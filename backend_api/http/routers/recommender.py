@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
 from backend_api.db.models import User
-from backend_api.http.dependencies import assert_job_access, assert_model_allowed, require_action
+from backend_api.http.dependencies import assert_job_access, require_action
 from backend_api.http.schemas.common import JobResponse
 from backend_api.http.schemas.recommender import (
     RagDecisionRequest,
@@ -36,7 +36,6 @@ def start_recommender(
     user: User = Depends(require_action("module:recommender")),
 ) -> JobResponse:
     _require_mulo_pipeline(user)
-    assert_model_allowed(user, request.model)
     job_id = start_recommender_job(
         request.file_content,
         request.file_name,
@@ -83,7 +82,6 @@ def recommender_rag_decision(
     try:
         job = job_store.get(job_id)
         assert_job_access(job, user)
-        assert_model_allowed(user, request.model)
         rag_job_id = submit_rag_decision(job_id, request.flags, request.model)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Job not found") from exc

@@ -16,15 +16,24 @@ from frontend_streamlit.st_utils import import_css_styling, show_upload_box, ren
 # =============================================================================
 # âš™ï¸ CONFIG & HELPER FUNCTIONS
 # =============================================================================
-def recommender_worker(graph, config, step, graph_input, q):
-    """Runs the Recommender workflow synchronously on a background thread."""
-    # try:
-    for mode, content in graph.stream(graph_input, config, stream_mode=["updates", "custom"]):
-        q.put({"type": "stream", "mode": mode, "content": content})
-    q.put({"type": "done", "step": step})
-    # except Exception as e:
-    #     q.put({"type": "error", "content": str(e)})
+# Make sure to import the wrapper at the top of your file
+from backend_api.Recommender.build_graph import build_graph, run_recommender_workflow
 
+
+def recommender_worker(graph, config, step, graph_input, q):
+    """Runs the Recommender workflow synchronously on a background thread using the wrapper."""
+
+    # Execute the wrapper, passing the queue so the UI still streams live updates
+    summary = run_recommender_workflow(graph, config, graph_input, q)
+    import pprint
+    pprint.pprint(summary)
+
+    if summary["success"]:
+        # Pass the summary payload into the 'done' message so the main UI thread can access it
+        q.put({"type": "done", "step": step, "summary": summary})
+    elif summary["success"] and summary["error"] == "":
+        # Pass the detailed error payload
+        q.put({"type": "error", "content": summary["error"], "summary": summary})
 
 def recommender_session_state():
     if "recommender_step" not in st.session_state:
@@ -109,8 +118,17 @@ def run_app():
             if __name__ == "__main__":
                 options = ["gpt-oss-120b", "gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-4o"]
                 show_upload_box(options)
-                st.session_state.start_btn = st.button("âš¡ Start Processing", use_container_width=True)
+
+                # --- NEW: User Prompt Input ---
+                user_prompt = st.text_area(
+                    "📝 Design Instructions (Optional)",
+                    placeholder="e.g., Prioritize PID controllers over LQR, minimize overshoot..."
+                )
+
+                st.session_state.start_btn = st.button("⚡ Start Processing", use_container_width=True)
                 if st.session_state.start_btn and st.session_state.uploaded_file:
+                    # Save the user's prompt to session state before running
+                    st.session_state.user_prompt = user_prompt
                     process_to_running()
 
 
@@ -195,14 +213,15 @@ def run_app():
                 if st.button("ðŸ§  Continue with RAG Enhancement", use_container_width=True):
                     st.session_state.recommender_graph.update_state(
                         st.session_state.rec_config,
-                        {"RAG_decision": {"Flag": st.session_state.rag_option, "Model": st.session_state.rag_model}}
+                        {"RAG_decision": {"Flag": st.session_state.rag_option, "Model": st.session_state.rag_model}},
+                        as_node="human_review"
                     )
                     st.session_state.recommender_step = "rag_run"
                     st.session_state.rec_thread_running = False  # Allow thread to restart
                     st.rerun()
                 st.session_state.rag_model = st.selectbox(
                     "LLM Model",
-                    ["gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-4o", "gpt-4o-mini"],
+                    ["gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-4o"],
                     index=3,
                     help='Choose a LLM Model to work with.'
                 )
@@ -248,7 +267,12 @@ def run_app():
         # 1. Start Recommender Background Thread
         if not st.session_state.rec_thread_running:
             graph_input = (
-                {"equation": st.session_state.file_content, "file_name": st.session_state.file_name, "messages": []}
+                {
+                    "equation": st.session_state.file_content,
+                    "file_name": st.session_state.file_name,
+                    "user_prompt": st.session_state.get("user_prompt", ""),  # <--- NEW: Pass to graph
+                    "messages": []
+                }
                 if st.session_state.recommender_step == "initial_run" else None
             )
             st.session_state.recommender_logs.append({"agent_tag": "ðŸ“.Equation", "log_history": st.session_state.file_content})

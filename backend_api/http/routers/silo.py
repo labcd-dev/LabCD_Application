@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
 from backend_api.db.models import User
-from backend_api.http.dependencies import assert_job_access, assert_model_allowed, require_action
+from backend_api.http.dependencies import assert_job_access, require_action
 from backend_api.http.schemas.common import JobResponse
 from backend_api.http.schemas.silo import SiloStartRequest
 from backend_api.http.services.events import sse_response
@@ -21,7 +21,6 @@ def start_silo(
 ) -> JobResponse:
     if not user.has_action("pipeline:silo"):
         raise HTTPException(status_code=403, detail="Missing required action: pipeline:silo")
-    assert_model_allowed(user, request.config.get("llm_model"))
     job_id = start_silo_job(
         request.config,
         request.control_objective or "",

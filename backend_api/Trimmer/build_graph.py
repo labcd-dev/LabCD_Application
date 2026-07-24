@@ -6,6 +6,7 @@ It orchestrates the overall control system analysis workflow.
 """
 from dotenv import load_dotenv
 from langgraph.graph import StateGraph, END
+from functools import partial
 
 
 from backend_api.Trimmer.states import WorkflowState
@@ -18,6 +19,7 @@ from backend_api.Trimmer.functionalNodes.create_controller_graph import (
 from backend_api.Trimmer.agenticNodes.agents import Agents
 from backend_api.Trimmer.functionalNodes.validate_config_only import validate_config_only
 from backend_api.Trimmer.functionalNodes.solver_engine import plan_strategy, solve_equilibrium_node
+from backend_api.Trimmer.services.human_input import HumanInputRequired
 
 
 def where_to_go_after_solver(state: WorkflowState) -> str:
@@ -65,13 +67,13 @@ def build_workflow_graph(model_name) -> StateGraph:
     agents = Agents(model_name)
 
     # Add nodes to the graph
-    workflow_graph.add_node("parse_system", agents.parse_system)
-    workflow_graph.add_node("validate_config_only", validate_config_only)
-    workflow_graph.add_node("plan_strategy", plan_strategy)
-    workflow_graph.add_node("solve_equilibrium", solve_equilibrium_node)
-    workflow_graph.add_node("analyze_result", analyze_result)
-    workflow_graph.add_node("handle_convergence_failure", handle_convergence_failure)
-    workflow_graph.add_node("handle_mismatch_failure",handle_mismatch_failure)
+    workflow_graph.add_node("parse_system", agents.parse_system)  # Bound method, already safe
+    workflow_graph.add_node("validate_config_only", partial(validate_config_only, agents=agents))
+    workflow_graph.add_node("plan_strategy", partial(plan_strategy, agents=agents))
+    workflow_graph.add_node("solve_equilibrium", partial(solve_equilibrium_node, agents=agents))
+    workflow_graph.add_node("analyze_result", partial(analyze_result, agents=agents))
+    workflow_graph.add_node("handle_convergence_failure", partial(handle_convergence_failure, agents=agents))
+    workflow_graph.add_node("handle_mismatch_failure", partial(handle_mismatch_failure, agents=agents))
     workflow_graph.add_node("generate_output", generate_output)
 
     # Define the graph's flow
@@ -148,3 +150,66 @@ def draw_graph_diagram(app: StateGraph, output_path: str = "workflow_graph.png")
     except Exception as e:
         print(f"Could not draw graph: {e}. You may need to install graphviz and mermaid-cli.")
 
+
+def run_trimmer_workflow(graph, initial_state, q=None, config=None) -> dict:
+    """
+    Wraps the execution of the Trimmer LangGraph workflow, handles exceptions
+    (including human intervention), and returns a standardized summary.
+    """
+    final_result = {}
+    result = {
+        "success": False,
+        "flag": "",
+        "error": "",
+        "token_usage": {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0},
+        "price": 0.0,
+        "pending_request": None,
+    }
+
+    # Provide a default thread configuration if none is passed
+    if config is None:
+        config = {"configurable": {"thread_id": "trimmer_default"}}
+
+    try:
+        # Stream updates, custom events, and state values to the queue
+        for mode, content in graph.stream(initial_state, config, stream_mode=["updates", "custom", "values"]):
+            if q is not None:
+                q.put({"type": "stream", "mode": mode, "content": content})
+
+            # Keep track of the latest state values for final metrics
+            if mode == "values":
+                final_result = content
+
+
+        # Extract costs, tokens, and stability status from the final state dictionary
+        if final_result:
+            stability = final_result.get("classification", "")
+
+            # Store the stability status in the flag, default to success if empty
+            result["flag"] = stability if stability else "success"
+            result["success"] = False if "unstable" in stability else True
+            result["token_usage"] = final_result.get("token_usage", result["token_usage"])
+            result["price"] = final_result.get("total_cost", 0.0)
+
+    except HumanInputRequired as exc:
+        # Catch the human-in-the-loop interruption gracefully
+        result["success"] = False
+        result["flag"] = "human_input"
+        result["pending_request"] = exc.request
+
+    except Exception as e:
+        error_msg = str(e)
+        result["success"] = False
+        result["error"] = error_msg
+
+        # Standardized error flags
+        if any(keyword in error_msg for keyword in ["Connection", "Timeout", "APIConnectionError", "Max retries"]):
+            result["flag"] = "connection_lost"
+        elif any(keyword in error_msg for keyword in ["RateLimit", "Authentication", "401", "429"]):
+            result["flag"] = "api_error"
+        elif any(keyword in error_msg for keyword in ["OutputParserException", "JSONDecodeError", "parse", "llm"]):
+            result["flag"] = "llm_failure"
+        else:
+            result["flag"] = "error"
+
+    return result

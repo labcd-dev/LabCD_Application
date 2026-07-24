@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends
 
 from backend_api.db.models import User
-from backend_api.http.dependencies import assert_model_allowed, require_action
+from backend_api.http.dependencies import require_action
 from backend_api.http.schemas.regularizer import (
     RegularizeRequest,
     RegularizeResponse,
@@ -18,9 +18,8 @@ router = APIRouter(prefix="/regularize", tags=["regularizer"])
 @router.post("", response_model=RegularizeResponse)
 def regularize_file(
     request: RegularizeRequest,
-    user: User = Depends(require_action("module:regularize")),
+    _: User = Depends(require_action("module:regularize")),
 ) -> RegularizeResponse:
-    assert_model_allowed(user, request.model)
     result = run_regularize(
         request.file_content,
         request.file_name,
@@ -37,8 +36,7 @@ def regularize_file(
 @router.post("/standardize", response_model=StandardizeResponse)
 def standardize_file(
     request: StandardizeRequest,
-    user: User = Depends(require_action("module:regularize")),
+    _: User = Depends(require_action("module:regularize")),
 ) -> StandardizeResponse:
-    assert_model_allowed(user, request.model)
     result = run_standardize(request.file_content, request.model, request.silo_pipeline)
     return StandardizeResponse(file_content=result["file_content"])

@@ -7,12 +7,39 @@ from dotenv import load_dotenv
 from langgraph.graph import START, StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
 
+MAX_SUPERVISOR_RETRIES = 5
 
-# Supervisor decides when the analysis is ready for graph generation
-def supervisor_edge(state: OverallState):
+
+def reset_retry_node(state: OverallState):
+    """Explicitly resets the supervisor retry counter to 0."""
+    return {"supervisor_retry_count": 0}
+
+
+def route_after_reset(state: OverallState):
+    """Routes the graph to the correct next step after resetting the counter."""
     last_message = state.get("supervisor_comment", "")
+
+    # If we exited because of success, move to graph creation
     if "CONTINUE" in last_message:
         return "create_controller_graph"
+
+    # If we exited because of max retries, end the flow (or route to human review)
+    return "end"
+
+
+def supervisor_edge(state: OverallState):
+    last_message = state.get("supervisor_comment", "")
+
+    # EXIT CONDITION 1: Success (Less than max retries)
+    if "CONTINUE" in last_message:
+        return "reset_retry_node"
+
+    retries = state.get("supervisor_retry_count", 0)
+    if retries >= MAX_SUPERVISOR_RETRIES:
+        print(f"⚠️ Supervisor max retries ({MAX_SUPERVISOR_RETRIES}) reached. Routing to human review.")
+        return "reset_retry_node"
+
+    # Otherwise, loop back to the analyser
     return "control_loop_analyser"
 
 
@@ -35,7 +62,7 @@ def choose_rag_pipeline(state: OverallState):
 def check_human_intervention_condition(state: OverallState):
     result = choose_rag_pipeline(state)
     if result == "end":
-        return "human_review"
+        return "judge"
     else:
         return result
 
@@ -84,9 +111,11 @@ def build_graph(model_name):
     builder.add_node("openai_web_search", agnt.openai_web_search)
     builder.add_node("block_diagram_search", search_engine.tavily_block_diagram_search)
     builder.add_node("openai_image_recognition", agnt.openai_image_recognition)
-
-    # NEW: Add a dedicated placeholder node for human review
     builder.add_node("human_review", lambda state: {})
+    # NEW: Register the reset node
+    builder.add_node("reset_retry_node", reset_retry_node)
+    # Pass the method reference directly into the workflow builder
+    builder.add_node("judge", agnt.judge_controller)
 
     # Core Flow
     # builder.add_edge(START, "standardize_matlab_file")
@@ -109,8 +138,17 @@ def build_graph(model_name):
         supervisor_edge,
         {
             "control_loop_analyser": "control_loop_analyser",
+            "reset_retry_node": "reset_retry_node"  # Both exits now funnel here
+        }
+    )
+
+    # NEW: Routing out of the Reset Node
+    builder.add_conditional_edges(
+        "reset_retry_node",
+        route_after_reset,
+        {
             "create_controller_graph": "create_controller_graph",
-            "block_diagram_search": "block_diagram_search"
+            "end": END
         }
     )
 
@@ -122,9 +160,10 @@ def build_graph(model_name):
             "human_review": "human_review",
             "openai_web_search": "openai_web_search",
             "block_diagram_search": "block_diagram_search",
-            "end": END
+            "judge": "judge"
         }
     )
+    builder.add_edge("judge", END)
 
     # NEW: Routing out of the human review node once resumed
     builder.add_conditional_edges(
@@ -180,3 +219,50 @@ def draw_graph_diagram(app: StateGraph, output_path: str = "workflow_graph.png")
         print(f"Workflow graph diagram saved to {output_path}")
     except Exception as e:
         print(f"Could not draw graph: {e}. You may need to install graphviz and mermaid-cli.")
+
+
+def run_recommender_workflow(graph, config, graph_input=None, q=None) -> dict:
+    """Synchronously executes the workflow and returns the final summary."""
+    result = {
+        "success": False,
+        "flag": "",
+        "error": "",
+        "token_usage": {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0},
+        "price": 0.0,
+        "best_score": None
+    }
+
+    try:
+        stream_input = graph_input if graph_input else None
+
+        for mode, content in graph.stream(stream_input, config, stream_mode=["updates", "custom"]):
+            if q is not None:
+                q.put({"type": "stream", "mode": mode, "content": content})
+
+        # Graph is completely finished here, including the judge
+        final_state = graph.get_state(config).values
+
+        result.update({
+            "success": True,
+            "flag": "success",
+            "token_usage": final_state.get("token_usage", result["token_usage"]),
+            "price": final_state.get("total_cost", 0.0),
+            "best_score": final_state.get("best_score", 0.0),
+            "detailed_scores": final_state.get("detailed_scores", {})
+        })
+
+    except Exception as e:
+        error_msg = str(e)
+        result["success"] = False
+        result["error"] = error_msg
+
+        if any(keyword in error_msg for keyword in ["Connection", "Timeout", "APIConnectionError", "Max retries"]):
+            result["flag"] = "connection_lost"
+        elif any(keyword in error_msg for keyword in ["RateLimit", "Authentication", "401", "429"]):
+            result["flag"] = "api_error"
+        elif any(keyword in error_msg for keyword in ["OutputParserException", "JSONDecodeError", "parse", "llm"]):
+            result["flag"] = "llm_failure"
+        else:
+            result["flag"] = "error"
+
+    return result

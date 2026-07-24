@@ -3,23 +3,21 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from decimal import Decimal
 
 import bcrypt
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 
-from backend_api.db.models import Action, Plan, User
+from backend_api.db.models import Action, User
 from backend_api.http.config import (
     ADMIN_EMAIL,
     ADMIN_PASSWORD,
-    DEFAULT_LLM_MODELS,
     JWT_ALGORITHM,
     JWT_EXPIRE_MINUTES,
     JWT_SECRET,
 )
 
-# Pipeline modes + module actions available in the system.
+# Pipeline modes + module actions users can be assigned.
 DEFAULT_ACTIONS: list[tuple[str, str]] = [
     ("pipeline:silo", "Run Single Loop (Silo) design for yourself"),
     ("pipeline:mulo", "Run Multi Loop (Mulo) design for yourself"),
@@ -46,54 +44,6 @@ MODULE_ACTIONS = {
     "mulo": "module:mulo",
     "case_studies": "module:case_studies",
 }
-
-SILO_ACTION_CODES = [
-    "pipeline:silo",
-    "module:upload",
-    "module:regularize",
-    "module:silo",
-]
-
-MULO_ACTION_CODES = [
-    "pipeline:mulo",
-    "module:upload",
-    "module:regularize",
-    "module:recommender",
-    "module:trimmer",
-    "module:mulo",
-    "module:case_studies",
-]
-
-DEFAULT_PLANS: list[tuple[str, str, Decimal, list[str], list[str]]] = [
-    (
-        "Free",
-        "Default plan for new registrations (no modules).",
-        Decimal("0.00"),
-        [],
-        ["gpt-4o-mini", "gpt-oss-120b"],
-    ),
-    (
-        "Single Loop",
-        "Single Loop (Silo) pipeline access.",
-        Decimal("29.00"),
-        SILO_ACTION_CODES,
-        list(DEFAULT_LLM_MODELS),
-    ),
-    (
-        "Multi Loop",
-        "Multi Loop (Mulo) pipeline access.",
-        Decimal("49.00"),
-        MULO_ACTION_CODES,
-        list(DEFAULT_LLM_MODELS),
-    ),
-    (
-        "Full Access",
-        "Both Single Loop and Multi Loop pipelines.",
-        Decimal("79.00"),
-        sorted(set(SILO_ACTION_CODES + MULO_ACTION_CODES)),
-        list(DEFAULT_LLM_MODELS),
-    ),
-]
 
 
 def hash_password(password: str) -> str:
@@ -141,29 +91,32 @@ def ensure_actions(db: Session, codes: list[str]) -> list[Action]:
     return actions
 
 
+def set_user_actions(db: Session, user: User, action_codes: list[str]) -> User:
+    user.actions = ensure_actions(db, action_codes)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
 def create_user(
     db: Session,
     *,
     email: str,
     password: str,
-    plan_id: int | None = None,
+    action_codes: list[str] | None = None,
     is_admin: bool = False,
-    assign_default_plan: bool = True,
 ) -> User:
-    from backend_api.http.services import plan_service
-
-    resolved_plan_id = plan_id
-    if resolved_plan_id is None and assign_default_plan and not is_admin:
-        resolved_plan_id = plan_service.get_default_plan_id(db)
-
     user = User(
         email=email.lower().strip(),
         password_hash=hash_password(password),
         is_admin=is_admin,
         is_active=True,
-        plan_id=resolved_plan_id,
     )
     db.add(user)
+    db.flush()
+    if action_codes:
+        user.actions = ensure_actions(db, action_codes)
     db.commit()
     db.refresh(user)
     return user
@@ -178,39 +131,6 @@ def authenticate_user(db: Session, email: str, password: str) -> User | None:
     return user
 
 
-def _ensure_default_plans(db: Session) -> Plan:
-    from backend_api.http.services import plan_service
-
-    free_plan: Plan | None = None
-    for name, description, price, codes, models in DEFAULT_PLANS:
-        plan = plan_service.get_plan_by_name(db, name)
-        if plan is None:
-            plan = Plan(
-                name=name,
-                description=description,
-                price=price,
-                is_active=True,
-                allowed_models=plan_service.normalize_plan_models(models),
-            )
-            db.add(plan)
-            db.flush()
-            if codes:
-                plan.actions = ensure_actions(db, codes)
-        if name == "Free":
-            free_plan = plan
-
-    db.commit()
-
-    if free_plan is None:
-        free_plan = plan_service.get_plan_by_name(db, "Free")
-    assert free_plan is not None
-
-    if plan_service.get_default_plan_id(db) is None:
-        plan_service.set_default_plan(db, free_plan.id)
-
-    return free_plan
-
-
 def seed_auth_data(db: Session) -> None:
     for code, description in DEFAULT_ACTIONS:
         action = db.query(Action).filter(Action.code == code).first()
@@ -219,8 +139,6 @@ def seed_auth_data(db: Session) -> None:
         elif not action.description:
             action.description = description
     db.commit()
-
-    free_plan = _ensure_default_plans(db)
 
     # Rename legacy reserved-domain admin if present (email-validator rejects .local).
     legacy_admin = get_user_by_email(db, "admin@labcd.local")
@@ -232,15 +150,11 @@ def seed_auth_data(db: Session) -> None:
         admin = legacy_admin
 
     if admin is None:
+        all_codes = [code for code, _ in DEFAULT_ACTIONS]
         create_user(
             db,
             email=ADMIN_EMAIL,
             password=ADMIN_PASSWORD,
-            plan_id=None,
+            action_codes=all_codes,
             is_admin=True,
-            assign_default_plan=False,
         )
-    elif admin.plan_id is None and not admin.is_admin:
-        admin.plan_id = free_plan.id
-        db.add(admin)
-        db.commit()

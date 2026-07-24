@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
 from backend_api.db.models import User
-from backend_api.http.dependencies import assert_job_access, assert_model_allowed, require_action
+from backend_api.http.dependencies import assert_job_access, require_action
 from backend_api.http.schemas.common import JobResponse
 from backend_api.http.schemas.trimmer import TrimmerInputRequest, TrimmerStartRequest
 from backend_api.http.services.events import sse_response
@@ -25,7 +25,6 @@ def start_trimmer(
 ) -> JobResponse:
     if not user.has_action("pipeline:mulo"):
         raise HTTPException(status_code=403, detail="Missing required action: pipeline:mulo")
-    assert_model_allowed(user, request.model)
     job_id = start_trimmer_job(
         request.file_content,
         request.file_name,

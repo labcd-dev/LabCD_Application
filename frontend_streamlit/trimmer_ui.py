@@ -9,7 +9,7 @@ import threading
 import queue
 import time
 
-from backend_api.Trimmer.build_graph import build_workflow_graph
+from backend_api.Trimmer.build_graph import build_workflow_graph, run_trimmer_workflow
 from backend_api.Trimmer.functionalNodes.create_controller_graph import Plotter
 from backend_api.Trimmer.pdf_generator import generate_pdf_report
 from backend_api.Trimmer.services.human_input import (
@@ -23,21 +23,26 @@ from backend_api.Trimmer.agenticNodes.agents import Agents
 from frontend_streamlit.st_utils import import_css_styling, show_upload_box, render_logs, make_serializable
 
 
-
-
 # =============================================================================
-# ðŸš€ THREAD WORKERS (Background Execution)
+# 🚀 THREAD WORKERS (Background Execution)
 # =============================================================================
 def trimmer_worker(graph, initial_state, q):
-    """Runs the Trimmer workflow synchronously on a background thread."""
-    try:
-        for mode, content in graph.stream(initial_state, stream_mode=["updates", "custom", "values"]):
-            q.put({"type": "stream", "mode": mode, "content": content})
-        q.put({"type": "done"})
-    except HumanInputRequired as exc:
-        q.put({"type": "human_input", "content": exc.request})
-    # except Exception as e:
-    #     q.put({"type": "error", "content": str(e)})
+    """Runs the Trimmer workflow synchronously on a background thread using the wrapper."""
+
+    config = {"configurable": {"thread_id": "1"}}
+    summary = run_trimmer_workflow(graph, initial_state, q, config)
+    import pprint
+    pprint.pprint(summary)
+
+    # Route the queue messages based on the standardized wrapper output
+    if summary["error"] != "":
+        return
+    elif summary["flag"] == "human_input":
+        q.put({"type": "human_input", "content": summary["pending_request"], "summary": summary})
+    elif summary["success"]:
+        q.put({"type": "done", "summary": summary})
+    else:
+        q.put({"type": "error", "content": summary["error"], "summary": summary})
 
 
 def trimmer_session_state():

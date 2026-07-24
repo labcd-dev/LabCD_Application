@@ -1,10 +1,8 @@
 """Health and metadata routes."""
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 
-from backend_api.db.models import User
 from backend_api.http.config import DEFAULT_LLM_MODELS, RAG_MODEL_OPTIONS
-from backend_api.http.dependencies import get_optional_user
 from backend_api.http.schemas.common import ModelsResponse
 
 router = APIRouter(tags=["health"])
@@ -16,16 +14,5 @@ def health_check() -> dict:
 
 
 @router.get("/models", response_model=ModelsResponse)
-def list_models(user: User | None = Depends(get_optional_user)) -> ModelsResponse:
-    """Return LLM/RAG model catalogs, filtered by the caller's plan when authenticated."""
-    if user is None:
-        llm_models = list(DEFAULT_LLM_MODELS)
-    elif user.is_admin:
-        llm_models = list(DEFAULT_LLM_MODELS)
-    else:
-        allowed = set(user.model_ids())
-        llm_models = [model for model in DEFAULT_LLM_MODELS if model in allowed]
-
-    allowed_set = set(llm_models)
-    rag_models = [model for model in RAG_MODEL_OPTIONS if model in allowed_set]
-    return ModelsResponse(llm_models=llm_models, rag_models=rag_models)
+def list_models() -> ModelsResponse:
+    return ModelsResponse(llm_models=DEFAULT_LLM_MODELS, rag_models=RAG_MODEL_OPTIONS)

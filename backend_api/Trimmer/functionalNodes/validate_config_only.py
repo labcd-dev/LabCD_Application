@@ -8,25 +8,19 @@ from backend_api.Trimmer.states import WorkflowState
 from backend_api.Trimmer.agenticNodes.agents import Agents
 
 
-def validate_config_only(state: WorkflowState, writer) -> WorkflowState:
+def validate_config_only(state: WorkflowState, writer, agents) -> WorkflowState:
     """Node to validate and update operating conditions."""
-    writer({"progress": 0.7, "text": "â³ Validate System Configuration..."})
+    writer({"progress": 0.7, "text": "⏳ Validate System Configuration..."})
 
     logger = state['logger']
     logger.info("--- Entering Node: validate_config_only ---")
 
-    # Initialize LLM from agenticNodes
-    agents = Agents()
-
     # Validate and update the configuration
     config = state['config']
 
-    # Use the parser's native validation flow first to preserve
-    # the same operating-condition UX as initial parsing
-    # (candidate selection + up-to-n_u independent values).
     try:
-        validated_config = agents.validate_only(config)
-        writer({"agent_tag": "â³.Configue Validator", "log_history": clean_json(str(validated_config))})
+        validated_config = agents.validate_only(state)
+        writer({"agent_tag": "⏳.Configue Validator", "log_history": clean_json(str(validated_config))})
         if validated_config:
             state['config'] = validated_config
             logger.info("Updated config via ParsingGraph.validate_only: %s",
@@ -55,13 +49,13 @@ def validate_config_only(state: WorkflowState, writer) -> WorkflowState:
 
     # Validate and prompt for missing params
     if not config.get('param_vars'):
-        print("\nâš  No parameters identified. Please provide system parameters.")
+        print("\n⚠️ No parameters identified. Please provide system parameters.")
     else:
         for param in config['param_vars']:
             if param not in config['params'] or config['params'][param] is None:
-                # Use agent-based prompt generation if available
+                # FIX: Pass 'state' into the prompt generator
                 question, default = _generate_prompt_with_agent(
-                    agents, dict(config), "params", param, logger
+                    agents, dict(config), "params", param, logger, state
                 )
 
                 prompt_display = f"  {question}"
@@ -81,16 +75,13 @@ def validate_config_only(state: WorkflowState, writer) -> WorkflowState:
 
                 if user_input:
                     try:
-                        # Try to parse as number
                         if '.' in user_input:
                             config['params'][param] = float(user_input)
                         else:
                             config['params'][param] = int(user_input)
                     except ValueError:
-                        # Keep as string
                         config['params'][param] = user_input
                 else:
-                    # Use default
                     try:
                         if '.' in default:
                             config['params'][param] = float(default)
@@ -101,8 +92,7 @@ def validate_config_only(state: WorkflowState, writer) -> WorkflowState:
 
     # Validate and prompt for missing operating conditions
     if not config.get('operating_conditions'):
-        output_text = "\nâš ï¸ No operating conditions specified.\n"
-        # Use heuristic categorization
+        output_text = "\n⚠️ No operating conditions specified.\n"
         specifiable, must_zero, arbitrary = _categorize_states(dict(config))
 
         explanation = _build_conditions_explanation(specifiable, must_zero, arbitrary, config.get('n_u', 0))
@@ -110,7 +100,7 @@ def validate_config_only(state: WorkflowState, writer) -> WorkflowState:
 
         if specifiable:
             adjusted_n_u = int(config.get('n_u', 0) or 0)
-            output_text += f"\nðŸ”§ For trimming systems, please specify the desired operating conditions:"
+            output_text += f"\n🔧 For trimming systems, please specify the desired operating conditions:"
             output_text += f"\n  Suggested operating conditions:"
             for i, op_var in enumerate(specifiable, 1):
                 output_text += f"\n    {i}) {op_var}"
@@ -120,7 +110,6 @@ def validate_config_only(state: WorkflowState, writer) -> WorkflowState:
             output_text += f"  Your choice:"
 
             if state["ui_mode"] == "streamlit":
-                # state["ui_inputs"] = state["ui_inputs"].pop("specify_trim_variable")
                 user_choice = require_human_input(
                     state=state,
                     prompt=output_text,
@@ -139,15 +128,16 @@ def validate_config_only(state: WorkflowState, writer) -> WorkflowState:
                         selected_vars = selected_vars[:adjusted_n_u]
                 except (ValueError, IndexError):
                     limit = min(len(specifiable), adjusted_n_u) if adjusted_n_u > 0 else len(specifiable)
-                    print(f"  âš  Invalid input. Using first {limit} items.")
+                    print(f"  ⚠️ Invalid input. Using first {limit} items.")
                     selected_vars = specifiable[:limit]
             else:
                 num_to_select = min(len(specifiable), adjusted_n_u) if adjusted_n_u > 0 else len(specifiable)
                 selected_vars = specifiable[:num_to_select] if num_to_select > 0 else []
 
             for op_var in selected_vars:
+                # FIX: Pass 'state' into the prompt generator
                 question, default = _generate_prompt_with_agent(
-                    agents, dict(config), "operating_conditions", op_var, logger
+                    agents, dict(config), "operating_conditions", op_var, logger, state
                 )
 
                 prompt_display = f"  {question}"
@@ -185,15 +175,16 @@ def validate_config_only(state: WorkflowState, writer) -> WorkflowState:
     # Validate and prompt for missing bounds
     if not config.get('bounds') or not all(k in config['bounds']
                                            for k in ['x_min', 'x_max', 'u_min', 'u_max']):
-        print("\nâš  Bounds not fully specified. Please provide bounds.")
+        print("\n⚠️ Bounds not fully specified. Please provide bounds.")
 
         n_x = config.get('n_x', 2)
         n_u = config.get('n_u', 1)
 
         for bound_type in ['x_min', 'x_max', 'u_min', 'u_max']:
             if bound_type not in config['bounds'] or config['bounds'][bound_type] is None:
+                # FIX: Pass 'state' into the prompt generator
                 question, default = _generate_prompt_with_agent(
-                    agents, dict(config), "bounds", bound_type, logger
+                    agents, dict(config), "bounds", bound_type, logger, state
                 )
 
                 prompt_display = f"  {question}"
@@ -216,8 +207,7 @@ def validate_config_only(state: WorkflowState, writer) -> WorkflowState:
                         values = [float(v.strip()) for v in user_input.split(',')]
                         config['bounds'][bound_type] = values
                     except ValueError:
-                        print(f"    âš  Invalid input. Using default: {default}")
-                        # Robustly parse default string like "[0.0, 1.0]"
+                        print(f"    ⚠️ Invalid input. Using default: {default}")
                         parsed = None
                         try:
                             import re
@@ -246,22 +236,18 @@ def validate_config_only(state: WorkflowState, writer) -> WorkflowState:
     system_f_code = config.get('system_f_code', '')
     if system_f_code and 'def system_f' in system_f_code:
         try:
-            # Execute the code to define the function
             namespace = {"np": np}
             exec(system_f_code, namespace)
-            # Extract the function
             config["system_f"] = namespace.get("system_f")
             if config["system_f"] is None:
                 print("Warning: system_f function not found in provided code. Setting to None.")
                 config["system_f"] = None
         except SyntaxError as e:
             print(f"SyntaxError compiling system_f_code: {e}")
-            print(f"Code was:\n{system_f_code}")
             print("Continuing with system_f = None")
             config["system_f"] = None
         except Exception as e:
             print(f"Error compiling system_f_code: {e}")
-            print(f"Code was:\n{system_f_code}")
             print("Continuing with system_f = None")
             config["system_f"] = None
     else:
@@ -272,11 +258,11 @@ def validate_config_only(state: WorkflowState, writer) -> WorkflowState:
     return state
 
 
-def _generate_prompt_with_agent(agents, config, missing_key, item_name, logger):
+def _generate_prompt_with_agent(agents, config, missing_key, item_name, logger, state):
     """Generate prompt using the generate_prompt agent if available."""
-    # Try to build agent directly from templates (create_agent)
     try:
-        generatePromptAgent = agents.generate_prompt()
+        # FIX: Pass 'state' into the factory
+        generatePromptAgent = agents.generate_prompt(state)
         agent_state = {
             'system_name': config.get('system_name', 'Unknown'),
             'missing_key': missing_key,
@@ -298,11 +284,9 @@ def _generate_prompt_with_agent(agents, config, missing_key, item_name, logger):
         if logger:
             logger.warning(f"Direct YAML agent creation failed: {e}. Using heuristic fallback.")
 
-    # Fallback to heuristic
     return _fallback_prompt(config, missing_key, item_name)
 
 def _infer_system_type(config):
-    """Infer system type from configuration."""
     system_name = config.get('system_name', '').lower()
     state_vars = [v.lower() for v in config.get('state_vars', [])]
 
@@ -312,18 +296,16 @@ def _infer_system_type(config):
         return "aircraft"
     if any(ind in system_name for ind in ['mass', 'spring', 'pendulum']):
         return "mechanical"
-
     return "general"
 
 
 def _fallback_prompt(config, missing_key, item_name):
-    """Heuristic prompt generation fallback."""
     defaults = {
         'm': ('1.0', 'mass [kg]'),
         'c': ('0.5', 'damping [Ns/m]'),
         'k': ('10.0', 'stiffness [N/m]'),
-        'g': ('9.81', 'gravity [m/sÂ²]'),
-        'rho': ('1.225', 'air density [kg/mÂ³]'),
+        'g': ('9.81', 'gravity [m/s²]'),
+        'rho': ('1.225', 'air density [kg/m³]'),
         'desired_force': ('1.0', 'force [N]'),
         'airspeed': ('50.0', 'speed [m/s]'),
     }
@@ -349,7 +331,6 @@ def _fallback_prompt(config, missing_key, item_name):
 
 
 def _categorize_states(config):
-    """Heuristic state categorization."""
     state_vars = config.get('state_vars', [])
     system_name = config.get('system_name', '').lower()
 
@@ -386,14 +367,6 @@ def _categorize_states(config):
 
 
 def _ensure_specifiable_candidates(config, specifiable, must_zero, arbitrary):
-    """
-    Deterministically ensure sensible specifiable candidates.
-
-    Rules:
-    1) Preserve plausible specifiable states.
-    2) Avoid promoting clearly arbitrary absolute positions/headings unless necessary.
-    3) Ensure at least n_u specifiable candidates when possible.
-    """
     state_vars = list(config.get('state_vars') or [])
     n_u = int(config.get('n_u') or 0)
     target = min(n_u, len(state_vars))
@@ -482,9 +455,7 @@ def _ensure_specifiable_candidates(config, specifiable, must_zero, arbitrary):
 
 
 def _build_conditions_explanation(specifiable, must_zero, arbitrary, n_u):
-    """Build explanation string for operating conditions."""
     parts = []
-
     if specifiable:
         parts.append(f"Specifiable: {', '.join(specifiable)}")
     else:
@@ -503,4 +474,3 @@ def _build_conditions_explanation(specifiable, must_zero, arbitrary, n_u):
     parts.append(f"You can specify up to {n_u} independent values.")
 
     return "Operating conditions:\n" + "\n".join(f"  {p}" for p in parts)
-

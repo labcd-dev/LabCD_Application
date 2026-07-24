@@ -56,25 +56,6 @@ def get_current_user(
     return _load_user_from_token(token, db)
 
 
-def get_optional_user(
-    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
-    access_token: str | None = Query(default=None),
-    db: Session = Depends(get_db),
-) -> User | None:
-    """Return the current user when a valid token is present; otherwise None."""
-    token: str | None = None
-    if credentials is not None and credentials.scheme.lower() == "bearer":
-        token = credentials.credentials
-    elif access_token:
-        token = access_token
-    if not token:
-        return None
-    try:
-        return _load_user_from_token(token, db)
-    except HTTPException:
-        return None
-
-
 def require_admin(user: User = Depends(get_current_user)) -> User:
     if not user.is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
@@ -91,19 +72,6 @@ def require_action(action_code: str):
         return user
 
     return _dependency
-
-
-def assert_model_allowed(user: User, model: str | None) -> None:
-    """Reject models that are not entitled on the user's plan."""
-    if not model or not str(model).strip():
-        return
-    normalized = str(model).strip()
-    if user.has_model(normalized):
-        return
-    raise HTTPException(
-        status_code=status.HTTP_403_FORBIDDEN,
-        detail=f"Model not allowed for your plan: {normalized}",
-    )
 
 
 def assert_job_access(job: Job, user: User) -> None:

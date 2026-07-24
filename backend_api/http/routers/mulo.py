@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
 from backend_api.db.models import User
-from backend_api.http.dependencies import assert_job_access, assert_model_allowed, require_action
+from backend_api.http.dependencies import assert_job_access, require_action
 from backend_api.http.schemas.common import JobResponse
 from backend_api.http.schemas.mulo import (
     MuloConfigureRequest,
@@ -55,7 +55,6 @@ def init_mulo(
     user: User = Depends(_mulo_user),
 ) -> JobResponse:
     try:
-        assert_model_allowed(user, (request.run_config or {}).get("llm_model"))
         job_id = init_mulo_designer(
             request.run_config,
             request.controller_structure,
@@ -78,7 +77,6 @@ def start_mulo(
     user: User = Depends(_mulo_user),
 ) -> JobResponse:
     try:
-        assert_model_allowed(user, (request.run_config or {}).get("llm_model"))
         job_id = start_mulo_job(
             request.run_config,
             request.controller_structure,

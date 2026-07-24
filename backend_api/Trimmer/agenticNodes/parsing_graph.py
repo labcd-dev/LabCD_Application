@@ -91,16 +91,16 @@ class ParsingGraph:
             # Attempt to read as file
             if os.path.isfile(input_text):
                 try:
-                    print(f"\nðŸ“‚ Loading system from file: {input_text}")
+                    print(f"\n📂 Loading system from file: {input_text}")
                     with open(input_text, 'r', encoding='utf-8') as f:
                         content = f.read()
                     input_text = f"Code file content:\n{content}"
-                    print(f"âœ“ File loaded successfully ({len(content)} characters)")
+                    print(f"✓ File loaded successfully ({len(content)} characters)")
                 except Exception as e:
-                    print(f"âš  Error reading file: {e}")
+                    print(f"⚠️ Error reading file: {e}")
                     raise ValueError(f"Error reading file {input_text}: {e}")
             else:
-                print(f"âš  File not found: {input_text}")
+                print(f"⚠️ File not found: {input_text}")
                 raise ValueError(f"File not found: {input_text}")
 
         # Store processed input
@@ -108,7 +108,7 @@ class ParsingGraph:
         new_state["input_text"] = input_text
         return new_state
 
-    def _parse_system(self, state: GraphState) -> GraphState:
+    def _parse_system(self, state: GraphState, run_config: dict = None) -> GraphState:
         """
         Use LLM agent to parse the input_text into parsed_config.
         """
@@ -117,7 +117,10 @@ class ParsingGraph:
             existing_config = state.get("parsed_config") or {}
             op_conditions = existing_config.get("operating_conditions", {})
 
-            parse_agent = create_agent(self.llm, "parse_system")
+            # Extract callbacks if provided via config
+            callbacks = run_config.get("callbacks") if run_config else None
+
+            parse_agent = create_agent(self.llm, "parse_system", callbacks=callbacks)
             agent_state = {
                 'input_text': state['input_text'],
                 # 2. FIX: Pass the correctly extracted op_conditions
@@ -156,7 +159,7 @@ class ParsingGraph:
                 self.logger.error(f"LLM parsing failed: {e}")
             raise ValueError(f"Failed to parse system configuration: {e}")
 
-    def _validate_config(self, state: GraphState) -> GraphState:
+    def _validate_config(self, state: GraphState, run_config: dict = None) -> GraphState:
         """
         Validate and complete the parsed configuration.
 
@@ -187,13 +190,13 @@ class ParsingGraph:
 
         # Validate and prompt for missing params
         if not config.get('param_vars'):
-            print("\nâš  No parameters identified. Please provide system parameters.")
+            print("\n⚠️ No parameters identified. Please provide system parameters.")
         else:
             for param in config['param_vars']:
                 if param not in config['params'] or config['params'][param] is None:
                     # Use agent-based prompt generation if available
                     question, default = self._generate_prompt_with_agent(
-                        dict(config), "params", param
+                        dict(config), "params", param, run_config
                     )
 
                     prompt_display = f"  {question}"
@@ -273,15 +276,15 @@ class ParsingGraph:
         does_have_operating_point = bool(operating_conds) and all(v not in ('', None) for v in operating_conds.values())
 
         # Validate and prompt for missing operating conditions
-        print(config.get('operating_conditions') )
+        # print(config.get('operating_conditions') )
         if not config.get('operating_conditions') or not does_have_operating_point:
-            print("\nâš  Operating conditions are missing or incomplete.")
+            print("\n⚠️ Operating conditions are missing or incomplete.")
 
             # Only fetch suggestions if we don't already have keys to prompt for
             if not config.get('operating_conditions'):
                 # Use LLM-based categorization
                 op_conditions_list, explanation, adjusted_n_u, zeroed_list, arbitrary_list = self._get_operating_conditions_list(
-                    dict(config))
+                    dict(config), run_config)
 
                 print(f"\n{explanation}")
 
@@ -296,7 +299,7 @@ class ParsingGraph:
             if specifiable:
                 # If we entered with an incomplete dict, skip selecting indices and go straight to filling values
                 if does_have_operating_point or not config.get('operating_conditions'):
-                    output_text = f"\nðŸ”§ For trimming systems, please specify the desired operating conditions:"
+                    output_text = f"\n🔧 For trimming systems, please specify the desired operating conditions:"
                     output_text += f"\n  Suggested operating conditions:"
                     for i, op_var in enumerate(specifiable, 1):
                         output_text += f"\n    {i}) {op_var}"
@@ -323,7 +326,7 @@ class ParsingGraph:
                             selected_vars = [specifiable[i] for i in indices if 0 <= i < len(specifiable)]
                             selected_vars = selected_vars[:adjusted_n_u]
                         except (ValueError, IndexError):
-                            print(f"  âš  Invalid input. Using first {min(len(specifiable), adjusted_n_u)} items.")
+                            print(f"  ⚠️ Invalid input. Using first {min(len(specifiable), adjusted_n_u)} items.")
                             selected_vars = specifiable[:adjusted_n_u]
                     else:
                         num_to_select = min(len(specifiable), adjusted_n_u)
@@ -334,7 +337,7 @@ class ParsingGraph:
                 # Prompt for values of selected variables
                 for op_var in selected_vars:
                     question, default = self._generate_prompt_with_agent(
-                        dict(config), "operating_conditions", op_var
+                        dict(config), "operating_conditions", op_var, run_config
                     )
 
                     prompt_display = f"  {question}"
@@ -548,27 +551,29 @@ class ParsingGraph:
 
         return workflow.compile()
 
-    def invoke(self, initial_state: GraphState) -> list[Any] | dict[str, Any] | Any:
+    def invoke(self, initial_state: GraphState, config: dict = None, **kwargs) -> list[Any] | dict[str, Any] | Any:
         """
         Execute the parsing graph with initial state.
-        
+
         Args:
             initial_state: Starting state with input_text
-            
+            config: Optional RunnableConfig for propagating callbacks and settings
+
         Returns:
             Final state with parsed and validated config
         """
-        return self.graph.invoke(initial_state)
+        return self.graph.invoke(initial_state, config=config, **kwargs)
 
-    def _generate_prompt_with_agent(self, config: Dict[str, Any], missing_key: str, item_name: str):
+    def _generate_prompt_with_agent(self, config: Dict[str, Any], missing_key: str, item_name: str, run_config: dict = None):
         """
         Generate prompt using the generate_prompt agent if available.
-        
+
         Falls back to heuristic generation if agent is not available.
         """
+        callbacks = run_config.get("callbacks") if run_config else None
 
         try:
-            agent = create_agent(self.llm, "generate_prompt")
+            agent = create_agent(self.llm, "generate_prompt", callbacks=callbacks)
             agent_state = {
                 'system_name': config.get('system_name', 'Unknown'),
                 'missing_key': missing_key,
@@ -592,7 +597,7 @@ class ParsingGraph:
 
         # attempt to create a YAML-driven agent directly from templates (Product_Tempelate style).
         try:
-            agent = create_agent(self.llm, "generate_prompt")
+            agent = create_agent(self.llm, "generate_prompt", callbacks=callbacks)
             agent_state = {
                 'system_name': config.get('system_name', 'Unknown'),
                 'missing_key': missing_key,
@@ -639,8 +644,8 @@ class ParsingGraph:
             'm': ('1.0', 'mass [kg]'),
             'c': ('0.5', 'damping [Ns/m]'),
             'k': ('10.0', 'stiffness [N/m]'),
-            'g': ('9.81', 'gravity [m/sÂ²]'),
-            'rho': ('1.225', 'air density [kg/mÂ³]'),
+            'g': ('9.81', 'gravity [m/s²]'),
+            'rho': ('1.225', 'air density [kg/m³]'),
             'desired_force': ('1.0', 'force [N]'),
             'airspeed': ('50.0', 'speed [m/s]'),
         }
@@ -706,12 +711,14 @@ class ParsingGraph:
         except Exception:
             raise ValueError(f"Could not parse default bounds value: {default_val}")
 
-    def _get_operating_conditions_list(self, config: dict) -> tuple[str, str, int, str, str]:
+    def _get_operating_conditions_list(self, config: dict, run_config: dict = None) -> tuple[str, str, int, str, str]:
         """
         Use LLM agent to determine the relevant operating conditions for this system.
         Returns: (specifiable_list_str, explanation_str, num_independent_vals, zeroed_list_str, arbitrary_list_str)
         Uses YAML-driven agent for state categorization.
         """
+        callbacks = run_config.get("callbacks") if run_config else None
+
         system_info = f"System: {config.get('system_name', 'Unknown')}\n"
         if config.get('system_f_code'):
             system_info += f"System equations:\n{config['system_f_code']}\n"
@@ -725,7 +732,7 @@ class ParsingGraph:
 
         # Use YAML-driven agent for categorization
         try:
-            categorize_agent = create_agent(self.llm, "categorize_states")
+            categorize_agent = create_agent(self.llm, "categorize_states", callbacks=callbacks)
             agent_state = {
                 'system_info': system_info,
                 'state_vars': config.get('state_vars', []),
@@ -960,13 +967,14 @@ class ParsingGraph:
 
         return "Operating conditions:\n" + "\n".join(f"  {p}" for p in parts)
 
-    def validate_only(self, config: SystemConfig):
+    def validate_only(self, config: SystemConfig, run_config: dict = None):
         """
         Validate and complete an existing config without re-parsing.
-        
+
         Args:
             config: Existing system configuration
-            
+            run_config: Optional execution config (e.g., callbacks)
+
         Returns:
             Validated and completed configuration, or None if validation fails
         """
@@ -978,7 +986,7 @@ class ParsingGraph:
         }
 
         # Call _validate_config directly
-        result_state = self._validate_config(parsing_state)
+        result_state = self._validate_config(parsing_state, run_config=run_config)
         return result_state.get("final_config")
 
 
@@ -1000,6 +1008,3 @@ class ParsingGraph:
         initial_state["parsed_config"] = initial_config
 
         return initial_state
-
-
-

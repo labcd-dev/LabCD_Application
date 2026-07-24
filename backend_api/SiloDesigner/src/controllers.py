@@ -341,18 +341,18 @@ def save_scenario_history(state: Dict) -> None:
 
 
 def design_scenario(state: Dict) -> Dict:
-    """Design/select a scenario for the current scenario level."""
+    _ensure_running(state)
     if state["scenario_level"] > state["max_scenarios"]:
-        print("🏁 Exceeded maximum number of scenarios. Terminating workflow.")
+        print("ðŸ Exceeded maximum number of scenarios. Terminating workflow.")
         return {"should_continue_outer": False, "scenario": None}
 
-    print(f"\n=== 🎭 DESIGNING SCENARIO LEVEL {state['scenario_level']}/{state['max_scenarios']} ===")
+    print(f"\n=== ðŸŽ­ DESIGNING SCENARIO LEVEL {state['scenario_level']}/{state['max_scenarios']} ===")
 
     if state.get("custom_scenarios") is not None:
         if state["scenario_level"] <= len(state.get("custom_scenarios", [])):
             scenario_data = state["custom_scenarios"][state["scenario_level"] - 1]
         else:
-            print(f"⚠️ No custom scenario defined for level {state['scenario_level']}. Terminating workflow.")
+            print(f"âš ï¸ No custom scenario defined for level {state['scenario_level']}. Terminating workflow.")
             return {"should_continue_outer": False, "scenario": None}
     else:
         if state["scenario_level"] == 1:
@@ -383,45 +383,30 @@ def design_scenario(state: Dict) -> Dict:
                 "reasoning": "Addition of uncertainty and disturbance"
             }
         else:
-            print(f"⚠️ No default scenario defined for level {state['scenario_level']}. Terminating workflow.")
+            print(f"âš ï¸ No default scenario defined for level {state['scenario_level']}. Terminating workflow.")
             return {"should_continue_outer": False, "scenario": None}
 
     state["simulator"].set_scenario(scenario_data)
     state["buffer"].scenario = scenario_data
 
-    # ── Initialise per-scenario metrics ────────────────────────────────────
-    # All keys are set upfront so the schema is stable throughout the scenario.
-    # api_failures is accumulated by _update_metrics() in llm_agents.py.
-    # stable / score / cost_per_success / controller_latency_s are computed
-    # (overwritten) by buffer.finalise_scenario_metrics() at scenario end.
+    # Initialize per-scenario metrics and start wall clock timer
     state["buffer"].current_scenario_metrics = {
-        # --- existing keys (unchanged) ---
         'tokens_in': 0,
         'tokens_out': 0,
         'time': 0.0,
-        'cost': 0.0,
-        # --- NEW DevOps KPI keys ---
-        'api_failures': 0,  # incremented by llm_agents._update_metrics()
-        'stable': False,  # finalised at scenario end
-        'score': 0.0,  # finalised at scenario end (0.0 – 1.0)
-        'cost_per_success': None,  # finalised at scenario end
-        'controller_latency_s': 0.0,  # finalised at scenario end
-        # --- context (for UI breakdown by type) ---
-        'controller_type': state.get('controller_type'),  # may be None at design time; updated below
+        'cost': 0.0
     }
+    state["scenario_start_time"] = time.time()  # Make sure this is called
 
-    state["scenario_start_time"] = time.time()
-    log_to_file(
-        f"Scenario {state['scenario_level']} started at "
-        f"{datetime.fromtimestamp(state['scenario_start_time'])}"
-    )
+    log_to_file(f"Scenario {state['scenario_level']} started at {datetime.fromtimestamp(state['scenario_start_time'])}")
+
     log_to_file(f"\n=== SCENARIO LEVEL {state['scenario_level']} ===\n{json.dumps(scenario_data, indent=2)}")
     print(f"Scenario {scenario_data['id']}: IC Range {scenario_data['initial_condition_range']}")
 
     return {
         "scenario": scenario_data,
         "inner_loop_completed": False,
-        "should_continue_outer": True,
+        "should_continue_outer": True
     }
 
 
@@ -801,85 +786,73 @@ def judge_termination(state: Dict) -> Dict:
 def evaluate_scenario_completion(state: Dict) -> Dict:
     """Evaluate whether to move to next scenario or try a different controller."""
     _ensure_running(state)
-
-    # ── Compute wall-clock duration and finalise all KPIs ──────────────────
+    # NEW: Compute wall clock time FIRST before any branching
     end_time = time.time()
     if state.get("scenario_start_time") is not None:
         duration = end_time - state["scenario_start_time"]
-
-        # Stamp the controller_type into the metrics dict now that it is known.
         if state["buffer"].current_scenario_metrics is not None:
-            state["buffer"].current_scenario_metrics['controller_type'] = state.get('controller_type')
-
-        # Single call that computes stable, score, cost_per_success, latency.
-        # This replaces the old inline `m["time"] = duration` line.
-        state["buffer"].finalise_scenario_metrics(
-            target_metrics=state.get("target_metrics", {}),
-            wall_clock_duration=duration,
-        )
-        log_to_file(f"Scenario {state['scenario_level']} duration: {duration:.2f}s")
+            state["buffer"].current_scenario_metrics["time"] = duration  # This accumulates wall-clock + prior LLM times
+            log_to_file(f"Scenario {state['scenario_level']} duration: {duration:.2f}s")
     else:
         log_to_file("Warning: scenario_start_time is None, cannot compute duration")
 
-    # ── Push finalised metrics to the monitor ──────────────────────────────
+    # NEW: Propagate to monitor if available
     if 'monitor' in state and state['monitor'] and state["buffer"].current_scenario_metrics is not None:
-        state['monitor'].add_scenario_metrics(
-            state['scenario_level'],
-            state["buffer"].current_scenario_metrics.copy(),
-        )
+        state['monitor'].add_scenario_metrics(state['scenario_level'], state["buffer"].current_scenario_metrics.copy())
 
-    # ── Branching logic (unchanged from original) ──────────────────────────
     if state["inner_loop_completed"]:
-        print(f"✅ Scenario {state['scenario_level']} completed successfully!")
-        save_scenario_history(state)
+        print(f"âœ… Scenario {state['scenario_level']} completed successfully!")
+        save_scenario_history(state)  # This now has the updated time
         state["buffer"].latest_juror_feedback = None
+
+        # Reset the range_reconsider_count for all controllers when moving to next scenario
         state["range_reconsider_count"] = {}
 
+        # Store current scenario level before incrementing
         completed_level = state["scenario_level"]
         state["scenario_level"] += 1
 
+        # Store in history with completed level
         state["all_scenario_history"].append({
-            'scenario_level': completed_level,
+            'scenario_level': completed_level,  # Use the completed level
             'controller_type': state["controller_type"],
             'history': state["buffer"].history.copy(),
-            'scenario_metrics': state["buffer"].current_scenario_metrics.copy()
-            if state["buffer"].current_scenario_metrics else {},
+            'scenario_metrics': state["buffer"].current_scenario_metrics.copy() if state[
+                "buffer"].current_scenario_metrics else {}
         })
 
         if 'update_queue' in state and state['update_queue']:
             state['update_queue'].put(f"Scenario {completed_level} completed successfully!")
 
         if state["scenario_level"] > state["max_scenarios"]:
-            print("🎉 All scenarios completed successfully!")
+            print(f"ðŸŽ‰ All scenarios completed successfully!")
             state["should_continue_outer"] = False
         else:
             state["should_continue_outer"] = True
 
     elif state["redesign_requested"]:
-        print(f"🔄 Redesign requested for Scenario {state['scenario_level']}")
-        save_scenario_history(state)
+        print(f"ðŸ”„ Redesign requested for Scenario {state['scenario_level']}")
+        save_scenario_history(state)  # This now has the updated time
         state["buffer"].latest_juror_feedback = None
         state["current_controller_index"] += 1
 
+        # Check if we've tried all controllers
         if state["current_controller_index"] >= len(state["controllers_list"]):
-            print(f"⚠️ All controllers tried for Scenario {state['scenario_level']} without success")
-            print("🏁 Terminating workflow - no suitable controller found for current scenario.")
+            print(f"âš ï¸ All controllers tried for Scenario {state['scenario_level']} without success")
+            print("ðŸ Terminating workflow - no suitable controller found for current scenario.")
             state["should_continue_outer"] = False
         else:
-            print(f"⭐️ Trying next controller: {state['controllers_list'][state['current_controller_index']]}")
+            print(f"â­ï¸ Trying next controller: {state['controllers_list'][state['current_controller_index']]}")
             state["should_continue_outer"] = True
             state["scenario_level"] = 1
     else:
         print(
-            f"🔄 Continuing optimization with current controller: "
-            f"{state['controllers_list'][state['current_controller_index']]} "
-            f"for scenario {state['scenario_level']}"
-        )
+            f"ðŸ”„ Continuing optimization with current controller: {state['controllers_list'][state['current_controller_index']]} for scenario {state['scenario_level']}")
 
     # Only reset iteration counter and start time when moving to next controller/scenario
     if state.get("inner_loop_completed", False) or state.get("redesign_requested", False):
         state["iteration"] = 0
-        state["scenario_start_time"] = None
+        state["scenario_start_time"] = None  # Clear for next scenario
 
     return state
 

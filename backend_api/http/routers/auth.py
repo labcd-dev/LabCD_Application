@@ -54,8 +54,8 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)) -> TokenRe
         db,
         email=request.email,
         password=request.password,
+        action_codes=None,
         is_admin=False,
-        assign_default_plan=True,
     )
     token = create_access_token(user.id, user.email)
     return TokenResponse(access_token=token)

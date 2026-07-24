@@ -96,3 +96,19 @@ def update_my_project(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return ProjectDetail(**project_service.project_to_detail(project))
+
+
+@router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_my_project(
+    project_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> None:
+    project = project_service.get_project(db, project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    try:
+        project_service.assert_project_access(project, user)
+    except ProjectAccessDenied as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    project_service.delete_project(db, project)
