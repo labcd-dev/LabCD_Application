@@ -240,6 +240,7 @@ Also back up `uploads/` and `results/`.
 | Symptom | Fix |
 |---------|-----|
 | HTTPS / cert fails | Open ports 80+443; confirm DNS with `dig`; check `caddy` logs |
+| `Bind for 0.0.0.0:80 failed: port is already allocated` | Something else owns host :80. On the server: `docker ps --filter publish=80` and `sudo ss -tlnp \| grep ':80 '`. Stop the other container, or disable host nginx/apache (`sudo systemctl disable --now nginx`). Then re-run `bash deploy/deploy.sh`. |
 | `502` Bad Gateway | `docker compose ... ps` and logs for `frontend` / `api` |
 | CORS / login errors | Set `CORS_ORIGINS` to production HTTPS URLs; recreate `api` |
 | API 404 under `/api/` | Frontend nginx proxies `/api/` → `api:8000`; ensure both containers are up |
