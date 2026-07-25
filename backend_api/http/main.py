@@ -16,6 +16,7 @@ from backend_api.http.routers import (
     admin,
     auth,
     blog,
+    bug_reports,
     case_studies,
     errors,
     health,
@@ -100,6 +101,7 @@ def create_app() -> FastAPI:
     app.include_router(site.router, prefix=API_PREFIX)
     app.include_router(blog.router, prefix=API_PREFIX)
     app.include_router(survey.router, prefix=API_PREFIX)
+    app.include_router(bug_reports.router, prefix=API_PREFIX)
     app.include_router(errors.router, prefix=API_PREFIX)
     app.include_router(projects.router, prefix=API_PREFIX)
     app.include_router(upload.router, prefix=API_PREFIX)

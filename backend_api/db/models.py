@@ -131,6 +131,11 @@ class User(Base):
         cascade="all, delete-orphan",
         lazy="noload",
     )
+    bug_reports: Mapped[list["BugReport"]] = relationship(
+        "BugReport",
+        back_populates="user",
+        lazy="noload",
+    )
 
     def action_codes(self) -> list[str]:
         if self.plan is None:
@@ -328,3 +333,38 @@ class BlogPost(Base):
         onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,
     )
+
+
+class BugReport(Base):
+    """User-submitted bug report with optional screenshot."""
+
+    __tablename__ = "bug_reports"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    title: Mapped[str] = mapped_column(String(200), nullable=False, default="")
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    image_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    page_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    status: Mapped[str] = mapped_column(String(40), default="open", nullable=False, index=True)
+    admin_notes: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+        index=True,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+    fixed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    user: Mapped[User | None] = relationship("User", back_populates="bug_reports")

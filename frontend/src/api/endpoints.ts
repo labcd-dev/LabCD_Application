@@ -37,6 +37,8 @@ import type {
   LandingPayload,
   BlogPost,
   BlogPostListItem,
+  BugReport,
+  BugReportSettings,
 } from './types'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '/api/v1'
@@ -342,6 +344,37 @@ export const uploadApi = {
     form.append('file', file)
     return apiFetch<UploadResponse>('/upload', { method: 'POST', body: form })
   },
+}
+
+export const bugReportsApi = {
+  status: () => apiFetch<BugReportSettings>('/bug-reports/status'),
+  create: (body: { description: string; page_url?: string; image?: File | null }) => {
+    const form = new FormData()
+    form.append('description', body.description)
+    if (body.page_url) form.append('page_url', body.page_url)
+    if (body.image) form.append('image', body.image)
+    return apiFetch<BugReport>('/bug-reports', { method: 'POST', body: form })
+  },
+  getSettings: () => apiFetch<BugReportSettings>('/admin/bug-reports/settings'),
+  updateSettings: (body: Partial<BugReportSettings>) =>
+    apiFetch<BugReportSettings>('/admin/bug-reports/settings', {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+  listAdmin: (params?: { status?: 'open' | 'fixed' | 'all' }) =>
+    apiFetch<BugReport[]>(
+      `/admin/bug-reports${buildQuery({ status: params?.status })}`,
+    ),
+  getAdmin: (reportId: number) => apiFetch<BugReport>(`/admin/bug-reports/${reportId}`),
+  updateStatus: (reportId: number, status: 'open' | 'fixed') =>
+    apiFetch<BugReport>(`/admin/bug-reports/${reportId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    }),
+  downloadCsv: (params?: { status?: 'open' | 'fixed' | 'all' }) =>
+    downloadAdminCsv('/admin/bug-reports/export.csv', {
+      status: params?.status,
+    }),
 }
 
 export const regularizerApi = {

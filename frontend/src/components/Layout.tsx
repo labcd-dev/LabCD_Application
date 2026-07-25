@@ -3,6 +3,7 @@ import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { Clapperboard, FolderOpen, Home, LogOut, Shield, User } from 'lucide-react'
 import { surveyApi } from '../api/endpoints'
 import type { TutorialVideo } from '../api/types'
+import { BugReportFab } from './BugReportFab'
 import { ThemeToggle } from './ThemeToggle'
 import { TutorialSliderModal } from './TutorialSliderModal'
 import { useAuth } from '../context/AuthContext'
@@ -178,6 +179,7 @@ export function Layout() {
           }}
         />
       )}
+      {user && <BugReportFab />}
     </div>
   )
 }
