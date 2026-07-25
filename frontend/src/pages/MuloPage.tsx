@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { ArrowLeft } from 'lucide-react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   caseStudiesApi,
   healthApi,
@@ -52,6 +53,7 @@ function resolveInitialPipelineStep(
 }
 
 export function MuloPage() {
+  const navigate = useNavigate()
   const pipeline = usePipeline()
   const [searchParams, setSearchParams] = useSearchParams()
 
@@ -152,7 +154,53 @@ export function MuloPage() {
     if (step === 'designer' && pipeline.recommenderJobId && pipeline.trimmerJobId) {
       setDataSource('pipeline')
     }
+    if (step !== 'designer') {
+      setStage('setup')
+      setError(null)
+    }
   }, [pipeline.recommenderJobId, pipeline.trimmerJobId, setSearchParams])
+
+  const resetExperiment = useCallback(() => {
+    pipeline.setMuloJobId(null)
+    setDesignerState(null)
+    setStage('setup')
+    setError(null)
+  }, [pipeline])
+
+  const goBackFromPipelineStep = useCallback(() => {
+    if (pipelineStep === 'designer') {
+      if (stage === 'edit_case_study') {
+        setStage('setup')
+        return
+      }
+      if (stage === 'running' || stage === 'complete') {
+        resetExperiment()
+        return
+      }
+      if (isPipelineWorkflow) {
+        goToPipelineStep('trimmer')
+        return
+      }
+      navigate('/studio')
+      return
+    }
+    if (pipelineStep === 'trimmer') {
+      goToPipelineStep('recommender')
+      return
+    }
+    navigate('/studio')
+  }, [pipelineStep, stage, isPipelineWorkflow, goToPipelineStep, navigate, resetExperiment])
+
+  const backLabel = (() => {
+    if (pipelineStep === 'designer') {
+      if (stage === 'edit_case_study') return 'Back to Parameter Configurations'
+      if (stage === 'running' || stage === 'complete') return 'Back to Designer Setup'
+      if (isPipelineWorkflow) return 'Back to Trimmer'
+      return 'Back to Studio'
+    }
+    if (pipelineStep === 'trimmer') return 'Back to Recommender'
+    return 'Back to Studio'
+  })()
 
   const loadCaseStudyBundle = useCallback(async (name: string) => {
     const bundle = (await caseStudiesApi.mulo(name)) as unknown as MuloCaseStudyBundle
@@ -287,13 +335,6 @@ export function MuloPage() {
     }
   }
 
-  const resetExperiment = () => {
-    pipeline.setMuloJobId(null)
-    setDesignerState(null)
-    setStage('setup')
-    setError(null)
-  }
-
   const editorStructure = useMemo(
     () => (designerState?.controller_structure as unknown as MuloPidLoop[]) ?? defaultStructure,
     [designerState, defaultStructure],
@@ -322,11 +363,19 @@ export function MuloPage() {
 
   return (
     <section className={pageSection}>
-      <h2 className="mt-0 text-foreground">Multi Loop Control Designer</h2>
-      <p className={pageIntro}>
-        LLM-enhanced genetic algorithm for multi-loop PID controller design.
-        {isPipelineWorkflow && ' Run Recommender, Trimmer, and Designer in one workflow.'}
-      </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="mt-0 text-foreground">Multi Loop Control Designer</h2>
+          <p className={pageIntro}>
+            LLM-enhanced genetic algorithm for multi-loop PID controller design.
+            {isPipelineWorkflow && ' Run Recommender, Trimmer, and Designer in one workflow.'}
+          </p>
+        </div>
+        <button type="button" className={btnBase} onClick={goBackFromPipelineStep}>
+          <ArrowLeft className="size-4" aria-hidden />
+          {backLabel}
+        </button>
+      </div>
 
       {feedbackModal}
 
@@ -335,7 +384,10 @@ export function MuloPage() {
           step={pipelineStep}
           completedSteps={completedPipelineSteps}
           onStepClick={(step) => {
-            if (step === 'recommender' || completedPipelineSteps.includes(step)) {
+            const order: MuloPipelineStep[] = ['recommender', 'trimmer', 'designer']
+            const targetIndex = order.indexOf(step)
+            const currentIndex = order.indexOf(pipelineStep)
+            if (step === 'recommender' || completedPipelineSteps.includes(step) || targetIndex <= currentIndex) {
               goToPipelineStep(step)
             }
           }}
@@ -431,16 +483,6 @@ export function MuloPage() {
               >
                 {loading ? 'Initializing Controller Designer Profile…' : 'Initialize Controller Designer Profile'}
               </button>
-
-              {isPipelineWorkflow && (
-                <button
-                  type="button"
-                  className={btnBase}
-                  onClick={() => goToPipelineStep('recommender')}
-                >
-                  Back to Recommender
-                </button>
-              )}
             </div>
           )}
 

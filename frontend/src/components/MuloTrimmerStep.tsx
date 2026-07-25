@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { RotateCcw } from 'lucide-react'
 import { trimmerApi } from '../api/endpoints'
 import { ActivityLog } from './ActivityLog'
 import { HumanInputForm } from './HumanInputForm'
@@ -8,7 +9,7 @@ import { StatusMessage } from './StatusMessage'
 import { Tabs } from './Tabs'
 import { usePipeline } from '../context/PipelineContext'
 import { useJobStream } from '../hooks/useJobStream'
-import { btnPrimary, fieldInput, fieldLabel } from '../lib/classes'
+import { btnBase, btnPrimary, fieldInput, fieldLabel } from '../lib/classes'
 
 type Step = 'operating' | 'running' | 'results'
 
@@ -102,6 +103,15 @@ export function MuloTrimmerStep({ onComplete }: MuloTrimmerStepProps) {
     }
   }
 
+  const restartTrimmer = () => {
+    pipeline.setTrimmerJobId(null)
+    pipeline.setMuloJobId(null)
+    setArtifacts(null)
+    setError(null)
+    setActiveTab('process')
+    setStep('operating')
+  }
+
   const tabs = [
     {
       id: 'process',
@@ -125,9 +135,15 @@ export function MuloTrimmerStep({ onComplete }: MuloTrimmerStepProps) {
             <>
               <StatusMessage type="success" message="Trimmer completed." />
               <JsonViewer data={artifacts.result ?? artifacts} title="Equilibrium Results" />
-              <button type="button" className={btnPrimary} onClick={onComplete}>
-                Continue to Multi Loop Designer
-              </button>
+              <div className="flex gap-3 flex-wrap mt-4">
+                <button type="button" className={btnBase} onClick={restartTrimmer}>
+                  <RotateCcw className="size-4" aria-hidden />
+                  Change Settings & Re-run
+                </button>
+                <button type="button" className={btnPrimary} onClick={onComplete}>
+                  Continue to Multi Loop Designer
+                </button>
+              </div>
             </>
           )}
         </>

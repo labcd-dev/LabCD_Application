@@ -323,6 +323,9 @@ export const projectsApi = {
       title?: string
       status?: string
       control_objective?: string
+      file_name?: string
+      file_type?: string
+      file_content?: string
       job_id?: string
       results?: Record<string, unknown>
     },

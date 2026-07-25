@@ -1,5 +1,5 @@
 import { createContext, useContext, useMemo, useState, type ReactNode } from 'react'
-import type { PipelineType, RecommenderHandoffResponse } from '../api/types'
+import type { PipelineType, ProjectDetail, RecommenderHandoffResponse } from '../api/types'
 
 interface PipelineState {
   fileName: string
@@ -33,6 +33,8 @@ interface PipelineContextValue extends PipelineState {
   setTrimmingParams: (params: Record<string, unknown>) => void
   setStatesInputs: (inputs: string[]) => void
   updateFileContent: (content: string) => void
+  clearDesignJobs: () => void
+  hydrateFromProject: (project: ProjectDetail) => void
   reset: () => void
 }
 
@@ -85,6 +87,26 @@ export function PipelineProvider({ children }: { children: ReactNode }) {
         setState((prev) => ({ ...prev, trimmingParams })),
       setStatesInputs: (statesInputs) => setState((prev) => ({ ...prev, statesInputs })),
       updateFileContent: (fileContent) => setState((prev) => ({ ...prev, fileContent })),
+      clearDesignJobs: () =>
+        setState((prev) => ({
+          ...prev,
+          recommenderJobId: null,
+          trimmerJobId: null,
+          siloJobId: null,
+          muloJobId: null,
+          handoff: null,
+          trimmingParams: {},
+          statesInputs: [],
+        })),
+      hydrateFromProject: (project) =>
+        setState({
+          ...initialState,
+          fileName: project.file_name || project.title || '',
+          fileType: project.file_type || 'python',
+          fileContent: project.file_content || '',
+          pipeline: project.pipeline_type,
+          projectId: project.id,
+        }),
       reset: () => setState(initialState),
     }),
     [state],

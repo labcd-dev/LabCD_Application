@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { RotateCcw } from 'lucide-react'
 import { healthApi, jobsApi, recommenderApi } from '../api/endpoints'
 import { ActivityLog } from './ActivityLog'
 import { JsonViewer } from './JsonViewer'
@@ -134,6 +135,22 @@ export function MuloRecommenderStep({ onComplete }: MuloRecommenderStepProps) {
     }
   }
 
+  const restartRecommender = () => {
+    pipeline.setRecommenderJobId(null)
+    pipeline.setHandoff(null)
+    pipeline.setTrimmerJobId(null)
+    pipeline.setMuloJobId(null)
+    pipeline.setTrimmingParams({})
+    pipeline.setStatesInputs([])
+    setState(null)
+    setChosenController(null)
+    setRagFlags([])
+    setRagError('')
+    setError(null)
+    setActiveTab('process')
+    setStep('idle')
+  }
+
   const controllerGraph = (state?.controller_graph ?? {}) as Record<string, string>
   const controllerKeys = Object.keys(controllerJson)
 
@@ -171,6 +188,10 @@ export function MuloRecommenderStep({ onComplete }: MuloRecommenderStepProps) {
                 />
               )}
               <div className="flex gap-3 flex-wrap mt-4">
+                <button type="button" className={btnBase} onClick={restartRecommender}>
+                  <RotateCcw className="size-4" aria-hidden />
+                  Change Settings & Re-run
+                </button>
                 <button type="button" className={btnPrimary} onClick={() => void goToTrimmer()}>
                   Satisfied – Continue to Trimmer
                 </button>
@@ -243,14 +264,20 @@ export function MuloRecommenderStep({ onComplete }: MuloRecommenderStepProps) {
                   </label>
                 ))}
               </div>
-              <button
-                type="button"
-                className={btnPrimary}
-                disabled={!chosenController || loading}
-                onClick={() => void goToTrimmer(chosenController)}
-              >
-                Save Choice – Continue to Trimmer
-              </button>
+              <div className="flex gap-3 flex-wrap mt-4">
+                <button
+                  type="button"
+                  className={btnPrimary}
+                  disabled={!chosenController || loading}
+                  onClick={() => void goToTrimmer(chosenController)}
+                >
+                  Save Choice – Continue to Trimmer
+                </button>
+                <button type="button" className={btnBase} onClick={restartRecommender}>
+                  <RotateCcw className="size-4" aria-hidden />
+                  Change Settings & Re-run
+                </button>
+              </div>
             </>
           )}
         </>

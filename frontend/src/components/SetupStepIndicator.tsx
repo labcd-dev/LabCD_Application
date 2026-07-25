@@ -5,7 +5,7 @@ import { cardPanel } from '../lib/classes'
 export type SetupStage = 'upload' | 'processing' | 'result' | 'standardizing' | 'ready'
 
 interface StepDef {
-  id: string
+  id: 'upload' | 'process' | 'standardize' | 'ready'
   label: string
   description: string
   icon: LucideIcon
@@ -34,12 +34,16 @@ function stageToIndex(stage: SetupStage): number {
   }
 }
 
+export type SetupStepId = StepDef['id']
+
 interface SetupStepIndicatorProps {
   stage: SetupStage
+  onStepClick?: (step: SetupStepId) => void
 }
 
-export function SetupStepIndicator({ stage }: SetupStepIndicatorProps) {
+export function SetupStepIndicator({ stage, onStepClick }: SetupStepIndicatorProps) {
   const activeIndex = stageToIndex(stage)
+  const isBusy = stage === 'processing' || stage === 'standardizing'
 
   return (
     <div className={`${cardPanel} setup-steps-card setup-animate-in`}>
@@ -50,6 +54,8 @@ export function SetupStepIndicator({ stage }: SetupStepIndicatorProps) {
           const isComplete = index < activeIndex
           const isActive = index === activeIndex
           const isPending = index > activeIndex
+          const isClickable =
+            Boolean(onStepClick) && !isBusy && (isComplete || isActive)
 
           return (
             <li
@@ -75,17 +81,35 @@ export function SetupStepIndicator({ stage }: SetupStepIndicatorProps) {
                   aria-hidden
                 />
               )}
-              <div className="setup-steps__node">
-                <span className="setup-steps__icon-wrap">
-                  {isComplete ? (
-                    <Check className="setup-steps__icon" aria-hidden />
-                  ) : (
-                    <Icon className="setup-steps__icon" aria-hidden />
-                  )}
-                </span>
-                <span className="setup-steps__label">{step.label}</span>
-                <span className="setup-steps__description">{step.description}</span>
-              </div>
+              {isClickable ? (
+                <button
+                  type="button"
+                  className="setup-steps__node setup-steps__node--button"
+                  onClick={() => onStepClick?.(step.id)}
+                >
+                  <span className="setup-steps__icon-wrap">
+                    {isComplete ? (
+                      <Check className="setup-steps__icon" aria-hidden />
+                    ) : (
+                      <Icon className="setup-steps__icon" aria-hidden />
+                    )}
+                  </span>
+                  <span className="setup-steps__label">{step.label}</span>
+                  <span className="setup-steps__description">{step.description}</span>
+                </button>
+              ) : (
+                <div className="setup-steps__node">
+                  <span className="setup-steps__icon-wrap">
+                    {isComplete ? (
+                      <Check className="setup-steps__icon" aria-hidden />
+                    ) : (
+                      <Icon className="setup-steps__icon" aria-hidden />
+                    )}
+                  </span>
+                  <span className="setup-steps__label">{step.label}</span>
+                  <span className="setup-steps__description">{step.description}</span>
+                </div>
+              )}
             </li>
           )
         })}

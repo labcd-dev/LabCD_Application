@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { FolderOpen, Search } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
+import { FolderOpen, RotateCcw, Search } from 'lucide-react'
 import { projectsApi } from '../api/endpoints'
 import type { ProjectSummary } from '../api/types'
 import { StatusMessage } from '../components/StatusMessage'
+import { usePipeline } from '../context/PipelineContext'
 import {
   btnBase,
   btnCompact,
@@ -14,13 +15,17 @@ import {
   pageSection,
 } from '../lib/classes'
 import { pipelineLabel, statusBadgeClass } from '../lib/projectLabels'
+import { canRetryProject, retryProject } from '../lib/retryProject'
 
 export function ProjectsPage() {
+  const navigate = useNavigate()
+  const pipeline = usePipeline()
   const [projects, setProjects] = useState<ProjectSummary[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<'all' | 'siloDesign' | 'muloDesign'>('all')
+  const [retryingId, setRetryingId] = useState<number | null>(null)
 
   const load = async () => {
     setLoading(true)
@@ -37,6 +42,18 @@ export function ProjectsPage() {
   useEffect(() => {
     void load()
   }, [])
+
+  const handleRetry = async (projectId: number) => {
+    setRetryingId(projectId)
+    setError(null)
+    try {
+      const detail = await projectsApi.get(projectId)
+      await retryProject(detail, pipeline, navigate)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to retry project')
+      setRetryingId(null)
+    }
+  }
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -136,6 +153,17 @@ export function ProjectsPage() {
                 </p>
               </div>
               <div className="flex shrink-0 gap-2">
+                {canRetryProject(project.status) && (
+                  <button
+                    type="button"
+                    className={`${btnBase} ${btnCompact}`}
+                    disabled={retryingId === project.id}
+                    onClick={() => void handleRetry(project.id)}
+                  >
+                    <RotateCcw className="size-3.5" />
+                    {retryingId === project.id ? 'Opening…' : 'Retry'}
+                  </button>
+                )}
                 <Link to={`/projects/${project.id}`} className={`${btnBase} ${btnCompact}`}>
                   View
                 </Link>

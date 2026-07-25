@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, Pencil } from 'lucide-react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { ArrowLeft, Pencil, RotateCcw } from 'lucide-react'
 import { projectsApi } from '../api/endpoints'
 import type { ProjectDetail } from '../api/types'
 import { CodePreview } from '../components/CodePreview'
 import { ProjectResultsView } from '../components/ProjectResultsView'
 import { StatusMessage } from '../components/StatusMessage'
+import { usePipeline } from '../context/PipelineContext'
 import {
   btnBase,
   btnCompact,
@@ -17,8 +18,11 @@ import {
   pageSection,
 } from '../lib/classes'
 import { pipelineLabel, statusBadgeClass } from '../lib/projectLabels'
+import { canRetryProject, retryProject } from '../lib/retryProject'
 
 export function ProjectDetailPage() {
+  const navigate = useNavigate()
+  const pipeline = usePipeline()
   const { projectId } = useParams()
   const id = Number(projectId)
   const [project, setProject] = useState<ProjectDetail | null>(null)
@@ -26,6 +30,7 @@ export function ProjectDetailPage() {
   const [loading, setLoading] = useState(true)
   const [renaming, setRenaming] = useState(false)
   const [title, setTitle] = useState('')
+  const [retrying, setRetrying] = useState(false)
 
   useEffect(() => {
     if (!Number.isFinite(id)) {
@@ -57,6 +62,18 @@ export function ProjectDetailPage() {
       setRenaming(false)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to rename project')
+    }
+  }
+
+  const handleRetry = async () => {
+    if (!project || !canRetryProject(project.status)) return
+    setRetrying(true)
+    setError(null)
+    try {
+      await retryProject(project, pipeline, navigate)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to retry project')
+      setRetrying(false)
     }
   }
 
@@ -121,6 +138,17 @@ export function ProjectDetailPage() {
               </div>
             </div>
             <div className="flex gap-2">
+              {canRetryProject(project.status) && (
+                <button
+                  type="button"
+                  className={btnPrimary}
+                  disabled={retrying}
+                  onClick={() => void handleRetry()}
+                >
+                  <RotateCcw className="size-3.5" />
+                  {retrying ? 'Opening…' : 'Retry Project'}
+                </button>
+              )}
               <button type="button" className={btnBase} onClick={() => setRenaming(true)}>
                 <Pencil className="size-3.5" />
                 Rename

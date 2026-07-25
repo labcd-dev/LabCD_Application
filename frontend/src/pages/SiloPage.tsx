@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { OctagonX } from 'lucide-react'
+import { ArrowLeft, OctagonX, RotateCcw } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { healthApi, jobsApi, siloApi } from '../api/endpoints'
 import { ActivityLog } from '../components/ActivityLog'
 import { DesignIterationReport } from '../components/DesignIterationReport'
@@ -35,6 +36,7 @@ import {
 } from '../lib/siloDesignConfig'
 
 export function SiloPage() {
+  const navigate = useNavigate()
   const pipeline = usePipeline()
   const [models, setModels] = useState<string[]>(['gpt-4o'])
   const [objective, setObjective] = useState('')
@@ -119,6 +121,22 @@ export function SiloPage() {
       setCancelling(false)
     }
   }
+
+  const goBackToStudio = () => {
+    navigate('/studio')
+  }
+
+  const retryDesign = () => {
+    pipeline.setSiloJobId(null)
+    setStarted(false)
+    setActiveTab('state')
+    setError(null)
+    setCancelling(false)
+    promptedJobRef.current = null
+  }
+
+  const canRetry =
+    started && (stream.isDone || stream.error || stream.isCancelled) && !stream.isRunning
 
   const isStopping = cancelling && !stream.isCancelled
 
@@ -225,10 +243,26 @@ export function SiloPage() {
 
   return (
     <section className={pageSection}>
-      <h2 className="mt-0 text-foreground">Single Loop Control Designer</h2>
-      <p className={pageIntro}>
-        Describe your control objective and run the SiloDesigner pipeline via API.
-      </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="mt-0 text-foreground">Single Loop Control Designer</h2>
+          <p className={pageIntro}>
+            Describe your control objective and run the SiloDesigner pipeline via API.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className={btnBase} onClick={goBackToStudio}>
+            <ArrowLeft className="size-4" aria-hidden />
+            Back to Studio
+          </button>
+          {canRetry && (
+            <button type="button" className={btnBase} onClick={retryDesign}>
+              <RotateCcw className="size-4" aria-hidden />
+              Retry Design
+            </button>
+          )}
+        </div>
+      </div>
 
       {error && <StatusMessage type="error" message={error} />}
       {feedbackModal}
