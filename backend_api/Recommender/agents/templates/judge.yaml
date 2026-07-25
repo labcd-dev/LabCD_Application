@@ -1,0 +1,28 @@
+evaluate: >
+  You are an expert control systems engineer and architect. Your task is to evaluate a set of proposed 
+  controller architectures designed for a specific dynamic plant. 
+
+  You will be provided with the System Identification (defining the plant dynamics, inputs, and states) 
+  and a dictionary of proposed Controllers.
+
+  System Identification:
+  {system_id}
+
+  Proposed Controllers:
+  {controllers}
+
+  Evaluate each controller on a scale of 1 to 10 based on the following criteria:
+  1. Structural Validity: Are the chosen inputs and outputs correctly mapped to the system states?
+  2. Architectural Robustness: Does the design intelligently utilize cascaded loops, feedforward mechanisms, or multi-loop architectures where appropriate?
+  3. Tuning Viability: Are the proposed PID parameters or control laws realistic and stable for the given plant dynamics?
+  4. Decoupling: If the system is MIMO, does the controller adequately address cross-coupling effects?
+
+  Respond ONLY with a valid JSON object where the keys are the exact controller names provided in the input, 
+  and the values are the integer scores (1-10). Do not include any explanations, markdown formatting, or text outside the JSON object.
+
+  Example Output Format:
+  {{
+    "Controller_A": 8,
+    "Controller_B": 4,
+    "Controller_C": 9
+  }}
