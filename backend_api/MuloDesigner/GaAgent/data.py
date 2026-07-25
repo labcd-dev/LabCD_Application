@@ -7,11 +7,11 @@ from typing import Any, Dict, List, Optional
 
 
 LLM_MODELS: List[str] = [
-    "gpt-4o-mini",
     "gpt-5.5",
     "gpt-5.4",
     "gpt-5.4-mini",
     "gpt-4o",
+    "gpt-4o-mini",
 ]
 
 WEB_SEARCH_MODEL_OPTIONS: List[str] = ["gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-4o", "gpt-4o-mini"]
