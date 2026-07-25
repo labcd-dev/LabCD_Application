@@ -204,9 +204,8 @@ class CustomDynamicalSystem(GeneralDynamicalSystem):
     def _detect_system_properties(self):
         """Auto-detect the number of states by testing the dynamics function"""
         test_t = 0.0
-        test_u = 0.0 if self.num_inputs == 1 else np.zeros(self.num_inputs)
+        test_u = np.zeros(self.num_inputs)
 
-        # Try different state dimensions to find the correct one
         for n_states in range(1, 11):
             try:
                 test_x = np.zeros(n_states)
@@ -216,7 +215,14 @@ class CustomDynamicalSystem(GeneralDynamicalSystem):
                 if result.shape == (n_states,):
                     self.num_states = n_states
                     return
-            except:
+            except TypeError as e:
+                raise TypeError(
+                    f"dynamics function raised TypeError during auto-detection "
+                    f"with num_states={n_states}, num_inputs={self.num_inputs}. "
+                    f"Ensure your dynamics accepts u as an array/vector even for SISO. "
+                    f"Original error: {e}"
+                ) from e
+            except Exception:
                 continue
 
         raise ValueError("Could not determine system dimension from dynamics function")
@@ -239,11 +245,10 @@ class CustomDynamicalSystem(GeneralDynamicalSystem):
         """
         t = 0.0  # Time-invariant assumption for simplicity
 
-        # Ensure u is properly formatted for the dynamics function
-        if self.num_inputs == 1:
-            u_input = u[0] if isinstance(u, (list, np.ndarray)) else float(u)
-        else:
-            u_input = u
+        # Ensure u is always a 1-D numpy array so user dynamics can safely index it (e.g. u[0])
+        u_input = np.asarray(u)
+        if u_input.ndim == 0:
+            u_input = u_input.reshape(1)
 
         return self.dynamics_func(t, x, u_input)
 

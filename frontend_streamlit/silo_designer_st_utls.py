@@ -373,7 +373,7 @@ def create_advanced_settings(llm_model = None):
         'min_ctrl': min_ctrl,
         'max_ctrl': max_ctrl,
         'matlab_func_name': "dynamics",
-        'num_states': num_states if num_states != 4 else None,
+        'num_states': num_states,
         'trim_values': trim_values if len(trim_values) == num_inputs else None,
         'param_ranges': param_ranges,
         'custom_scenarios': custom_scenarios if custom_scenarios else None,
