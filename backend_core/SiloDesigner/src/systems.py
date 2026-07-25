@@ -186,22 +186,32 @@ class CustomDynamicalSystem(GeneralDynamicalSystem):
             self.dynamics_func = getattr(self.dynamics_module, 'dynamics')
 
     def _detect_system_properties(self):
-        """Auto-detect the number of states by testing the dynamics function"""
+        """Auto-detect the number of states by testing the dynamics function.
+
+        Tries both scalar-u (common in case studies: `... + u`) and vector-u
+        (`u[0]`) conventions for SISO so either style of dynamics works.
+        """
         test_t = 0.0
-        test_u = 0.0 if self.num_inputs == 1 else np.zeros(self.num_inputs)
+        if self.num_inputs == 1:
+            test_u_candidates = [0.0, np.zeros(1)]
+        else:
+            test_u_candidates = [np.zeros(self.num_inputs)]
 
-        # Try different state dimensions to find the correct one
+        self._pass_u_as_vector = self.num_inputs > 1
+
         for n_states in range(1, 11):
-            try:
-                test_x = np.zeros(n_states)
-                result = self.dynamics_func(test_t, test_x, test_u)
-                result = np.asarray(result)
+            test_x = np.zeros(n_states)
+            for test_u in test_u_candidates:
+                try:
+                    result = self.dynamics_func(test_t, test_x, test_u)
+                    result = np.asarray(result, dtype=float).reshape(-1)
 
-                if result.shape == (n_states,):
-                    self.num_states = n_states
-                    return
-            except:
-                continue
+                    if result.shape == (n_states,):
+                        self.num_states = n_states
+                        self._pass_u_as_vector = isinstance(test_u, np.ndarray)
+                        return
+                except Exception:
+                    continue
 
         raise ValueError("Could not determine system dimension from dynamics function")
 
@@ -223,11 +233,14 @@ class CustomDynamicalSystem(GeneralDynamicalSystem):
         """
         t = 0.0  # Time-invariant assumption for simplicity
 
-        # Ensure u is properly formatted for the dynamics function
-        if self.num_inputs == 1:
-            u_input = u[0] if isinstance(u, (list, np.ndarray)) else float(u)
+        if self.num_inputs == 1 and not getattr(self, '_pass_u_as_vector', False):
+            # Scalar-u convention used by most case-study dynamics
+            u_input = float(u[0]) if isinstance(u, (list, np.ndarray)) else float(u)
         else:
-            u_input = u
+            # Vector-u convention (safe to index as u[0], ..., u[n-1])
+            u_input = np.atleast_1d(np.asarray(u, dtype=float)).ravel()
+            if self.num_inputs == 1:
+                u_input = u_input[:1]
 
         return self.dynamics_func(t, x, u_input)
 
