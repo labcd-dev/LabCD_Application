@@ -6,6 +6,7 @@ import {
   Bug,
   ClipboardList,
   FolderKanban,
+  Flag,
   Globe,
   LayoutDashboard,
   LogOut,
@@ -15,6 +16,7 @@ import {
   Users,
   X,
 } from 'lucide-react'
+import { BugReportFab } from '../BugReportFab'
 import { ThemeToggle } from '../ThemeToggle'
 import { useAuth } from '../../context/AuthContext'
 import { btnBase, btnCompact } from '../../lib/classes'
@@ -27,6 +29,7 @@ const navItems = [
   { to: '/admin/site', end: false, label: 'Site CMS', icon: Globe },
   { to: '/admin/blog', end: false, label: 'Blog', icon: Newspaper },
   { to: '/admin/survey', end: false, label: 'Survey', icon: ClipboardList },
+  { to: '/admin/bug-reports', end: false, label: 'Bug Reports', icon: Flag },
   { to: '/admin/monitoring', end: false, label: 'Monitoring', icon: Activity },
   { to: '/admin/errors', end: false, label: 'Error Tracking', icon: Bug },
 ] as const
@@ -159,6 +162,7 @@ export function AdminLayout() {
           </div>
         </main>
       </div>
+      <BugReportFab />
     </div>
   )
 }

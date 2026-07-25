@@ -875,6 +875,59 @@
   animation: admin-slide-in 0.25s ease-out;
 }
 
+@keyframes bug-report-success-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes bug-report-check-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.12);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes bug-report-ring-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--app-primary) 35%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 10px color-mix(in srgb, var(--app-primary) 0%, transparent);
+  }
+}
+
+.bug-report-success {
+  animation: bug-report-success-in 0.35s ease-out;
+}
+
+.bug-report-success__ring {
+  animation: bug-report-ring-pulse 1.1s ease-out 1;
+}
+
+.bug-report-success__check {
+  animation: bug-report-check-pop 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.bug-report-submit--busy {
+  pointer-events: none;
+  opacity: 0.9;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .setup-animate-in,
   .setup-hero__icon-wrap,
@@ -884,7 +937,10 @@
   .processing-card__core-icon--spin,
   .setup-ready-banner__icon,
   .admin-fade-in,
-  .admin-slide-in {
+  .admin-slide-in,
+  .bug-report-success,
+  .bug-report-success__ring,
+  .bug-report-success__check {
     animation: none;
   }
 

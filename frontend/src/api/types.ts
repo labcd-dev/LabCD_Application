@@ -397,3 +397,21 @@ export interface BlogPost extends BlogPostListItem {
   author_id: number | null
 }
 
+export type BugReportStatus = 'open' | 'fixed'
+
+export interface BugReport {
+  id: number
+  user_id: number | null
+  user_email: string | null
+  description: string
+  image_url: string | null
+  page_url: string | null
+  status: BugReportStatus | string
+  created_at: string
+  fixed_at: string | null
+}
+
+export interface BugReportSettings {
+  enabled: boolean
+}
+

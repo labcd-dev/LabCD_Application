@@ -105,6 +105,43 @@ def _migrate_schema() -> None:
             )
 
     _migrate_plan_allowed_models()
+    _migrate_bug_reports()
+
+
+def _migrate_bug_reports() -> None:
+    """Align legacy bug_reports table with the current BugReport model."""
+    from sqlalchemy import inspect
+
+    inspector = inspect(engine)
+    if "bug_reports" not in inspector.get_table_names():
+        return
+
+    columns = {col["name"] for col in inspector.get_columns("bug_reports")}
+    statements: list[str] = []
+    if "fixed_at" not in columns:
+        statements.append("ALTER TABLE bug_reports ADD COLUMN fixed_at TIMESTAMP WITH TIME ZONE")
+    if "title" not in columns:
+        statements.append(
+            "ALTER TABLE bug_reports ADD COLUMN title VARCHAR(200) NOT NULL DEFAULT ''"
+        )
+    if "user_agent" not in columns:
+        statements.append("ALTER TABLE bug_reports ADD COLUMN user_agent VARCHAR(512)")
+    if "admin_notes" not in columns and "admin_note" not in columns:
+        statements.append(
+            "ALTER TABLE bug_reports ADD COLUMN admin_notes TEXT NOT NULL DEFAULT ''"
+        )
+    if "updated_at" not in columns:
+        statements.append(
+            "ALTER TABLE bug_reports ADD COLUMN updated_at TIMESTAMP WITH TIME ZONE "
+            "NOT NULL DEFAULT NOW()"
+        )
+
+    if not statements:
+        return
+
+    with engine.begin() as conn:
+        for statement in statements:
+            conn.execute(text(statement))
 
 
 def _migrate_plan_allowed_models() -> None:
