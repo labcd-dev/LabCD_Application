@@ -11,7 +11,6 @@ import {
 import type { MuloDesignerStateResponse } from '../api/types'
 import { MuloAdvancedSettings } from '../components/MuloAdvancedSettings'
 import { MuloCaseStudyEditor } from '../components/MuloCaseStudyEditor'
-import { MuloOptimizationDashboard } from '../components/MuloOptimizationDashboard'
 import {
   MuloPipelineStepIndicator,
   type MuloPipelineStep,
@@ -21,7 +20,6 @@ import { MuloTrimmerStep } from '../components/MuloTrimmerStep'
 import { ModelSelect } from '../components/ModelSelect'
 import { StatusMessage } from '../components/StatusMessage'
 import { usePipeline } from '../context/PipelineContext'
-import { useFeedbackSurveyPrompt } from '../hooks/useFeedbackSurveyPrompt'
 import {
   buildMuloRunConfig,
   normalizeControllerStructure,
@@ -91,8 +89,6 @@ export function MuloPage() {
   const [defaultSimParams, setDefaultSimParams] = useState({ dt: 0.001, max_time: 50 })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [optimizationRunKey, setOptimizationRunKey] = useState(0)
-  const { promptAfterDesignSuccess, feedbackModal } = useFeedbackSurveyPrompt()
 
   const jobId = pipeline.muloJobId
 
@@ -160,21 +156,10 @@ export function MuloPage() {
     }
   }, [pipeline.recommenderJobId, pipeline.trimmerJobId, setSearchParams])
 
-  const resetExperiment = useCallback(() => {
-    pipeline.setMuloJobId(null)
-    setDesignerState(null)
-    setStage('setup')
-    setError(null)
-  }, [pipeline])
-
   const goBackFromPipelineStep = useCallback(() => {
     if (pipelineStep === 'designer') {
       if (stage === 'edit_case_study') {
         setStage('setup')
-        return
-      }
-      if (stage === 'running' || stage === 'complete') {
-        resetExperiment()
         return
       }
       if (isPipelineWorkflow) {
@@ -189,12 +174,11 @@ export function MuloPage() {
       return
     }
     navigate('/studio')
-  }, [pipelineStep, stage, isPipelineWorkflow, goToPipelineStep, navigate, resetExperiment])
+  }, [pipelineStep, stage, isPipelineWorkflow, goToPipelineStep, navigate])
 
   const backLabel = (() => {
     if (pipelineStep === 'designer') {
       if (stage === 'edit_case_study') return 'Back to Parameter Configurations'
-      if (stage === 'running' || stage === 'complete') return 'Back to Designer Setup'
       if (isPipelineWorkflow) return 'Back to Trimmer'
       return 'Back to Studio'
     }
@@ -286,6 +270,10 @@ export function MuloPage() {
     simulationParams: { dt: number; max_time: number },
   ) => {
     if (!jobId || !designerState) return
+    if (!pipeline.projectId) {
+      setError('Create a project from Studio before starting optimization.')
+      return
+    }
     setLoading(true)
     setError(null)
     try {
@@ -298,38 +286,9 @@ export function MuloPage() {
         controller_structure: structure as unknown as Record<string, unknown>[],
       })
       await muloApi.run(jobId)
-      setOptimizationRunKey((prev) => prev + 1)
-      setStage('running')
+      navigate(`/projects/${pipeline.projectId}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start optimization')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleOptimizationComplete = useCallback((state: MuloDesignerStateResponse) => {
-    setDesignerState(state)
-    setStage('complete')
-    void promptAfterDesignSuccess()
-  }, [promptAfterDesignSuccess])
-
-  const continueNextLoop = async () => {
-    if (!jobId) return
-    setLoading(true)
-    setError(null)
-    try {
-      const latest = await muloApi.state(jobId)
-      await muloApi.continue(jobId, {
-        equation: latest.modified_code,
-        controller_structure: latest.modified_controller_structure,
-      })
-      const state = await muloApi.state(jobId)
-      setDesignerState(state)
-      setDefaultStructure(state.controller_structure as unknown as MuloPidLoop[])
-      setOptimizationRunKey((prev) => prev + 1)
-      setStage('running')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to continue to next loop')
     } finally {
       setLoading(false)
     }
@@ -369,6 +328,7 @@ export function MuloPage() {
           <p className={pageIntro}>
             LLM-enhanced genetic algorithm for multi-loop PID controller design.
             {isPipelineWorkflow && ' Run Recommender, Trimmer, and Designer in one workflow.'}
+            {' '}Live optimization opens on the project page.
           </p>
         </div>
         <button type="button" className={btnBase} onClick={goBackFromPipelineStep}>
@@ -376,8 +336,6 @@ export function MuloPage() {
           {backLabel}
         </button>
       </div>
-
-      {feedbackModal}
 
       {isPipelineWorkflow && (
         <MuloPipelineStepIndicator
@@ -507,35 +465,6 @@ export function MuloPage() {
               }}
               onRun={(structure, simulationParams) => void runOptimization(structure, simulationParams)}
               loading={loading}
-            />
-          )}
-
-          {(stage === 'running' || stage === 'complete') && jobId && (
-            <MuloOptimizationDashboard
-              key={`${jobId}-${optimizationRunKey}`}
-              jobId={jobId}
-              runConfig={runConfig}
-              designerState={designerState}
-              onComplete={handleOptimizationComplete}
-              onNewExperiment={resetExperiment}
-            />
-          )}
-
-          {stage === 'complete' && designerState && !designerState.is_complete && (
-            <button
-              type="button"
-              className={`${btnPrimary} ${btnWide} mt-4`}
-              disabled={loading}
-              onClick={() => void continueNextLoop()}
-            >
-              Continue Controller Design (Loop {designerState.controller_index + 1})
-            </button>
-          )}
-
-          {stage === 'complete' && designerState?.is_complete && (
-            <StatusMessage
-              type="success"
-              message="All cascade loops have been designed. Review final results in the Final Result tab."
             />
           )}
         </>

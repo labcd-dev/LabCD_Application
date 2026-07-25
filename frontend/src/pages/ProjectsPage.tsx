@@ -125,8 +125,8 @@ export function ProjectsPage() {
           <p className="mt-1 mb-4 text-sm text-muted-text">
             Upload a dynamics file on Home and start a Single or Multi Loop design.
           </p>
-          <Link to="/" className={btnPrimary}>
-            Go to Home
+          <Link to="/studio" className={btnPrimary}>
+            Go to Studio
           </Link>
         </div>
       ) : (

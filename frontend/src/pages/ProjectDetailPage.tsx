@@ -1,12 +1,15 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Pencil, RotateCcw } from 'lucide-react'
-import { projectsApi } from '../api/endpoints'
+import { projectsApi, muloApi } from '../api/endpoints'
 import type { ProjectDetail } from '../api/types'
 import { CodePreview } from '../components/CodePreview'
+import { MuloLiveRunPanel } from '../components/MuloLiveRunPanel'
 import { ProjectResultsView } from '../components/ProjectResultsView'
+import { SiloLiveRunPanel } from '../components/SiloLiveRunPanel'
 import { StatusMessage } from '../components/StatusMessage'
 import { usePipeline } from '../context/PipelineContext'
+import { usePoll } from '../hooks/usePoll'
 import {
   btnBase,
   btnCompact,
@@ -31,6 +34,38 @@ export function ProjectDetailPage() {
   const [renaming, setRenaming] = useState(false)
   const [title, setTitle] = useState('')
   const [retrying, setRetrying] = useState(false)
+  const [muloAwaitingContinue, setMuloAwaitingContinue] = useState(false)
+
+  const refreshProject = useCallback(async () => {
+    if (!Number.isFinite(id)) return null
+    const detail = await projectsApi.get(id)
+    setProject(detail)
+    setTitle(detail.title)
+    return detail
+  }, [id])
+
+  useEffect(() => {
+    setMuloAwaitingContinue(false)
+  }, [id])
+
+  useEffect(() => {
+    if (!project || project.pipeline_type !== 'muloDesign' || !project.job_id) return
+    if (project.status === 'running') return
+    if (project.status !== 'completed') return
+    const jobId = project.job_id
+    let active = true
+    void muloApi
+      .state(jobId)
+      .then((state) => {
+        if (active && !state.is_complete) {
+          setMuloAwaitingContinue(true)
+        }
+      })
+      .catch(() => {})
+    return () => {
+      active = false
+    }
+  }, [project?.id, project?.status, project?.job_id, project?.pipeline_type])
 
   useEffect(() => {
     if (!Number.isFinite(id)) {
@@ -42,9 +77,7 @@ export function ProjectDetailPage() {
       setLoading(true)
       setError(null)
       try {
-        const detail = await projectsApi.get(id)
-        setProject(detail)
-        setTitle(detail.title)
+        await refreshProject()
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load project')
       } finally {
@@ -52,7 +85,43 @@ export function ProjectDetailPage() {
       }
     }
     void load()
+  }, [id, refreshProject])
+
+  const isLive = project?.status === 'running' && Boolean(project.job_id)
+
+  const fetchWhileRunning = useCallback(async () => {
+    if (!Number.isFinite(id)) return null
+    return projectsApi.get(id)
   }, [id])
+
+  const projectPoll = usePoll(
+    fetchWhileRunning,
+    4000,
+    Boolean(isLive || muloAwaitingContinue),
+  )
+
+  useEffect(() => {
+    if (!projectPoll.data) return
+    setProject(projectPoll.data)
+    setTitle(projectPoll.data.title)
+    if (projectPoll.data.status === 'running') {
+      setMuloAwaitingContinue(false)
+    }
+  }, [projectPoll.data])
+
+  useEffect(() => {
+    if (project?.status === 'running') {
+      setMuloAwaitingContinue(false)
+    }
+  }, [project?.status])
+
+  const handleRunTerminal = useCallback(() => {
+    void refreshProject().catch(() => {})
+  }, [refreshProject])
+
+  const handleAwaitingContinue = useCallback((awaiting: boolean) => {
+    setMuloAwaitingContinue(awaiting)
+  }, [])
 
   const saveTitle = async () => {
     if (!project || !title.trim()) return
@@ -92,6 +161,15 @@ export function ProjectDetailPage() {
       </section>
     )
   }
+
+  const liveJobId = project.job_id
+  const showSiloLive =
+    project.pipeline_type === 'siloDesign' && project.status === 'running' && Boolean(liveJobId)
+  const showMuloLive =
+    project.pipeline_type === 'muloDesign'
+    && Boolean(liveJobId)
+    && (project.status === 'running' || muloAwaitingContinue)
+  const showResults = !showSiloLive && !showMuloLive
 
   return (
     <section className={pageSection}>
@@ -138,7 +216,7 @@ export function ProjectDetailPage() {
               </div>
             </div>
             <div className="flex gap-2">
-              {canRetryProject(project.status) && (
+              {canRetryProject(project.status) && !muloAwaitingContinue && (
                 <button
                   type="button"
                   className={btnPrimary}
@@ -169,6 +247,28 @@ export function ProjectDetailPage() {
         </div>
       ) : null}
 
+      {(showSiloLive || showMuloLive) && (
+        <div className={cardPanel}>
+          <h3 className="m-0 mb-2 text-lg font-semibold text-foreground">
+            {project.status === 'running' ? 'Running' : 'Design progress'}
+          </h3>
+          <p className="mt-0 mb-3 text-sm text-muted-text">
+            Live status, plots, and logs for this project. You can start another project from Studio
+            while this one continues.
+          </p>
+          {showSiloLive && liveJobId && (
+            <SiloLiveRunPanel jobId={liveJobId} onTerminal={handleRunTerminal} />
+          )}
+          {showMuloLive && liveJobId && (
+            <MuloLiveRunPanel
+              jobId={liveJobId}
+              onTerminal={handleRunTerminal}
+              onAwaitingContinueChange={handleAwaitingContinue}
+            />
+          )}
+        </div>
+      )}
+
       <div className={cardPanel}>
         <h3 className="m-0 mb-2 text-lg font-semibold text-foreground">Uploaded file</h3>
         <p className="mt-0 mb-3 text-sm text-muted-text">
@@ -177,13 +277,15 @@ export function ProjectDetailPage() {
         <CodePreview value={project.file_content || '# No file content stored'} readOnly />
       </div>
 
-      <div className={cardPanel}>
-        <h3 className="m-0 mb-2 text-lg font-semibold text-foreground">Results</h3>
-        <p className="mt-0 mb-3 text-sm text-muted-text">
-          Snapshot saved when the design job finished (or last update).
-        </p>
-        <ProjectResultsView pipelineType={project.pipeline_type} results={project.results} />
-      </div>
+      {showResults && (
+        <div className={cardPanel}>
+          <h3 className="m-0 mb-2 text-lg font-semibold text-foreground">Results</h3>
+          <p className="mt-0 mb-3 text-sm text-muted-text">
+            Snapshot saved when the design job finished (or last update).
+          </p>
+          <ProjectResultsView pipelineType={project.pipeline_type} results={project.results} />
+        </div>
+      )}
     </section>
   )
 }

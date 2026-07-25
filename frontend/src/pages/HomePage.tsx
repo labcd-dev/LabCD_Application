@@ -42,6 +42,15 @@ export function HomePage() {
   const [editMode, setEditMode] = useState(false)
 
   useEffect(() => {
+    pipeline.reset()
+    setStage('upload')
+    setEditMode(false)
+    setError(null)
+    // Fresh studio session only — do not resume another project's workspace.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset once on mount
+  }, [])
+
+  useEffect(() => {
     healthApi.models().then((res) => setModels(res.llm_models)).catch(() => {})
   }, [])
 
@@ -120,24 +129,14 @@ export function HomePage() {
     setLoading(true)
     setError(null)
     try {
-      if (!pipeline.projectId) {
-        const project = await projectsApi.create({
-          title: pipeline.fileName || undefined,
-          pipeline_type: pipeline.pipeline,
-          file_name: pipeline.fileName,
-          file_type: pipeline.fileType,
-          file_content: pipeline.fileContent,
-        })
-        pipeline.setProjectId(project.id)
-      } else {
-        await projectsApi.update(pipeline.projectId, {
-          status: 'draft',
-          file_name: pipeline.fileName,
-          file_type: pipeline.fileType,
-          file_content: pipeline.fileContent,
-        })
-        pipeline.clearDesignJobs()
-      }
+      const project = await projectsApi.create({
+        title: pipeline.fileName || undefined,
+        pipeline_type: pipeline.pipeline,
+        file_name: pipeline.fileName,
+        file_type: pipeline.fileType,
+        file_content: pipeline.fileContent,
+      })
+      pipeline.setProjectId(project.id)
       if (pipeline.pipeline === 'muloDesign') {
         navigate('/mulo?step=recommender')
       } else if (pipeline.pipeline === 'siloDesign') {
