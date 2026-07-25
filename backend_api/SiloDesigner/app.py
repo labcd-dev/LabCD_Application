@@ -23,6 +23,9 @@ MONITOR_STATE_KEYS = (
     'target',
     'current_params',
     'results',
+    'simulator',
+    'system',
+    'seed',
 )
 MAX_MONITOR_HISTORY = 100
 
@@ -113,6 +116,7 @@ class DummyMonitor:
 
 class DesignCancelledError(Exception):
     """Raised when the user cancels an in-progress control design."""
+    pass
 
 
 class DesignMonitor:

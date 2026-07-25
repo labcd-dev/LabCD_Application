@@ -373,7 +373,7 @@ def create_advanced_settings(llm_model = None):
         'min_ctrl': min_ctrl,
         'max_ctrl': max_ctrl,
         'matlab_func_name': "dynamics",
-        'num_states': num_states if num_states != 4 else None,
+        'num_states': num_states,
         'trim_values': trim_values if len(trim_values) == num_inputs else None,
         'param_ranges': param_ranges,
         'custom_scenarios': custom_scenarios if custom_scenarios else None,
@@ -408,7 +408,7 @@ def build_config_from_session():
     )
 
 
-def display_time_response():
+def display_time_response(verbose: bool = False):
     """Display latest system response with interactive gain sliders and GA comparison"""
 
     # Initialize session state for gains if not present
@@ -421,20 +421,181 @@ def display_time_response():
     if 'ga_results' not in st.session_state:
         st.session_state.ga_results = {}
 
-    # Get latest gains and controller type from monitor
+    # DEBUG: Check monitor state
+    if verbose:
+        st.write("🔍 **DEBUG INFO**")
+        debug_info = {
+            'monitor_type': type(st.session_state.monitor).__name__,
+            'state_history_size': len(st.session_state.monitor.state_history),
+            'progress_history_size': len(st.session_state.monitor.progress_history),
+            'is_running': st.session_state.monitor.is_running,
+            'current_state_keys': list(st.session_state.monitor.current_state.keys()),
+        }
+        st.json(debug_info)
+
+        if hasattr(st.session_state.monitor, 'get_state_summary'):
+            st.write(st.session_state.monitor.get_state_summary())
+
+    # ========================================================================
+    # DATA EXTRACTION WITH DETAILED DIAGNOSTICS
+    # ========================================================================
+
     latest_controller_type = None
     latest_gains = {}
     current_system = None
 
+    # Initialize diagnostic info
+    diagnostic = {
+        'has_state_history': len(st.session_state.monitor.state_history) > 0,
+        'latest_state': None,
+        'controller_type_value': None,
+        'current_params_value': None,
+        'controller_type_is_none': True,
+        'current_params_is_none': True,
+        'current_params_is_empty': True,
+        'results_value': None,
+        'results_is_none': True,
+        'trajectory_exists': False,
+        'trajectory_length': 0,
+    }
+
+    # PRIMARY: Use state_history if available
     if st.session_state.monitor.state_history:
         latest_state = st.session_state.monitor.state_history[-1]['state']
+        diagnostic['latest_state'] = latest_state
+
         latest_controller_type = latest_state.get('controller_type', None)
+        diagnostic['controller_type_value'] = latest_controller_type
+        diagnostic['controller_type_is_none'] = latest_controller_type is None
 
         if latest_state.get('current_params'):
             latest_gains = {k: v for k, v in latest_state['current_params'].items()
                             if k != 'reasoning'}
+            diagnostic['current_params_value'] = latest_state.get('current_params')
+            diagnostic['current_params_is_none'] = False
+            diagnostic['current_params_is_empty'] = len(latest_gains) == 0
+        else:
+            diagnostic['current_params_value'] = latest_state.get('current_params')
+            diagnostic['current_params_is_none'] = latest_state.get('current_params') is None
 
         current_system = latest_state.get('system', None)
+
+        # Check results
+        results = latest_state.get('results')
+        diagnostic['results_value'] = results
+        diagnostic['results_is_none'] = results is None
+
+        if results and isinstance(results, dict):
+            trajectory = results.get('trajectory')
+            diagnostic['trajectory_exists'] = trajectory is not None
+            if trajectory:
+                diagnostic['trajectory_length'] = len(trajectory) if isinstance(trajectory,
+                                                                                (list, tuple)) else 'unknown'
+
+        if verbose:
+            st.write(f"✅ Using data from state_history (entry #{len(st.session_state.monitor.state_history)})")
+
+    # FALLBACK: Use current_state if state_history is empty
+    elif st.session_state.monitor.current_state:
+        st.warning("⚠️ state_history is empty, using fallback current_state")
+
+        current_state = st.session_state.monitor.current_state
+        latest_controller_type = current_state.get('controller_type', None)
+
+        if current_state.get('current_params'):
+            latest_gains = {k: v for k, v in current_state['current_params'].items()
+                            if k != 'reasoning'}
+
+        current_system = current_state.get('system', None)
+
+    # NO DATA: Show helpful message
+    else:
+        st.info("📊 **No simulation data available yet**")
+        st.write("Steps to proceed:")
+        st.write("1. Configure your control system in the 'Configuration' section")
+        st.write("2. Click 'Start Design' to begin the optimization process")
+        st.write("3. Once optimization begins, simulation data will appear here")
+
+        st.write("")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Design Status", "Not Started" if not st.session_state.monitor.is_running else "Running")
+        with col2:
+            st.metric("Progress Updates", len(st.session_state.monitor.progress_history))
+        with col3:
+            st.metric("State Snapshots", len(st.session_state.monitor.state_history))
+
+        return  # Exit early
+
+    # ========================================================================
+    # SHOW DETAILED DIAGNOSTICS
+    # ========================================================================
+
+    if verbose and st.session_state.monitor.state_history:
+        st.write("\n---\n")
+        st.write("🔬 **DETAILED DIAGNOSTICS**")
+
+        # Show each diagnostic field
+        st.write("**Data Extraction Results:**")
+
+        # Latest Controller Type
+        if diagnostic['controller_type_is_none']:
+            st.error(f"❌ latest_controller_type: None (MISSING!)")
+        else:
+            st.success(f"✅ latest_controller_type: '{diagnostic['controller_type_value']}'")
+
+        # Current Params
+        if diagnostic['current_params_is_none']:
+            st.error(f"❌ current_params: None (MISSING!)")
+        elif diagnostic['current_params_is_empty']:
+            st.warning(f"⚠️ current_params: Empty dict {{}}")
+        else:
+            params = diagnostic['current_params_value']
+            param_keys = list(params.keys()) if isinstance(params, dict) else []
+            st.success(f"✅ current_params: dict with {len(param_keys)} keys: {param_keys}")
+
+        # Results
+        if diagnostic['results_is_none']:
+            st.error(f"❌ results: None (MISSING!)")
+        else:
+            st.success(f"✅ results: dict present")
+
+        # Trajectory
+        if not diagnostic['trajectory_exists']:
+            st.error(f"❌ trajectory: Not found in results")
+        else:
+            st.success(f"✅ trajectory: Found, length={diagnostic['trajectory_length']}")
+
+        # Summary
+        st.write("\n**Summary:**")
+        is_displayable = (
+                not diagnostic['controller_type_is_none']
+                and not diagnostic['current_params_is_empty']
+                and not diagnostic['results_is_none']
+                and diagnostic['trajectory_exists']
+        )
+
+        if is_displayable:
+            st.success("✅ All data present - plot SHOULD display")
+        else:
+            st.error("❌ Missing data - plot will NOT display. See errors above.")
+
+            # Show which fields are missing
+            st.write("\n**Missing Fields:**")
+            if diagnostic['controller_type_is_none']:
+                st.write("- controller_type is None")
+            if diagnostic['current_params_is_empty']:
+                st.write("- current_params is empty or None")
+            if diagnostic['results_is_none']:
+                st.write("- results is None")
+            if not diagnostic['trajectory_exists']:
+                st.write("- trajectory not in results")
+
+        st.write("\n---\n")
+
+    # ========================================================================
+    # MAIN DISPLAY LOGIC (rest of the function stays the same)
+    # ========================================================================
 
     # Scenario selection
     selected_scenario = None
@@ -474,41 +635,46 @@ def display_time_response():
                 try:
                     schema = current_system.get_control_param_schema(latest_controller_type)
                     param_ranges = {k: [v["min"], v["max"]] for k, v in schema.items()}
-                except:
+                except Exception as e:
+                    if verbose:
+                        st.warning(f"Could not get param schema: {e}")
                     param_ranges = _get_default_param_ranges(latest_controller_type, current_system)
             else:
                 param_ranges = _get_default_param_ranges(latest_controller_type, current_system)
 
             # Create sliders for each gain
             updated_gains = {}
-            for param_name in sorted(latest_gains.keys()):
-                if param_name == 'reasoning':
-                    continue
+            if latest_gains:
+                for param_name in sorted(latest_gains.keys()):
+                    if param_name == 'reasoning':
+                        continue
 
-                param_range = param_ranges.get(param_name, [0.0, 100.0])
+                    param_range = param_ranges.get(param_name, [0.0, 100.0])
 
-                if st.session_state.test_mode and param_name in st.session_state.manual_gains:
-                    current_value = st.session_state.manual_gains[param_name]
-                else:
-                    current_value = latest_gains[param_name]
+                    if st.session_state.test_mode and param_name in st.session_state.manual_gains:
+                        current_value = st.session_state.manual_gains[param_name]
+                    else:
+                        current_value = latest_gains[param_name]
 
-                optimal_marker = ""
-                if param_name in st.session_state.optimal_gains:
-                    optimal_val = st.session_state.optimal_gains[param_name]
-                    if abs(current_value - optimal_val) > 0.01:
-                        optimal_marker = f" (Optimal: {optimal_val:.2f})"
+                    optimal_marker = ""
+                    if param_name in st.session_state.optimal_gains:
+                        optimal_val = st.session_state.optimal_gains[param_name]
+                        if abs(current_value - optimal_val) > 0.01:
+                            optimal_marker = f" (Optimal: {optimal_val:.2f})"
 
-                new_value = st.slider(
-                    f"{param_name}{optimal_marker}",
-                    min_value=float(param_range[0]),
-                    max_value=float(param_range[1]),
-                    value=float(current_value),
-                    step=0.01,
-                    disabled=st.session_state.monitor.is_running,
-                    key=f"gain_slider_{param_name}"
-                )
+                    new_value = st.slider(
+                        f"{param_name}{optimal_marker}",
+                        min_value=float(param_range[0]),
+                        max_value=float(param_range[1]),
+                        value=float(current_value),
+                        step=0.01,
+                        disabled=st.session_state.monitor.is_running,
+                        key=f"gain_slider_{param_name}"
+                    )
 
-                updated_gains[param_name] = new_value
+                    updated_gains[param_name] = new_value
+            else:
+                st.info("No parameters available yet")
 
             # Add control buttons
             if not st.session_state.monitor.is_running and latest_gains:
@@ -547,20 +713,27 @@ def display_time_response():
                     ga_params = st.session_state.ga_results.get('best_params', {})
                     for param_name, param_value in ga_params.items():
                         st.markdown(f"- {param_name}: {param_value:.2f}")
+        else:
+            st.info("Controller type not yet determined")
 
     with col2:
         if st.session_state.monitor.state_history:
-            _plot_system_response(
-                st.session_state.monitor.state_history,
-                test_gains=st.session_state.manual_gains if st.session_state.test_mode else None,
-                latest_controller_type=latest_controller_type,
-                selected_scenario=selected_scenario,
-                ga_results=st.session_state.ga_results if st.session_state.ga_results.get(
-                    'status') == 'complete' else None
-            )
+            try:
+                _plot_system_response(
+                    st.session_state.monitor.state_history,
+                    test_gains=st.session_state.manual_gains if st.session_state.test_mode else None,
+                    latest_controller_type=latest_controller_type,
+                    selected_scenario=selected_scenario,
+                    ga_results=st.session_state.ga_results if st.session_state.ga_results.get(
+                        'status') == 'complete' else None
+                )
+            except Exception as e:
+                st.error(f"Error plotting system response: {e}")
+                if verbose:
+                    import traceback
+                    st.code(traceback.format_exc())
         else:
-            st.info("No simulation data available yet. Start the design process to see results.")
-
+            st.info("No trajectory data available yet. Waiting for first simulation to complete...")
 
 
 
@@ -621,14 +794,7 @@ def _plot_system_response(state_history, test_gains=None, latest_controller_type
     # Generate fixed initial condition
     initial_state = np.zeros(latest_system.num_states)
     ic_min, ic_max = latest_system.initial_condition_range
-
-    rng = np.random.default_rng(seed=state_history[0]['state']['seed'])
-    fixed_ic_value = rng.uniform(ic_min, ic_max)
-    # print("seed")
-    # print(state_history[0]['state']['seed'])
-    # print("fixed_ic_value")
-    # print(fixed_ic_value)
-
+    fixed_ic_value = (ic_min + ic_max) / 2
     initial_state[latest_system.output_channel] = fixed_ic_value
 
     # Run simulation with optimal parameters
