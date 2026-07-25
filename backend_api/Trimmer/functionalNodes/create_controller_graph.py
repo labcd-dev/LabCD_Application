@@ -84,7 +84,7 @@ class Plotter:
         plt.show()
 
 
-def analyze_result(state: WorkflowState, writer) -> WorkflowState:
+def analyze_result(state: WorkflowState, writer, agents) -> WorkflowState:
     """
     Node for linearization, stability analysis, and validation.
 
@@ -176,9 +176,7 @@ def analyze_result(state: WorkflowState, writer) -> WorkflowState:
 
             # Use agenticNodes for LLM assessment
             try:
-                from Trimmer.agenticNodes.create_agent import create_agent
-                agents = Agents()
-                equilibrium_check_agent = agents.equilibrium_check()
+                equilibrium_check_agent = agents.equilibrium_check(state)
 
 
                 # Prepare agent state
@@ -271,14 +269,14 @@ def analyze_result(state: WorkflowState, writer) -> WorkflowState:
     return state
 
 
-def handle_convergence_failure(state: WorkflowState, writer) -> WorkflowState:
-    return handle_human_intervention(state, "Solver failed to converge", writer)
+def handle_convergence_failure(state: WorkflowState, writer, agents) -> WorkflowState:
+    return handle_human_intervention(state, "Solver failed to converge", writer, agents)
 
-def handle_mismatch_failure(state: WorkflowState, writer) -> WorkflowState:
-    return handle_human_intervention(state, "Equilibrium does not match desired conditions", writer)
+def handle_mismatch_failure(state: WorkflowState, writer, agents) -> WorkflowState:
+    return handle_human_intervention(state, "Equilibrium does not match desired conditions", writer, agents)
 
 
-def handle_human_intervention(state: WorkflowState, failure_type: str, writer) -> WorkflowState:
+def handle_human_intervention(state: WorkflowState, failure_type: str, writer, agents) -> WorkflowState:
     """Node to handle human intervention."""
     writer({"progress": 0.9, "text": "ðŸ¤– Human Intervention ..."})
 
@@ -296,8 +294,8 @@ def handle_human_intervention(state: WorkflowState, failure_type: str, writer) -
     }]
 
     config = state['config']
-    agents = Agents()
-    intervention_agent = agents.human_intervention()
+    intervention_agent = agents.human_intervention(state)
+
     agent_state = {
         'system_name': config.get('system_name', 'Unknown'),
         'max_restarts': state['max_restarts'],

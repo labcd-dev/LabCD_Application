@@ -1,9 +1,12 @@
 import yaml
 import os
 import json
+import re
 from typing import Dict, Any, Callable, Optional
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
+from langchain_core.runnables import RunnableLambda
+
 
 def make_serializable(obj):
     if callable(obj):
@@ -21,31 +24,36 @@ def make_serializable(obj):
         except TypeError:
             return str(obj)
 
-def create_agent(llm, template_name: str, state_keys: Optional[Dict[str, str]] = None) -> Callable:
-    # Load the YAML configuration
+
+# FIXED: Added back the static 'callbacks' argument to support nested graphs
+def create_agent(llm, template_name: str, state_keys: Optional[Dict[str, str]] = None, callbacks: Optional[list] = None,
+                 get_callbacks: Optional[Callable] = None) -> Callable:
     config = _load_template(template_name)
-
-    # Build the prompt template
     prompt_template = _build_prompt_template(config)
-
-    # Create the chain
     chain = _build_chain(llm, prompt_template, config)
 
-    # Create the node function
     def agent_node(state):
         """LangGraph node function that processes state and returns updated state."""
-        # Extract inputs from state based on config
         inputs = _extract_inputs(state, config)
 
-        # Run the chain
-        result = chain.invoke(inputs)
+        # Support both static callbacks (from parsing_graph) and dynamic state-bound callbacks (from agents.py)
+        run_callbacks = []
+        if callbacks:
+            run_callbacks.extend(callbacks)
+        if get_callbacks:
+            run_callbacks.extend(get_callbacks(state))
 
-        # Process and update state
+        invoke_config = {"callbacks": run_callbacks} if run_callbacks else {}
+
+        # The callback mutates the tracker's 'state' directly in-place during this invocation
+        result = chain.invoke(inputs, config=invoke_config)
+
+        # _update_state safely copies the state
         updated_state = _update_state(state, result, config)
-
         return updated_state
 
     return agent_node
+
 
 def _load_template(template_name: str) -> Dict[str, Any]:
     """Load YAML template configuration."""
@@ -60,10 +68,10 @@ def _load_template(template_name: str) -> Dict[str, Any]:
 
     return config
 
+
 def _build_prompt_template(config: Dict[str, Any]) -> ChatPromptTemplate:
     """Build ChatPromptTemplate from configuration."""
     system_message = config.get('system_message', '')
-    # support legacy key 'prompt' as an alias for 'human_message'
     human_message = config.get('human_message', '') or config.get('prompt', '')
 
     if not human_message:
@@ -76,22 +84,34 @@ def _build_prompt_template(config: Dict[str, Any]) -> ChatPromptTemplate:
 
     return ChatPromptTemplate.from_messages(messages)
 
+
+def _clean_llm_json_output(output):
+    """Removes comments from LLM generated JSON strings before parsing."""
+    text = output.content if hasattr(output, 'content') else str(output)
+    text = re.sub(r'//.*$', '', text, flags=re.MULTILINE)
+    text = re.sub(r'/\*.*?\*/', '', text, flags=re.DOTALL)
+
+    if hasattr(output, 'content'):
+        output.content = text
+        return output
+    return text
+
+
 def _build_chain(llm, prompt_template: ChatPromptTemplate, config: Dict[str, Any]):
     """Build the LangChain runnable chain."""
-    # Add output parser if specified
     output_parser = config.get('output_parser', 'json')
     if output_parser == 'json':
         parser = JsonOutputParser()
     else:
         parser = None
 
-    # Build the chain
     chain = prompt_template | llm
 
     if parser:
-        chain = chain | parser
+        chain = chain | RunnableLambda(_clean_llm_json_output) | parser
 
     return chain
+
 
 def _extract_inputs(state: Dict[str, Any], config: Dict[str, Any]) -> Dict[str, Any]:
     """Extract required inputs from state based on template configuration."""
@@ -102,22 +122,18 @@ def _extract_inputs(state: Dict[str, Any], config: Dict[str, Any]) -> Dict[str, 
         if key in state:
             inputs[key] = make_serializable(state[key])
         else:
-            # Try to get from nested state
             inputs[key] = make_serializable(_get_nested_value(state, key))
 
     return inputs
+
 
 def _update_state(state: Dict[str, Any], result: Any, config: Dict[str, Any]) -> Dict[str, Any]:
     """Update state with the result of the agent execution."""
     output_key = config.get('output_key', 'result')
 
-    # Deep copy state to avoid mutation
     new_state = state.copy()
-
-    # Store result in state
     new_state[output_key] = result
 
-    # Add to trace if tracing is enabled
     if 'trace' in new_state:
         trace_entry = {
             'agent': config.get('name', 'unknown_agent'),
@@ -127,6 +143,7 @@ def _update_state(state: Dict[str, Any], result: Any, config: Dict[str, Any]) ->
         new_state['trace'].append(trace_entry)
 
     return new_state
+
 
 def _get_nested_value(obj: Any, key: str) -> Any:
     """Get nested value from object using dot notation."""
@@ -142,4 +159,3 @@ def _get_nested_value(obj: Any, key: str) -> Any:
             return None
 
     return current
-

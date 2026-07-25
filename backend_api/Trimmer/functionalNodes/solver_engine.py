@@ -7,7 +7,7 @@ from backend_api.Trimmer.agenticNodes.agents import Agents
 from backend_api.Trimmer.agenticNodes.tools.tools import solve_equilibrium as solve_equilibrium_tool
 
 
-def plan_strategy(state: WorkflowState, writer) -> WorkflowState:
+def plan_strategy(state: WorkflowState, writer, agents) -> WorkflowState:
     """Node to plan the solving strategy using YAML-driven agent."""
     writer({"progress": 0.5, "text": "ðŸ§  Planing Strategy..."})
 
@@ -17,8 +17,7 @@ def plan_strategy(state: WorkflowState, writer) -> WorkflowState:
     config = state['config']
 
     # Use YAML-driven agent from agenticNodes
-    agents = Agents()
-    plan_agent = agents.plan_strategy()
+    plan_agent = agents.plan_strategy(state)
 
     # Prepare agent state
     # TODO: this is look like to be extra work
@@ -96,7 +95,7 @@ def plan_strategy(state: WorkflowState, writer) -> WorkflowState:
     return state
 
 
-def solve_equilibrium_node(state: WorkflowState, writer) -> WorkflowState:
+def solve_equilibrium_node(state: WorkflowState, writer, agents) -> WorkflowState:
     """Node to find the equilibrium point using numerical tools with adaptive retry logic."""
     writer({"progress": 0.8, "text": "ðŸ‘¨â€ðŸ« Solving Equation..."})
 
@@ -165,7 +164,7 @@ def solve_equilibrium_node(state: WorkflowState, writer) -> WorkflowState:
         if attempt < max_retries - 1:
             current_guess, current_strategy, output_text = _adapt_solver_with_llm(
                 state, config, current_guess, x_e, u_e, attempt, current_strategy,
-                best_cost, cost, logger, output_text
+                best_cost, cost, logger, output_text, agents
             )
 
     # Use best result found
@@ -201,7 +200,7 @@ def solve_equilibrium_node(state: WorkflowState, writer) -> WorkflowState:
     return state
 
 
-def _adapt_solver_with_llm(state, config, old_guess, x_e, u_e, attempt, strategy, best_cost, last_cost, logger, output_text):
+def _adapt_solver_with_llm(state, config, old_guess, x_e, u_e, attempt, strategy, best_cost, last_cost, logger, output_text, agents_config):
     """Use LLM to suggest adaptive guess and strategy adjustments."""
     # Prepare context for LLM
     if config is None:
@@ -221,7 +220,6 @@ def _adapt_solver_with_llm(state, config, old_guess, x_e, u_e, attempt, strategy
         output_text += f"\n    ðŸ§  Consulting LLM for adaptive strategy (attempt {attempt + 1})..."
 
         # Use the solve_equilibrium agent for adaptive guidance
-        agents_config = Agents()
         adaptive_agent = agents_config.solve_equilibrium()
 
         # Sanitize system_f_code for passing to LLM agent (do not embed code execution inside the dict)

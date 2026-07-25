@@ -51,7 +51,7 @@ class MuloControllerDesigner:
         self.prev_error = 0.0
 
     def update(self, setpoint, measurement):
-        error =  measurement - setpoint
+        error =  setpoint - measurement 
 
         # Compute P and D terms normally
         p_term = self.kp * error
@@ -151,6 +151,9 @@ class MuloControllerDesigner:
 
 
     def controller_tuner(self) -> tuple[float, float, float]:
+        # import pprint
+        # pprint.pprint(self.controller_structure)
+
         final_state = run_ga_handler(
             case_study_file=self.run_config["case_study_file"],
             tuning_specs=None,          # use case-study defaults
@@ -173,9 +176,10 @@ class MuloControllerDesigner:
 
         self.final_state = final_state
 
-        if self.controller_index % 2 == 0:
-            return kp, ki, kd
-        return -kp, -ki, -kd
+        return kp, ki, kd
+        # if self.controller_index % 2 == 0:
+        #     return kp, ki, kd
+        # return -kp, -ki, -kd
 
 
 
@@ -213,13 +217,7 @@ class MuloControllerDesigner:
     def update_case_study(self, cont:Dict[str, Any], working_function:str) -> None:
         output_channel = cont['controlled_variable_in_equation']
         input_channel = cont['output_variable_in_equation']
-        min_target = float(cont['target']['min_value'])
-        max_target = float(cont['target']['max_value'])
-
-        target = 0.0
-        rng = np.random.default_rng(seed=self.run_config["seed"])
-        while target == 0.0:
-            target = round(rng.uniform(min_target, max_target), 3)
+        target = self.generate_target(cont)
 
         self.case_study["output_channel"] = self.get_index(output_channel)
         self.case_study["input_channel"] = self.get_index(input_channel)
@@ -230,6 +228,20 @@ class MuloControllerDesigner:
 
         self.case_study['python_code'] = self.equation
         self.case_study['working_function'] = working_function
+
+
+    def generate_target(self, cont):
+        min_target = float(cont['target']['min_value'])
+        max_target = float(cont['target']['max_value'])
+
+        target = 0.0
+        rng = np.random.default_rng(seed=self.run_config["seed"])
+        while target == 0.0:
+            target = round(rng.uniform(min_target, max_target), 3)
+        print("target")
+        print(target)
+        target = 0.1
+        return target
 
 
     @staticmethod
@@ -258,8 +270,8 @@ class MuloControllerDesigner:
                 new_value = self.get_state_name(new_controller[i]["controllers"][j]["output_variable_in_equation"])
                 new_controller[i]["controllers"][j]["output_variable_in_equation"] = new_value
 
-        # import pprint
-        # pprint.pprint(new_controller)
+        import pprint
+        pprint.pprint(new_controller)
 
         return new_controller
 

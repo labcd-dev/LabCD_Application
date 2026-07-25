@@ -27,4 +27,6 @@ class WorkflowState(TypedDict):
     ui_mode: str
     ui_inputs: Dict[str, Any]
     trimming_params: List[str]
+    token_usage: Dict[str, int]
+    total_cost: float
 

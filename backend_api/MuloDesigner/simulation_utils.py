@@ -12,7 +12,7 @@ def generate_reference(t: float, signal_type: str, amplitude: float = 1, freq_hz
     return 0.0
 
 
-def simulate_system_response(equation_str: str, case_study: dict, input_channel_name: str ,signal_type: str):
+def simulate_system_response(equation_str: str, case_study: dict, input_channel_name: str ,signal_type: str, amplitude: float = 1.0):
     """
     Executes the dynamically generated system equations and simulates the time response.
     """
@@ -51,7 +51,7 @@ def simulate_system_response(equation_str: str, case_study: dict, input_channel_
     x = X_trim.copy()
 
     for i, t in enumerate(t_eval):
-        ref_value = float(generate_reference(t, signal_type))
+        ref_value = float(generate_reference(t, signal_type, amplitude))
         setpoints = {input_channel_name: ref_value}
         dx = dynamics(t, x, U_trim, setpoints)
         # print(dx)

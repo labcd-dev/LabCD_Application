@@ -51,9 +51,9 @@ def render_logs(container, logs):
                         st.markdown(f"**{agent_tag}**")
                     with col2:
                         with st.expander("View Details"):
-                            if agent_tag == "📐.Equation":
+                            if "Equation" in agent_tag:
                                 st.code(log_history)
-                            elif agent_tag == "🖼️.Found Block Diagram" and (log_history.startswith("https") or log_history.startswith("http")):
+                            elif "Found Block Diagram" in agent_tag and (log_history.startswith("https") or log_history.startswith("http")):
                                 st.image(log_history)
                                 st.caption(log_history)
                             elif is_json(log_history):

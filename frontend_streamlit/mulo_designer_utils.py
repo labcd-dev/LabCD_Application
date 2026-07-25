@@ -2,6 +2,7 @@ import streamlit as st
 import re
 import plotly.graph_objects as go
 import copy
+import numpy as np
 
 from backend_api.MuloDesigner.controller_tuning import (
     active_controller_index,
@@ -31,23 +32,23 @@ def show_performance_plots():
     col1, col2 = st.columns([2, 6])
     with col1:
         # Pass the scratchpad structure context explicitly down to the sliders
-        code, new_kp, new_ki, new_kd = _show_constant_slidebars(
+        code, new_kp, new_ki, new_kd, amplitude = _show_constant_slidebars(
             designer,
             st.session_state["modified_code"],
             st.session_state["modified_controller_structure"]
         )
 
         st.markdown('<div id="blue_btn"></div>', unsafe_allow_html=True)
-        if st.button("ðŸ’¾ Apply New Values To Controller", type="secondary", use_container_width=True):
+        if st.button("💾 Apply New Values To Controller", type="secondary", use_container_width=True):
             _save_changes(code, new_kp, new_ki, new_kd)
 
         st.markdown('<div id="blue_btn"></div>', unsafe_allow_html=True)
-        if st.button("â®ï¸ Reset To Original Values", type="secondary", use_container_width=True):
+        if st.button("⏪️ Reset To Original Values", type="secondary", use_container_width=True):
             _reset_values()
 
     with col2:
-        # Render the performance plots dynamically using the current code state
-        _show_performance_plots(designer, code, st.session_state["modified_controller_structure"])
+        # Render the performance plots dynamically using the current code state and amplitude
+        _show_performance_plots(designer, code, st.session_state["modified_controller_structure"], amplitude)
 
 
 def _save_changes(code, new_kp, new_ki, new_kd):
@@ -68,7 +69,8 @@ def _save_changes(code, new_kp, new_ki, new_kd):
 
 def _reset_values():
     designer = st.session_state["designer"]
-    cont_index = max(0, designer.controller_index - 1)
+    cont_index = max(0,
+                     designer.controller_index - 1)
 
     # 1. Reset the scratchpad to the designer's current (original) values
     st.session_state["modified_code"] = designer.equation
@@ -91,9 +93,24 @@ def _show_constant_slidebars(designer, code, controller_structure):
         st.session_state[f"kp_slider_{cont_index}"] = kp
         st.session_state[f"ki_slider_{cont_index}"] = ki
         st.session_state[f"kd_slider_{cont_index}"] = kd
-        st.session_state["reset_sliders"] = False   # clear the flag
+        st.session_state["reset_sliders"] = False  # clear the flag
 
     kp_bound, ki_bound, kd_bound = get_pid_gain_bounds(designer.final_state)
+
+    # --- NEW: Test Signal Amplitude Input ---
+    controller = controller_structure[cont_index]["controllers"][0]
+    min_val = float(controller.get("target", {}).get("min_value", -1.0))
+    max_val = float(controller.get("target", {}).get("max_value", 1.0))
+
+    default_amp = designer.generate_target(controller)
+
+    amplitude = st.number_input("Test Signal Amplitude",
+                                min_value=min_val,
+                                max_value=max_val,
+                                value=default_amp,
+                                step=0.01,
+                                key=f"plot_amplitude_{cont_index}")
+    st.markdown("---")
 
     # Generate sliders with unique keys tied to the loop index
     new_kp = st.slider("Proportional Gain (Kp)", min_value=-kp_bound, max_value=kp_bound, value=kp, step=0.01,
@@ -105,10 +122,10 @@ def _show_constant_slidebars(designer, code, controller_structure):
 
     code = replace_last_pid_controller_gains(code, new_kp, new_ki, new_kd)
 
-    return code, new_kp, new_ki, new_kd
+    return code, new_kp, new_ki, new_kd, amplitude
 
 
-def _show_performance_plots(designer, code, controller):
+def _show_performance_plots(designer, code, controller, amplitude):
     cont_index = max(0, designer.controller_index - 1)
     y_label = controller[cont_index]["controllers"][0]["controlled_variable"]
 
@@ -119,12 +136,13 @@ def _show_performance_plots(designer, code, controller):
             input_channel_name = controller[cont_index]["controllers"][0]["controlled_variable_in_equation"].capitalize()
             unit = controller[cont_index]["controllers"][0]["target"]["unit"].capitalize()
 
-            # try:
+            # Pass the user-defined amplitude into the simulation
             t, y, ref_val = simulate_system_response(
                 code,
                 designer.case_study,
                 input_channel_name,
-                signal_type
+                signal_type,
+                amplitude=amplitude
             )
 
             match = re.search(r'\d+', input_channel_name)
@@ -136,10 +154,9 @@ def _show_performance_plots(designer, code, controller):
             fig.add_trace(go.Scatter(
                 x=t,
                 y=y[:, n],
-                # y=traj1,
                 mode='lines',
                 name=f'{signal_type} Actual Value',
-                line=dict(color='blue', width=2)  # Solid blue line
+                line=dict(color='blue', width=2)
             ))
 
             # 2. Add the Reference Setpoint (ref_val) - Dashed Line
@@ -179,13 +196,15 @@ def display_edit_case_study_page():
 
         with btn_col1:
             st.markdown('<div id="blue_btn"></div>', unsafe_allow_html=True)
-            if st.button("â¬…ï¸ Back to Parameter Configurations", type="secondary", use_container_width=True, key="btn_back_to_params"):
+            if st.button("⬅️ Back to Parameter Configurations", type="secondary", use_container_width=True,
+                         key="btn_back_to_params"):
                 st.session_state["mulo_designer_stage"] = "setup"
                 st.rerun()
 
         with btn_col2:
             st.markdown('<div id="blue_btn"></div>', unsafe_allow_html=True)
-            if st.button("ðŸ”„ Reset to Default Values", type="secondary", use_container_width=True, key="btn_reset_defaults"):
+            if st.button("🔄 Reset to Default Values", type="secondary", use_container_width=True,
+                         key="btn_reset_defaults"):
 
                 # 1. Fetch the PURE defaults directly from the designer
                 default_cs = designer.get_case_study()
@@ -203,12 +222,20 @@ def display_edit_case_study_page():
                     st.session_state[f"overshoot_input_{i}"] = float(metrics.get("overshoot", 15.0))
                     st.session_state[f"effort_input_{i}"] = float(metrics.get("control_effort", 0.25))
 
+                    # Reset controller bounds if they exist
+                    if pid_loop.get("controllers") and len(pid_loop["controllers"]) > 0:
+                        ctrl_output = pid_loop["controllers"][0].get("controller_output", {})
+                        if "min_bound" in ctrl_output:
+                            st.session_state[f"min_bound_{i}"] = float(ctrl_output["min_bound"])
+                        if "max_bound" in ctrl_output:
+                            st.session_state[f"max_bound_{i}"] = float(ctrl_output["max_bound"])
+
                 # 3. Rerun. The widgets will lock onto the session_state values we just forced.
                 st.rerun()
 
-        with st.expander("âš™ï¸ Live Case Study Parametric Modification", expanded=True):
+        with st.expander("⚙️ Live Case Study Parametric Modification", expanded=True):
             # Section 1: Global Simulation Parameters
-            st.markdown("#### â±ï¸ **Simulation Parameters**")
+            st.markdown("#### ⏳ **Simulation Parameters**")
             sim_col1, sim_col2 = st.columns(2)
             with sim_col1:
                 dt = st.number_input("Time Step Size Delta (dt)",
@@ -223,7 +250,11 @@ def display_edit_case_study_page():
             st.markdown("---")
 
             # Section 2: Loop Specific Metrics
-            st.markdown("#### ðŸŽ¯ **Fixed Performance Targets**")
+            st.markdown("#### 🎯 **Fixed Performance Targets**")
+
+            # --- NEW: Flag to track if any bounds are invalid ---
+            has_bounds_error = False
+
             for i, pid_loop in enumerate(controller_structure):
                 st.markdown(f"##### **Loop Context: {pid_loop['loop_name'].replace('_', ' ').title()}**")
 
@@ -240,7 +271,8 @@ def display_edit_case_study_page():
                                                 value=float(pid_loop.get("metrics", {}).get("overshoot", 15.0)),
                                                 step=0.5, min_value=0.0, max_value=100.0, key=f"overshoot_input_{i}")
                     control_effort = st.number_input("Control Effort Penalty Weight",
-                                                     value=float(pid_loop.get("metrics", {}).get("control_effort", 0.25)),
+                                                     value=float(
+                                                         pid_loop.get("metrics", {}).get("control_effort", 0.25)),
                                                      min_value=0.0, step=0.1, key=f"effort_input_{i}")
 
                 controller_structure[i]["metrics"] = {
@@ -250,9 +282,39 @@ def display_edit_case_study_page():
                     "control_effort": control_effort
                 }
 
+                # Read, display, and update controller bounds
+                if pid_loop.get("controllers") and len(pid_loop["controllers"]) > 0:
+                    ctrl_output = pid_loop["controllers"][0].get("controller_output", {})
+
+                    if ctrl_output.get("is_bounded", False):
+                        bound_col1, bound_col2 = st.columns(2)
+                        with bound_col1:
+                            min_b = st.number_input("Minimum Output Bound",
+                                                    value=float(ctrl_output.get("min_bound", -1.0)),
+                                                    step=0.1, key=f"min_bound_{i}")
+                        with bound_col2:
+                            max_b = st.number_input("Maximum Output Bound",
+                                                    value=float(ctrl_output.get("max_bound", 1.0)),
+                                                    step=0.1, key=f"max_bound_{i}")
+
+                        # --- NEW: Validation Logic ---
+                        if min_b >= max_b:
+                            st.error(
+                                f"⚠️ **Error:** Minimum Output Bound ({min_b}) must be strictly less than Maximum Output Bound ({max_b}).")
+                            has_bounds_error = True
+
+                        # Apply the changes directly to the controller structure
+                        controller_structure[i]["controllers"][0]["controller_output"]["min_bound"] = min_b
+                        controller_structure[i]["controllers"][0]["controller_output"]["max_bound"] = max_b
+
         st.markdown('<div id="red_btn"></div>', unsafe_allow_html=True)
-        if st.button(f"ðŸš€ Run Controller Design Optimization (Loop {designer.controller_index + 1})", type="primary",
-                     use_container_width=True, key="btn_run_optimization"):
+
+        # --- NEW: Disable the Run button if there is a bounds error ---
+        if st.button(f"🚀 Run Controller Design Optimization (Loop {designer.controller_index + 1})",
+                     type="primary",
+                     use_container_width=True,
+                     key="btn_run_optimization",
+                     disabled=has_bounds_error):
             # We only apply edits to the actual designer object when they hit "Run"
             designer.set_case_study(case_study)
             designer.set_controller_structure(controller_structure)
