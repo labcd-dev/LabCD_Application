@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { ArrowLeft } from 'lucide-react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   caseStudiesApi,
   healthApi,
@@ -10,7 +11,6 @@ import {
 import type { MuloDesignerStateResponse } from '../api/types'
 import { MuloAdvancedSettings } from '../components/MuloAdvancedSettings'
 import { MuloCaseStudyEditor } from '../components/MuloCaseStudyEditor'
-import { MuloOptimizationDashboard } from '../components/MuloOptimizationDashboard'
 import {
   MuloPipelineStepIndicator,
   type MuloPipelineStep,
@@ -20,7 +20,6 @@ import { MuloTrimmerStep } from '../components/MuloTrimmerStep'
 import { ModelSelect } from '../components/ModelSelect'
 import { StatusMessage } from '../components/StatusMessage'
 import { usePipeline } from '../context/PipelineContext'
-import { useFeedbackSurveyPrompt } from '../hooks/useFeedbackSurveyPrompt'
 import {
   buildMuloRunConfig,
   normalizeControllerStructure,
@@ -52,6 +51,7 @@ function resolveInitialPipelineStep(
 }
 
 export function MuloPage() {
+  const navigate = useNavigate()
   const pipeline = usePipeline()
   const [searchParams, setSearchParams] = useSearchParams()
 
@@ -89,8 +89,6 @@ export function MuloPage() {
   const [defaultSimParams, setDefaultSimParams] = useState({ dt: 0.001, max_time: 50 })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [optimizationRunKey, setOptimizationRunKey] = useState(0)
-  const { promptAfterDesignSuccess, feedbackModal } = useFeedbackSurveyPrompt()
 
   const jobId = pipeline.muloJobId
 
@@ -152,7 +150,41 @@ export function MuloPage() {
     if (step === 'designer' && pipeline.recommenderJobId && pipeline.trimmerJobId) {
       setDataSource('pipeline')
     }
+    if (step !== 'designer') {
+      setStage('setup')
+      setError(null)
+    }
   }, [pipeline.recommenderJobId, pipeline.trimmerJobId, setSearchParams])
+
+  const goBackFromPipelineStep = useCallback(() => {
+    if (pipelineStep === 'designer') {
+      if (stage === 'edit_case_study') {
+        setStage('setup')
+        return
+      }
+      if (isPipelineWorkflow) {
+        goToPipelineStep('trimmer')
+        return
+      }
+      navigate('/studio')
+      return
+    }
+    if (pipelineStep === 'trimmer') {
+      goToPipelineStep('recommender')
+      return
+    }
+    navigate('/studio')
+  }, [pipelineStep, stage, isPipelineWorkflow, goToPipelineStep, navigate])
+
+  const backLabel = (() => {
+    if (pipelineStep === 'designer') {
+      if (stage === 'edit_case_study') return 'Back to Parameter Configurations'
+      if (isPipelineWorkflow) return 'Back to Trimmer'
+      return 'Back to Studio'
+    }
+    if (pipelineStep === 'trimmer') return 'Back to Recommender'
+    return 'Back to Studio'
+  })()
 
   const loadCaseStudyBundle = useCallback(async (name: string) => {
     const bundle = (await caseStudiesApi.mulo(name)) as unknown as MuloCaseStudyBundle
@@ -238,6 +270,10 @@ export function MuloPage() {
     simulationParams: { dt: number; max_time: number },
   ) => {
     if (!jobId || !designerState) return
+    if (!pipeline.projectId) {
+      setError('Create a project from Studio before starting optimization.')
+      return
+    }
     setLoading(true)
     setError(null)
     try {
@@ -250,48 +286,12 @@ export function MuloPage() {
         controller_structure: structure as unknown as Record<string, unknown>[],
       })
       await muloApi.run(jobId)
-      setOptimizationRunKey((prev) => prev + 1)
-      setStage('running')
+      navigate(`/projects/${pipeline.projectId}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start optimization')
     } finally {
       setLoading(false)
     }
-  }
-
-  const handleOptimizationComplete = useCallback((state: MuloDesignerStateResponse) => {
-    setDesignerState(state)
-    setStage('complete')
-    void promptAfterDesignSuccess()
-  }, [promptAfterDesignSuccess])
-
-  const continueNextLoop = async () => {
-    if (!jobId) return
-    setLoading(true)
-    setError(null)
-    try {
-      const latest = await muloApi.state(jobId)
-      await muloApi.continue(jobId, {
-        equation: latest.modified_code,
-        controller_structure: latest.modified_controller_structure,
-      })
-      const state = await muloApi.state(jobId)
-      setDesignerState(state)
-      setDefaultStructure(state.controller_structure as unknown as MuloPidLoop[])
-      setOptimizationRunKey((prev) => prev + 1)
-      setStage('running')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to continue to next loop')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const resetExperiment = () => {
-    pipeline.setMuloJobId(null)
-    setDesignerState(null)
-    setStage('setup')
-    setError(null)
   }
 
   const editorStructure = useMemo(
@@ -322,20 +322,30 @@ export function MuloPage() {
 
   return (
     <section className={pageSection}>
-      <h2 className="mt-0 text-foreground">Multi Loop Control Designer</h2>
-      <p className={pageIntro}>
-        LLM-enhanced genetic algorithm for multi-loop PID controller design.
-        {isPipelineWorkflow && ' Run Recommender, Trimmer, and Designer in one workflow.'}
-      </p>
-
-      {feedbackModal}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="mt-0 text-foreground">Multi Loop Control Designer</h2>
+          <p className={pageIntro}>
+            LLM-enhanced genetic algorithm for multi-loop PID controller design.
+            {isPipelineWorkflow && ' Run Recommender, Trimmer, and Designer in one workflow.'}
+            {' '}Live optimization opens on the project page.
+          </p>
+        </div>
+        <button type="button" className={btnBase} onClick={goBackFromPipelineStep}>
+          <ArrowLeft className="size-4" aria-hidden />
+          {backLabel}
+        </button>
+      </div>
 
       {isPipelineWorkflow && (
         <MuloPipelineStepIndicator
           step={pipelineStep}
           completedSteps={completedPipelineSteps}
           onStepClick={(step) => {
-            if (step === 'recommender' || completedPipelineSteps.includes(step)) {
+            const order: MuloPipelineStep[] = ['recommender', 'trimmer', 'designer']
+            const targetIndex = order.indexOf(step)
+            const currentIndex = order.indexOf(pipelineStep)
+            if (step === 'recommender' || completedPipelineSteps.includes(step) || targetIndex <= currentIndex) {
               goToPipelineStep(step)
             }
           }}
@@ -431,16 +441,6 @@ export function MuloPage() {
               >
                 {loading ? 'Initializing Controller Designer Profile…' : 'Initialize Controller Designer Profile'}
               </button>
-
-              {isPipelineWorkflow && (
-                <button
-                  type="button"
-                  className={btnBase}
-                  onClick={() => goToPipelineStep('recommender')}
-                >
-                  Back to Recommender
-                </button>
-              )}
             </div>
           )}
 
@@ -465,35 +465,6 @@ export function MuloPage() {
               }}
               onRun={(structure, simulationParams) => void runOptimization(structure, simulationParams)}
               loading={loading}
-            />
-          )}
-
-          {(stage === 'running' || stage === 'complete') && jobId && (
-            <MuloOptimizationDashboard
-              key={`${jobId}-${optimizationRunKey}`}
-              jobId={jobId}
-              runConfig={runConfig}
-              designerState={designerState}
-              onComplete={handleOptimizationComplete}
-              onNewExperiment={resetExperiment}
-            />
-          )}
-
-          {stage === 'complete' && designerState && !designerState.is_complete && (
-            <button
-              type="button"
-              className={`${btnPrimary} ${btnWide} mt-4`}
-              disabled={loading}
-              onClick={() => void continueNextLoop()}
-            >
-              Continue Controller Design (Loop {designerState.controller_index + 1})
-            </button>
-          )}
-
-          {stage === 'complete' && designerState?.is_complete && (
-            <StatusMessage
-              type="success"
-              message="All cascade loops have been designed. Review final results in the Final Result tab."
             />
           )}
         </>

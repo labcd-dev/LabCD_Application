@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { OctagonX } from 'lucide-react'
 import { jobsApi, muloApi } from '../api/endpoints'
 import type { MuloDesignerStateResponse } from '../api/types'
@@ -22,10 +22,11 @@ import { btnBase, mutedText } from '../lib/classes'
 
 interface MuloOptimizationDashboardProps {
   jobId: string
-  runConfig: MuloRunConfig
+  runConfig?: MuloRunConfig | null
   designerState: MuloDesignerStateResponse | null
   onComplete: (state: MuloDesignerStateResponse) => void
-  onNewExperiment: () => void
+  onNewExperiment?: () => void
+  onTerminal?: () => void
 }
 
 export function MuloOptimizationDashboard({
@@ -34,12 +35,14 @@ export function MuloOptimizationDashboard({
   designerState,
   onComplete,
   onNewExperiment,
+  onTerminal,
 }: MuloOptimizationDashboardProps) {
   const [activeTab, setActiveTab] = useState('performance')
   const [plotData, setPlotData] = useState<MuloPlotData | null>(null)
   const [localState, setLocalState] = useState<MuloDesignerStateResponse | null>(designerState)
   const [cancelling, setCancelling] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const notifiedTerminalRef = useRef<string | null>(null)
 
   const stream = useJobStream({ module: 'mulo', jobId, enabled: true })
 
@@ -73,6 +76,13 @@ export function MuloOptimizationDashboard({
       setCancelling(false)
     }
   }, [cancelling, stream.isCancelled, stream.isDone, stream.isRunning])
+
+  useEffect(() => {
+    const terminal = stream.isDone || stream.isCancelled || Boolean(stream.error)
+    if (!terminal || notifiedTerminalRef.current === jobId) return
+    notifiedTerminalRef.current = jobId
+    onTerminal?.()
+  }, [stream.isDone, stream.isCancelled, stream.error, jobId, onTerminal])
 
   const cancelOptimization = async () => {
     if (cancelling) return
@@ -207,9 +217,11 @@ export function MuloOptimizationDashboard({
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h3 className="m-0 text-foreground capitalize">{loopTitle} — Controller Tuning</h3>
-        <button type="button" className={btnBase} onClick={onNewExperiment}>
-          New Experiment
-        </button>
+        {onNewExperiment && (
+          <button type="button" className={btnBase} onClick={onNewExperiment}>
+            New Experiment
+          </button>
+        )}
       </div>
 
       <MuloStatusBar

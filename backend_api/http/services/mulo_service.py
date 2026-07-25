@@ -280,6 +280,11 @@ def run_mulo_optimization(job_id: str) -> None:
     job.error = None
     job.cancel_requested = False
     job.touch(JobStatus.PENDING)
+    sync_project_from_job(
+        project_id=job.metadata.get("project_id"),
+        job_id=job_id,
+        status="running",
+    )
     _start_worker(job_id)
 
 

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import {
+  ArrowLeft,
   ArrowRight,
   CheckCircle2,
   Cpu,
@@ -17,7 +18,7 @@ import { FileUpload } from '../components/FileUpload'
 import { ModelSelect } from '../components/ModelSelect'
 import { PipelineSelector } from '../components/PipelineSelector'
 import { ProcessingCard } from '../components/ProcessingCard'
-import { SetupStepIndicator } from '../components/SetupStepIndicator'
+import { SetupStepIndicator, type SetupStepId } from '../components/SetupStepIndicator'
 import { StatusMessage } from '../components/StatusMessage'
 import { usePipeline } from '../context/PipelineContext'
 import {
@@ -39,6 +40,15 @@ export function HomePage() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [editMode, setEditMode] = useState(false)
+
+  useEffect(() => {
+    pipeline.reset()
+    setStage('upload')
+    setEditMode(false)
+    setError(null)
+    // Fresh studio session only — do not resume another project's workspace.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset once on mount
+  }, [])
 
   useEffect(() => {
     healthApi.models().then((res) => setModels(res.llm_models)).catch(() => {})
@@ -119,16 +129,14 @@ export function HomePage() {
     setLoading(true)
     setError(null)
     try {
-      if (!pipeline.projectId) {
-        const project = await projectsApi.create({
-          title: pipeline.fileName || undefined,
-          pipeline_type: pipeline.pipeline,
-          file_name: pipeline.fileName,
-          file_type: pipeline.fileType,
-          file_content: pipeline.fileContent,
-        })
-        pipeline.setProjectId(project.id)
-      }
+      const project = await projectsApi.create({
+        title: pipeline.fileName || undefined,
+        pipeline_type: pipeline.pipeline,
+        file_name: pipeline.fileName,
+        file_type: pipeline.fileType,
+        file_content: pipeline.fileContent,
+      })
+      pipeline.setProjectId(project.id)
       if (pipeline.pipeline === 'muloDesign') {
         navigate('/mulo?step=recommender')
       } else if (pipeline.pipeline === 'siloDesign') {
@@ -138,6 +146,34 @@ export function HomePage() {
       setError(err instanceof Error ? err.message : 'Failed to create project')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const goBackToUpload = () => {
+    setEditMode(false)
+    setError(null)
+    setStage('upload')
+  }
+
+  const goBackFromReady = () => {
+    setEditMode(false)
+    setError(null)
+    setStage(pipeline.changeApplied ? 'result' : 'upload')
+  }
+
+  const handleSetupStepClick = (step: SetupStepId) => {
+    if (stage === 'processing' || stage === 'standardizing') return
+    if (step === 'upload') {
+      goBackToUpload()
+      return
+    }
+    if (step === 'process' && (stage === 'result' || stage === 'ready') && pipeline.changeApplied) {
+      setEditMode(false)
+      setStage('result')
+      return
+    }
+    if (step === 'ready' && stage === 'ready') {
+      return
     }
   }
 
@@ -158,7 +194,7 @@ export function HomePage() {
         </div>
       </header>
 
-      <SetupStepIndicator stage={stage} />
+      <SetupStepIndicator stage={stage} onStepClick={handleSetupStepClick} />
 
       {error && <StatusMessage type="error" message={error} />}
 
@@ -246,6 +282,10 @@ export function HomePage() {
                   language={pipeline.fileType === 'matlab' ? 'matlab' : 'python'}
                 />
                 <div className="flex gap-3 flex-wrap mt-4">
+                  <button type="button" className={btnBase} onClick={goBackToUpload}>
+                    <ArrowLeft className="size-4" aria-hidden />
+                    Back
+                  </button>
                   <button type="button" className={btnBase} onClick={() => setEditMode(true)}>
                     <Pencil className="size-4" aria-hidden />
                     Edit Code
@@ -302,14 +342,20 @@ export function HomePage() {
               height={300}
               language={pipeline.fileType === 'matlab' ? 'matlab' : 'python'}
             />
-            <button
-              type="button"
-              className={`${btnPrimary} ${btnWide} setup-cta`}
-              onClick={proceedToPipeline}
-            >
-              Continue to {nextLabel}
-              <ArrowRight className="size-4" aria-hidden />
-            </button>
+            <div className="flex gap-3 flex-wrap mt-4">
+              <button type="button" className={btnBase} onClick={goBackFromReady}>
+                <ArrowLeft className="size-4" aria-hidden />
+                Back
+              </button>
+              <button
+                type="button"
+                className={`${btnPrimary} ${btnWide} setup-cta`}
+                onClick={() => void proceedToPipeline()}
+              >
+                Continue to {nextLabel}
+                <ArrowRight className="size-4" aria-hidden />
+              </button>
+            </div>
           </div>
         </div>
       )}
