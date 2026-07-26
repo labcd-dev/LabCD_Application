@@ -235,7 +235,7 @@ export function MuloRecommenderStep({ onComplete }: MuloRecommenderStepProps) {
           )}
           {step === 'comparison' && (
             <>
-              <div className="grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-[repeat(auto-fit,minmax(240px,1fr))]">
                 {graphImageUrl && (
                   <figure>
                     <img src={graphImageUrl} alt="Original output" className={resultImageClass} />

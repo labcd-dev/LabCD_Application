@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import Plot from 'react-plotly.js'
 import type { Data, Layout } from 'plotly.js'
 import { useTheme } from '../context/ThemeContext'
@@ -10,6 +11,22 @@ interface PlotlyChartProps {
   revision?: number | string
 }
 
+function useResponsiveChartHeight(height: number) {
+  const [resolved, setResolved] = useState(height)
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 640px)')
+    const update = () => {
+      setResolved(mq.matches ? Math.min(height, Math.round(height * 0.72)) : height)
+    }
+    update()
+    mq.addEventListener('change', update)
+    return () => mq.removeEventListener('change', update)
+  }, [height])
+
+  return resolved
+}
+
 export function PlotlyChart({
   data,
   layout = {},
@@ -19,10 +36,11 @@ export function PlotlyChart({
 }: PlotlyChartProps) {
   const { resolvedTheme } = useTheme()
   const isDark = resolvedTheme === 'dark'
+  const chartHeight = useResponsiveChartHeight(height)
 
   const mergedLayout: Partial<Layout> = {
     autosize: true,
-    height,
+    height: chartHeight,
     margin: { l: 48, r: 24, t: 40, b: 40 },
     paper_bgcolor: 'transparent',
     plot_bgcolor: 'transparent',
@@ -51,8 +69,16 @@ export function PlotlyChart({
     },
   }
 
+  if (chartHeight < height) {
+    mergedLayout.margin = { l: 40, r: 12, t: 28, b: 32, ...(layout.margin ?? {}) }
+    mergedLayout.font = {
+      ...mergedLayout.font,
+      size: 11,
+    }
+  }
+
   return (
-    <div className={className ?? 'w-full min-h-[280px]'}>
+    <div className={className ?? 'w-full min-h-[220px] overflow-x-auto sm:min-h-[280px]'}>
       <Plot
         data={data}
         layout={mergedLayout}
@@ -61,7 +87,7 @@ export function PlotlyChart({
           responsive: true,
         }}
         useResizeHandler
-        style={{ width: '100%', height: `${height}px` }}
+        style={{ width: '100%', height: `${chartHeight}px` }}
       />
     </div>
   )

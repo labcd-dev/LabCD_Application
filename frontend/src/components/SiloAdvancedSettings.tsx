@@ -87,7 +87,7 @@ function RangeField({
 }
 
 function FieldGrid({ children }: { children: ReactNode }) {
-  return <div className="grid grid-cols-1 gap-0 sm:grid-cols-2 sm:gap-x-4">{children}</div>
+  return <div className="grid grid-cols-1 gap-0 md:grid-cols-2 md:gap-x-4">{children}</div>
 }
 
 function updateConfig(
@@ -403,7 +403,7 @@ export function SiloAdvancedSettings({ value, onChange }: SiloAdvancedSettingsPr
             <div className="mb-4 rounded-lg border border-border bg-surface-muted p-3">
               <FieldGrid>
                 {Object.entries(value.fsfRanges).map(([paramName, [min, max]]) => (
-                  <div key={paramName} className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-x-4">
+                  <div key={paramName} className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-x-4">
                     <NumberField
                       label={`${paramName} Min`}
                       value={min}

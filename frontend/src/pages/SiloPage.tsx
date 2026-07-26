@@ -71,13 +71,13 @@ export function SiloPage() {
     <section className={pageSection}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="mt-0 text-foreground">Single Loop Control Designer</h2>
+          <h2 className="mt-0 text-xl text-foreground sm:text-2xl">Single Loop Control Designer</h2>
           <p className={pageIntro}>
             Describe your control objective and start the SiloDesigner pipeline. Live progress
             opens on the project page.
           </p>
         </div>
-        <button type="button" className={btnBase} onClick={() => navigate('/studio')}>
+        <button type="button" className={`${btnBase} max-sm:w-full`} onClick={() => navigate('/studio')}>
           <ArrowLeft className="size-4" aria-hidden />
           Back to Studio
         </button>

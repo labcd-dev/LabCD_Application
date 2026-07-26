@@ -1,6 +1,6 @@
-export const pageSection = 'space-y-5'
-export const pageTitle = 'mt-0 text-2xl font-semibold tracking-tight text-foreground'
-export const pageIntro = 'text-muted-text leading-relaxed'
+export const pageSection = 'space-y-4 sm:space-y-5'
+export const pageTitle = 'mt-0 text-xl font-semibold tracking-tight text-foreground sm:text-2xl'
+export const pageIntro = 'text-sm text-muted-text leading-relaxed sm:text-base'
 
 export const fieldLabel =
   'flex flex-col gap-1.5 mb-4 last:mb-0 [&>span]:font-medium [&>span]:text-sm [&>span]:text-foreground'
@@ -21,9 +21,9 @@ export const btnLink =
 export const btnCompact = 'px-3 py-1.5 text-[0.82rem]'
 
 export const cardPanel =
-  'bg-surface-elevated border border-border rounded-xl p-4 shadow-sm'
+  'bg-surface-elevated border border-border rounded-xl p-3 shadow-sm sm:p-4'
 export const cardProcessing =
-  'bg-surface-elevated border border-border rounded-xl p-8 shadow-sm text-center'
+  'bg-surface-elevated border border-border rounded-xl p-5 shadow-sm text-center sm:p-8'
 
 export const codePreview =
   'w-full font-mono text-[0.85rem] p-4 border border-border-input rounded-lg bg-code-bg text-code-text resize-y shadow-inner'

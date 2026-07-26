@@ -1,5 +1,6 @@
 import { useEffect, useState, type CSSProperties } from 'react'
 import { Navigate } from 'react-router-dom'
+import { Menu, X } from 'lucide-react'
 import { siteApi } from '../api/endpoints'
 import type { LandingPayload } from '../api/types'
 import { useAuth } from '../context/AuthContext'
@@ -26,6 +27,7 @@ function section<T extends SectionRecord>(landing: Record<string, unknown>, key:
 export function LandingPage() {
   const { user, loading } = useAuth()
   const [payload, setPayload] = useState<LandingPayload>(FALLBACK_LANDING)
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
   useMouseGlow()
 
   useEffect(() => {
@@ -98,7 +100,7 @@ export function LandingPage() {
             {brand.logo_url ? <BrandLogo brand={brand} /> : <LogoMark />}
             <span className="text-[24px] font-extrabold tracking-[-0.6px] text-white max-md:text-xl">
               {brand.brand_name}
-              <p className="text-sm font-medium" style={{ color: 'color-mix(in srgb, var(--brand-primary) 80%, white)' }}>
+              <p className="text-sm font-medium max-md:hidden" style={{ color: 'color-mix(in srgb, var(--brand-primary) 80%, white)' }}>
                 {brand.tagline}
               </p>
             </span>
@@ -118,7 +120,42 @@ export function LandingPage() {
               Access Platform
             </LandingLink>
           </div>
+          <button
+            type="button"
+            className="inline-flex size-10 items-center justify-center rounded-lg border border-white/15 text-white transition hover:bg-white/10 md:hidden"
+            aria-label={mobileNavOpen ? 'Close menu' : 'Open menu'}
+            aria-expanded={mobileNavOpen}
+            onClick={() => setMobileNavOpen((open) => !open)}
+          >
+            {mobileNavOpen ? <X className="size-5" /> : <Menu className="size-5" />}
+          </button>
         </nav>
+        {mobileNavOpen && (
+          <div
+            className="border-t border-white/10 bg-[#030716] px-5 py-4 md:hidden"
+            onClick={() => setMobileNavOpen(false)}
+          >
+            <ul className="m-0 flex list-none flex-col gap-1 p-0 [&>li>a]:block [&>li>a]:rounded-lg [&>li>a]:px-3 [&>li>a]:py-3">
+              {renderMenu(menus.header)}
+            </ul>
+            <div className="mt-4 flex flex-col gap-3 border-t border-white/10 pt-4">
+              <LandingLink
+                href={brand.sign_in_url}
+                external
+                className="rounded-lg px-3 py-3 text-center text-[15px] font-medium text-white/75 transition hover:text-white"
+              >
+                Sign In
+              </LandingLink>
+              <LandingLink
+                href={brand.access_platform_url}
+                external
+                className="inline-flex h-11 items-center justify-center rounded-lg px-5 text-[15px] font-bold text-slate-950 landing-brand-gradient"
+              >
+                Access Platform
+              </LandingLink>
+            </div>
+          </div>
+        )}
       </header>
 
       <section className="relative overflow-hidden bg-[#07101f] [background-image:linear-gradient(rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.04)_1px,transparent_1px)] [background-size:36px_36px]">

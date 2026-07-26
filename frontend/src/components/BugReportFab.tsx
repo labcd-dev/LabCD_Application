@@ -28,7 +28,7 @@ export function BugReportFab() {
     <>
       <button
         type="button"
-        className="fixed bottom-6 right-6 z-50 flex size-12 items-center justify-center rounded-full border border-border bg-surface-elevated text-foreground shadow-lg transition hover:bg-surface-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+        className="fixed bottom-4 right-4 z-50 flex size-11 items-center justify-center rounded-full border border-border bg-surface-elevated text-foreground shadow-lg transition hover:bg-surface-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary sm:bottom-6 sm:right-6 sm:size-12"
         aria-label="Report a bug"
         title="Report a bug"
         onClick={() => setOpen(true)}

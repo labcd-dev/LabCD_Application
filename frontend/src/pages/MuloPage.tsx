@@ -331,14 +331,14 @@ export function MuloPage() {
     <section className={pageSection}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="mt-0 text-foreground">Multi Loop Control Designer</h2>
+          <h2 className="mt-0 text-xl text-foreground sm:text-2xl">Multi Loop Control Designer</h2>
           <p className={pageIntro}>
             LLM-enhanced genetic algorithm for multi-loop PID controller design.
             {isPipelineWorkflow && ' Run Recommender, Trimmer, and Designer in one workflow.'}
             {' '}Live optimization opens on the project page.
           </p>
         </div>
-        <button type="button" className={btnBase} onClick={goBackFromPipelineStep}>
+        <button type="button" className={`${btnBase} max-sm:w-full`} onClick={goBackFromPipelineStep}>
           <ArrowLeft className="size-4" aria-hidden />
           {backLabel}
         </button>

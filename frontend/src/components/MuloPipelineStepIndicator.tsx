@@ -37,7 +37,7 @@ export function MuloPipelineStepIndicator({
   return (
     <div className={`${cardPanel} setup-steps-card setup-animate-in`}>
       <nav className="setup-steps" aria-label="Multi loop design progress">
-        <ol className="setup-steps__list">
+        <ol className="setup-steps__list setup-steps__list--mulo">
           {STEPS.map((pipelineStep, index) => {
             const Icon = pipelineStep.icon
             const isComplete =

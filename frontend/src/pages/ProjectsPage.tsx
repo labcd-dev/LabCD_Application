@@ -71,7 +71,7 @@ export function ProjectsPage() {
   return (
     <section className={pageSection}>
       <header className="space-y-2">
-        <h2 className="m-0 text-2xl font-semibold tracking-tight text-foreground">
+        <h2 className="m-0 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
           Project history
         </h2>
         <p className={`${pageIntro} m-0 max-w-2xl`}>
@@ -92,7 +92,7 @@ export function ProjectsPage() {
             onChange={(e) => setQuery(e.target.value)}
           />
         </div>
-        <div className="flex gap-1">
+        <div className="flex flex-wrap gap-1">
           {(
             [
               ['all', 'All'],

@@ -28,7 +28,7 @@ export function FileUpload({
     <label className={`${fieldLabel} mb-0`}>
       <span>System definition file</span>
       <div
-        className={`relative flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-6 py-8 text-center transition-colors duration-150 cursor-pointer ${
+        className={`relative flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-4 py-6 text-center transition-colors duration-150 cursor-pointer sm:px-6 sm:py-8 ${
           dragOver
             ? 'border-primary bg-[color-mix(in_srgb,var(--app-primary)_8%,transparent)]'
             : 'border-border-input bg-surface-muted hover:border-primary/60 hover:bg-surface-hover'

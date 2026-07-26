@@ -342,9 +342,13 @@
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 0;
+  list-style: none;
   margin: 0;
   padding: 0;
-  list-style: none;
+}
+
+.setup-steps__list--mulo {
+  grid-template-columns: repeat(3, 1fr);
 }
 
 .setup-steps__item {
@@ -827,10 +831,50 @@
   }
 }
 
+@media (max-width: 900px) {
+  .setup-steps__list {
+    grid-template-columns: repeat(2, 1fr);
+    row-gap: 1.25rem;
+  }
+
+  .setup-steps__list--mulo {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .setup-steps__connector {
+    display: none;
+  }
+
+  .setup-steps__description {
+    display: none;
+  }
+}
+
 @media (max-width: 640px) {
   .setup-steps__list {
     grid-template-columns: repeat(2, 1fr);
     row-gap: 1.5rem;
+  }
+
+  .setup-steps__list--mulo {
+    grid-template-columns: 1fr;
+    row-gap: 0.75rem;
+  }
+
+  .setup-steps__list--mulo .setup-steps__node {
+    flex-direction: row;
+    align-items: center;
+    gap: 0.75rem;
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+  }
+
+  .setup-steps__list--mulo .setup-steps__label {
+    font-size: 0.875rem;
+  }
+
+  .setup-steps__list--mulo .setup-steps__description {
+    display: block;
   }
 
   .setup-steps__connector {
@@ -844,6 +888,18 @@
   .setup-hero {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .setup-hero__title {
+    font-size: 1.25rem;
+  }
+
+  .setup-steps-card {
+    padding: 0.875rem;
+  }
+
+  .setup-panel {
+    padding: 0;
   }
 }
 

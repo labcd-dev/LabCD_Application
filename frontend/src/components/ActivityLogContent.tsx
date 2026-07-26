@@ -147,9 +147,9 @@ function ControllerCard({ controller, index }: { controller: ControllerInfo; ind
         {fields
           .filter(([, value]) => value)
           .map(([label, value]) => (
-            <div key={label} className="grid grid-cols-[minmax(0,9rem)_1fr] gap-2">
-              <dt className="text-muted-text">{label}</dt>
-              <dd className="text-foreground m-0 font-mono text-[0.82rem]">{value}</dd>
+            <div key={label} className="grid grid-cols-1 gap-0.5 sm:grid-cols-[minmax(0,9rem)_1fr] sm:gap-2">
+              <dt className="text-xs text-muted-text sm:text-sm">{label}</dt>
+              <dd className="m-0 break-all font-mono text-[0.82rem] text-foreground">{value}</dd>
             </div>
           ))}
       </dl>

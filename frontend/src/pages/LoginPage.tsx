@@ -34,7 +34,7 @@ export function LoginPage() {
   }
 
   return (
-    <section className="mx-auto flex min-h-[70vh] max-w-md flex-col justify-center">
+    <section className="mx-auto flex min-h-[70vh] max-w-md flex-col justify-center px-1">
       <div className={`${cardPanel} space-y-4`}>
         <header>
           <h2 className="m-0 text-2xl font-semibold tracking-tight text-foreground">Sign in</h2>
