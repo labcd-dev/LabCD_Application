@@ -46,7 +46,7 @@ export function MuloRecommenderStep({ onComplete }: MuloRecommenderStepProps) {
 
   const startRecommender = async (recommenderStep = 'initial_run') => {
     if (!pipeline.fileContent || !pipeline.fileName) {
-      setError('Upload and process a file on the Home page first.')
+      setError('Upload and process a file on the New Project page first.')
       return
     }
     setLoading(true)

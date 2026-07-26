@@ -3,9 +3,9 @@ import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   Clapperboard,
   FolderOpen,
-  Home,
   LogOut,
   Menu,
+  Plus,
   Shield,
   User,
   X,
@@ -111,8 +111,8 @@ export function Layout() {
           {user && (
             <nav className="hidden items-center gap-1 md:flex" aria-label="Studio">
               <Link to="/studio" className={navLinkClass(isHome)}>
-                <Home className="size-4" aria-hidden />
-                Home
+                <Plus className="size-4" aria-hidden />
+                New Project
               </Link>
               <Link to="/projects" className={navLinkClass(isProjects)}>
                 <FolderOpen className="size-4" aria-hidden />
@@ -209,8 +209,8 @@ export function Layout() {
                 className={mobileNavLinkClass(isHome)}
                 onClick={() => setMenuOpen(false)}
               >
-                <Home className="size-4 shrink-0" aria-hidden />
-                Home
+                <Plus className="size-4 shrink-0" aria-hidden />
+                New Project
               </Link>
               <Link
                 to="/projects"
