@@ -35,7 +35,7 @@ export function SiloPage() {
 
   const startDesign = async () => {
     if (!pipeline.fileContent) {
-      setError('Upload and process a file on the Home page first.')
+      setError('Upload and process a file on the New Project page first.')
       return
     }
     if (!pipeline.projectId) {
