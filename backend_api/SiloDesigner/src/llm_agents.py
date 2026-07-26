@@ -192,42 +192,41 @@ class LLMBaseAgent:
             raise DesignCancelledError("Design cancelled by user")
 
     def invoke_llm(self, system_prompt, user_prompt, max_retries=3):
-        """Invoke LLM with separate system and user prompts, retry logic and logging.
-
-        Returns
-        -------
-        response_text : str
-        usage : dict
-            Keys: prompt_tokens, completion_tokens, llm_time, api_failures
-        """
-        failed_attempts = 0  # ← NEW: track per-call failures across retries
-
+        """Invoke LLM with separate system and user prompts, retry logic and logging"""
         for attempt in range(max_retries):
             try:
+                self._ensure_running()
+
+                # Log the prompts
                 if attempt > 0:
                     log_to_file(f"Retry attempt {attempt + 1}/{max_retries} for {self.agent_name}")
 
+                # Create messages with system and user prompts
                 messages = [
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
+                    {"role": "user", "content": user_prompt}
                 ]
 
+                # NEW: Measure LLM inference time
                 llm_start_time = time.time()
                 response = self.llm.invoke(messages)
                 llm_duration = time.time() - llm_start_time
 
+                # Handle response format
                 if isinstance(response, AIMessage):
                     response_text = response.content
+                    # Extract usage metadata with better fallback handling
                     if hasattr(response, 'usage_metadata') and response.usage_metadata:
                         usage = {
                             'prompt_tokens': response.usage_metadata.get('input_tokens', 0),
-                            'completion_tokens': response.usage_metadata.get('output_tokens', 0),
+                            'completion_tokens': response.usage_metadata.get('output_tokens', 0)
                         }
                     elif hasattr(response, 'response_metadata') and response.response_metadata:
+                        # Some providers put usage in response_metadata
                         usage_data = response.response_metadata.get('usage', {})
                         usage = {
                             'prompt_tokens': usage_data.get('prompt_tokens', 0),
-                            'completion_tokens': usage_data.get('completion_tokens', 0),
+                            'completion_tokens': usage_data.get('completion_tokens', 0)
                         }
                     else:
                         usage = {'prompt_tokens': 0, 'completion_tokens': 0}
@@ -235,38 +234,31 @@ class LLMBaseAgent:
                     response_text = str(response)
                     usage = {'prompt_tokens': 0, 'completion_tokens': 0}
 
+                # NEW: Add LLM inference duration to usage
                 usage['llm_time'] = llm_duration
-                usage['api_failures'] = failed_attempts  # ← NEW: attach failure count to successful call
 
-                formatted_log(
-                    self.agent_name,
-                    f"System: {system_prompt}\nUser: {user_prompt}",
-                    f"{response_text}\n\n"
-                    f"[Usage: {usage['prompt_tokens']} in, {usage['completion_tokens']} out, "
-                    f"{llm_duration:.2f}s LLM time, {failed_attempts} prior failures]",
-                )
+                # Log the interaction with usage info
+                formatted_log(self.agent_name, f"System: {system_prompt}\nUser: {user_prompt}",
+                              f"{response_text}\n\n[Usage: {usage['prompt_tokens']} in, {usage['completion_tokens']} out, {llm_duration:.2f}s LLM time]")
 
+                # Add to monitor if available
                 if self.monitor:
                     full_prompt = f"System: {system_prompt}\n\nUser: {user_prompt}"
-                    truncated = full_prompt[:200] + "..." if len(full_prompt) > 200 else full_prompt
-                    self.monitor.add_llm_response(self.agent_name, truncated, response_text)
+                    truncated_prompt = full_prompt[:200] + "..." if len(full_prompt) > 200 else full_prompt
+                    self.monitor.add_llm_response(self.agent_name, truncated_prompt, response_text)
 
                 return response_text, usage
 
             except Exception as e:
-                failed_attempts += 1  # ← NEW: count this attempt as a failure
+                # NEW: Accumulate retry time as well (though minimal)
+                llm_duration = time.time() - (time.time() - 0.01)  # Approximate minimal overhead for failed attempt
                 log_to_file(
-                    f"❌ Error invoking LLM (attempt {attempt + 1}/{max_retries}): {e}",
-                    True,
-                )
+                    f"âŒError invoking LLM (attempt {attempt + 1}/{max_retries}): {e} [~{llm_duration:.2f}s overhead]",
+                    True)
                 if attempt == max_retries - 1:
-                    # All retries exhausted — propagate failure count before raising
-                    # so callers that catch can still read it if needed.
-                    # Re-raise to preserve existing error-handling contract.
                     raise e
 
-        # Unreachable in normal flow, but satisfies linters.
-        return None, {'prompt_tokens': 0, 'completion_tokens': 0, 'llm_time': 0.0, 'api_failures': failed_attempts}
+        return None, {'prompt_tokens': 0, 'completion_tokens': 0, 'llm_time': 0.0}
 
     # NEW: Compute cost based on model and tokens (price_table in $/1M tokens)
     def _compute_cost(self, in_tokens: int, out_tokens: int) -> float:
@@ -338,29 +330,17 @@ class LLMBaseAgent:
         return 0.0
 
     # NEW: Update buffer metrics if present (called after each successful invoke)
-
     def _update_metrics(self, buffer, usage):
-        """Push token / cost / failure counters from one LLM call into the buffer.
-
-        Extended keys in current_scenario_metrics
-        -----------------------------------------
-        api_failures : int   ← NEW cumulative count of failed API attempts this scenario
-        """
-        if not (hasattr(buffer, 'current_scenario_metrics') and
+        if (hasattr(buffer, 'current_scenario_metrics') and
                 buffer.current_scenario_metrics is not None):
-            return
-
-        m = buffer.current_scenario_metrics
-        m['tokens_in'] += usage.get('prompt_tokens', 0)
-        m['tokens_out'] += usage.get('completion_tokens', 0)
-        m['time'] += usage.get('llm_time', 0.0)
-        m['cost'] += self._compute_cost(
-            usage.get('prompt_tokens', 0),
-            usage.get('completion_tokens', 0),
-        )
-        # ← NEW: accumulate API failures; key may not exist in old data, so use setdefault
-        m.setdefault('api_failures', 0)
-        m['api_failures'] += usage.get('api_failures', 0)
+            m = buffer.current_scenario_metrics
+            m['tokens_in'] += usage.get('prompt_tokens', 0)
+            m['tokens_out'] += usage.get('completion_tokens', 0)
+            m['time'] += usage.get('llm_time', 0.0)  # NEW: Accumulate LLM inference time
+            m['cost'] += self._compute_cost(
+                usage.get('prompt_tokens', 0),
+                usage.get('completion_tokens', 0)
+            )
 
 
 class LLMActor(LLMBaseAgent):

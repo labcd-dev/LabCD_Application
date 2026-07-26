@@ -120,7 +120,7 @@ def display_home_page(run_by_ga_agent_ui: bool = True) -> None:
                 "Max Wall Clock (s)",
                 min_value=10.0,
                 max_value=7_200.0,
-                value=600.0,
+                value=120.0,
                 step=10.0,
                 key="adv_wall_clock",
                 help="Hard time budget for the entire experiment.",

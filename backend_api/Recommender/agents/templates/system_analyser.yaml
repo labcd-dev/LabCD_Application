@@ -23,7 +23,9 @@ analyse_system: |
       "continuous": "Continuous/Discreate",
       "linear": "Linear/Nonlinear",
       "order": integer,
-      "type": "SISO/MIMO"
+      "type": "SISO/MIMO",
+      "n_states": "number of states",
+      "n_inputs":"number of controller inputs",
     }},
     "inputs": [
       {{

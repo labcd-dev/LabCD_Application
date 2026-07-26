@@ -67,77 +67,6 @@ class SharedBuffer:
     #         data = pickle.load(f)
     #     self.__dict__.update(data)
 
-    def finalise_scenario_metrics(self, target_metrics: dict, wall_clock_duration: float) -> None:
-        """Compute and stamp derived DevOps KPIs into current_scenario_metrics.
-
-        Call this once, *after* wall-clock time is known but *before* the
-        metrics dict is copied to the monitor.
-
-        Parameters
-        ----------
-        target_metrics : dict
-            The per-scenario target thresholds, e.g.
-            {'mse': 0.2, 'settling_time': 4.0, 'overshoot': 0}.
-        wall_clock_duration : float
-            Elapsed seconds for this scenario (from scenario_start_time).
-        """
-        if self.current_scenario_metrics is None:
-            return
-
-        m = self.current_scenario_metrics
-
-        # 1. Wall-clock time (overwrite the LLM-accumulated stub with the real value)
-        m['time'] = wall_clock_duration
-
-        # 2. Controller latency — total wall-clock seconds for this design attempt.
-        #    We expose it separately so the UI can break it down by controller type.
-        m['controller_latency_s'] = wall_clock_duration
-
-        # 3. Was the best design stable?
-        best_entry = self.get_best_entries(1)
-        if best_entry:
-            best_metrics = best_entry[0]['metrics']
-            m['stable'] = bool(best_metrics.get('stable', False))
-        else:
-            m['stable'] = False
-
-        # 4. Success score  (each of the 4 KPIs contributes 25 %)
-        #    A KPI passes if the best value is ≤ the target (lower-is-better).
-        #    'stable' is a boolean bonus that can be included or ignored;
-        #    here we treat it as a prerequisite: score = 0 if not stable.
-        score = 0.0
-        if m['stable'] and best_entry:
-            bm = best_entry[0]['metrics']
-            kpi_map = {
-                'mse': ('mse', target_metrics.get('mse', 0.2)),
-                'settling_time': ('settling_time', target_metrics.get('settling_time', 4.0)),
-                'overshoot': ('overshoot', target_metrics.get('overshoot', 0.0)),
-                'ss_error': ('ss_error', target_metrics.get('ss_error', 0.05)),
-            }
-            passing = sum(
-                1 for metric_key, (bm_key, threshold) in kpi_map.items()
-                if bm.get(bm_key, float('inf')) <= threshold
-            )
-            score = passing / len(kpi_map)  # 0.0 – 1.0
-        m['score'] = round(score, 4)
-
-        # 5. Cost per successful design
-        #    If the scenario was NOT successful we still record cost but mark
-        #    cost_per_success as None so the UI can display "—".
-        if m['stable'] and score >= 1.0:
-            m['cost_per_success'] = m['cost']
-        else:
-            m['cost_per_success'] = None
-
-        # 6. api_failures is already accumulated by _update_metrics() in llm_agents.py;
-        #    ensure the key exists even if no failures occurred.
-        m.setdefault('api_failures', 0)
-
-        log_to_file(
-            f"[finalise_scenario_metrics] stable={m['stable']}, score={m['score']:.2f}, "
-            f"api_failures={m['api_failures']}, cost_per_success={m['cost_per_success']}, "
-            f"latency={m['controller_latency_s']:.1f}s"
-        )
 
 def log_to_file(message, also_print=False):
     """Write message to log file and optionally print to console"""
@@ -148,9 +77,13 @@ def log_to_file(message, also_print=False):
     if also_print:
         print(message)
 
-
 def generate_scenario_report_json(full_path: str) -> None:
     """Generate report for a scenario using data loaded from a JSON file."""
+    # current_directory = os.getcwd()
+    # parent_directory = os.path.abspath(os.path.join(current_directory, ".."))
+    # json_path = os.path.join(parent_directory, json_filename)
+
+    # Load JSON data
     with open(full_path, "r") as f:
         scenario_data = json.load(f)
 
@@ -163,19 +96,9 @@ def generate_scenario_report_json(full_path: str) -> None:
         print("No history data found.")
         return
 
-    # Extract metrics (with safe defaults for older JSON files)
-    scenario_metrics = scenario_data.get(
-        "scenario_metrics",
-        {
-            'tokens_in': 0, 'tokens_out': 0, 'time': 0.0, 'cost': 0.0,
-            # NEW keys — default gracefully for legacy files
-            'api_failures': 0,
-            'stable': False,
-            'score': 0.0,
-            'cost_per_success': None,
-            'controller_latency_s': 0.0,
-        },
-    )
+    # NEW: Extract metrics from JSON
+    scenario_metrics = scenario_data.get("scenario_metrics",
+                                         {'tokens_in': 0, 'tokens_out': 0, 'time': 0.0, 'cost': 0.0})
 
     # Determine parameters to plot based on controller type
     first_entry = history[0]
@@ -197,14 +120,16 @@ def generate_scenario_report_json(full_path: str) -> None:
     if history:
         segments.append((start, len(history), history[start]["param_ranges"]))
 
+    # Range change indices
     range_change_indices = [seg[1] for seg in segments[:-1]]
 
-    # ── Plot ────────────────────────────────────────────────────────────────
+    # Initialize figure
     plt.figure(figsize=(10, 8))
     ax = plt.subplot(221)
 
+    # Plot parameter evolution
     iterations = range(len(history))
-    colors = ['r', 'g', 'b', 'c', 'm', 'y', 'k']
+    colors = ['r', 'g', 'b', 'c', 'm', 'y', 'k']  # Color cycle
 
     for i, param in enumerate(params_to_plot):
         color = colors[i % len(colors)]
@@ -212,17 +137,19 @@ def generate_scenario_report_json(full_path: str) -> None:
         values = [e["params"].get(param, 0) for e in history]
         ax.plot(iterations, values, color + marker_style, label=param)
 
+    # Plot shaded areas for parameter ranges
     N = len(history)
-    for seg_start, seg_end, ranges in segments:
-        if seg_start >= seg_end:
+    for start, end, ranges in segments:
+        if start >= end:
             continue
         for param, (min_val, max_val) in ranges.items():
             if param in params_to_plot:
                 color = colors[params_to_plot.index(param) % len(colors)]
-                xmin = seg_start / (N - 1) if N > 1 else 0
-                xmax = (seg_end - 1) / (N - 1) if N > 1 else 1
+                xmin = start / (N - 1) if N > 1 else 0
+                xmax = (end - 1) / (N - 1) if N > 1 else 1
                 ax.axhspan(min_val, max_val, xmin=xmin, xmax=xmax, color=color, alpha=0.2)
 
+    # Add vertical lines for range changes
     for idx in range_change_indices:
         ax.axvline(x=idx, color='k', linestyle='--', alpha=0.5)
         ax.text(idx, ax.get_ylim()[1] * 0.95, "Range\nChange", fontsize=8, ha='center', va='top',
@@ -234,6 +161,8 @@ def generate_scenario_report_json(full_path: str) -> None:
     ax.legend()
     ax.grid(True)
 
+    # Performance metrics plots
+    # MSE Plot
     plt.subplot(222)
     mse_values = [e["metrics"]["mse"] for e in history]
     plt.semilogy(iterations, mse_values, 'r-o', label='MSE', linewidth=2, markersize=4)
@@ -249,6 +178,7 @@ def generate_scenario_report_json(full_path: str) -> None:
     plt.legend()
     plt.grid(True, alpha=0.3)
 
+    # Settling Time Plot
     plt.subplot(223)
     settling_times = [e["metrics"]["settling_time"] for e in history]
     plt.plot(iterations, settling_times, 'g-o', linewidth=2, markersize=4)
@@ -259,6 +189,7 @@ def generate_scenario_report_json(full_path: str) -> None:
     plt.title('Settling Time Evolution')
     plt.grid(True, alpha=0.3)
 
+    # Overshoot Plot
     plt.subplot(224)
     overshoots = [e["metrics"]["overshoot"] for e in history]
     plt.plot(iterations, overshoots, 'b-o', linewidth=2, markersize=4)
@@ -269,9 +200,13 @@ def generate_scenario_report_json(full_path: str) -> None:
     plt.title('Maximum Overshoot Evolution')
     plt.grid(True, alpha=0.3)
 
+    # Save plot
     plt.tight_layout()
+    # plot_filename = f"scenario_report_{Path(full_path).stem}.png"
+    # plt.savefig(plot_filename, dpi=300, bbox_inches='tight') #$$$$$$$
+    # plt.close() #$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
 
-    # ── Text report ─────────────────────────────────────────────────────────
+    # Generate text summary
     report = f"\n=== Scenario {scenario_level} Optimization Summary ===\n"
     report += f"Controller Type: {controller_type}\n"
     report += f"Total iterations: {len(history)}\n"
@@ -279,53 +214,44 @@ def generate_scenario_report_json(full_path: str) -> None:
     if range_change_indices:
         report += f"Parameter range changes at iterations: {range_change_indices}\n"
         report += f"Number of range reconsiderations: {len(range_change_indices)}\n"
-        report += "\nParameter Range Evolution:\n"
-        for seg_start, seg_end, ranges in segments:
-            if seg_start < seg_end:
-                report += f"  Iterations {seg_start}-{seg_end - 1}: "
+        report += f"\nParameter Range Evolution:\n"
+        for start, end, ranges in segments:
+            if start < end:
+                report += f"  Iterations {start}-{end - 1}: "
                 if controller_type == "FSF":
                     fsf_items = [(k, v) for k, v in ranges.items() if k in params_to_plot]
                     fsf_items.sort(key=lambda x: int(x[0][1:]) if x[0][1:].isdigit() else 0)
-                    range_strs = [f"{p}=[{lo:.2f}, {hi:.2f}]" for p, (lo, hi) in fsf_items]
+                    range_strs = [f"{param}=[{min_val:.2f}, {max_val:.2f}]" for param, (min_val, max_val) in fsf_items]
                 else:
-                    range_strs = [f"{p}=[{lo:.2f}, {hi:.2f}]" for p, (lo, hi) in ranges.items()
-                                  if p in params_to_plot]
+                    range_strs = [f"{param}=[{min_val:.2f}, {max_val:.2f}]" for param, (min_val, max_val) in
+                                  ranges.items() if param in params_to_plot]
                 report += " ".join(range_strs) + "\n"
 
+    # Find best parameters and metrics
     if history:
         best_entry = min(history, key=lambda x: x["metrics"]["mse"])
         best_params = best_entry["params"]
         best_metrics = best_entry["metrics"]
 
-        report += "\nBest parameters found:\n"
+        report += f"\nBest parameters found:\n"
         for param in params_to_plot:
             if param in best_params:
                 report += f"  {param}: {best_params[param]:.4f}\n"
 
-        report += f"Best MSE:             {best_metrics['mse']:.4f}\n"
-        report += f"Settling Time:        {best_metrics.get('settling_time', 'N/A'):.2f}s\n"
-        report += f"Overshoot:            {best_metrics.get('overshoot', 'N/A'):.4f}\n"
-        report += f"Rise Time:            {best_metrics.get('rise_time', 'N/A'):.2f}s\n"
-        report += f"Zero-Crossings:       {best_metrics.get('zero_crossings', 'N/A')}\n"
-        report += f"Control Effort:       {best_metrics.get('control_effort', 'N/A'):.4f}\n"
-        report += f"Control Zero-Cross.:  {best_metrics.get('control_zero_crossings', 'N/A')}\n"
-        report += f"Stable:               {'Yes' if best_metrics.get('stable', False) else 'No'}\n"
+        report += f"Best MSE: {best_metrics['mse']:.4f}\n"
+        report += f"Settling Time: {best_metrics.get('settling_time', 'N/A'):.2f}s\n"
+        report += f"Overshoot: {best_metrics.get('overshoot', 'N/A'):.4f}\n"
+        report += f"Rise Time: {best_metrics.get('rise_time', 'N/A'):.2f}s\n"
+        report += f"Zero-Crossings: {best_metrics.get('zero_crossings', 'N/A')}\n"
+        report += f"Control Effort: {best_metrics.get('control_effort', 'N/A'):.4f}\n"
+        report += f"Control Zero-Crossings: {best_metrics.get('control_zero_crossings', 'N/A')}\n"
+        report += f"Stable: {'Yes' if best_metrics.get('stable', False) else 'No'}\n"
 
-    # ── Extended DevOps section ──────────────────────────────────────────────
-    report += "\n=== Scenario Metrics ===\n"
-    report += f"Total Tokens In:          {scenario_metrics['tokens_in']}\n"
-    report += f"Total Tokens Out:         {scenario_metrics['tokens_out']}\n"
-    report += f"Wall Clock Time:          {scenario_metrics['time']:.2f}s\n"
-    report += f"Controller Latency:       {scenario_metrics.get('controller_latency_s', scenario_metrics['time']):.2f}s\n"
-    report += f"Estimated Cost:           ${scenario_metrics['cost']:.6f}\n"
+    report += f"\n=== Scenario Metrics ===\n"
+    report += f"Total Tokens In: {scenario_metrics['tokens_in']}\n"
+    report += f"Total Tokens Out: {scenario_metrics['tokens_out']}\n"
+    report += f"Wall Clock Time: {scenario_metrics['time']:.2f}s\n"
+    report += f"Estimated Cost: ${scenario_metrics['cost']:.6f}\n"
 
-    # NEW DevOps KPIs
-    report += "\n=== DevOps KPIs ===\n"
-    report += f"Controller Successful:    {'Yes' if scenario_metrics.get('stable', False) else 'No'}\n"
-    score_pct = scenario_metrics.get('score', 0.0) * 100
-    report += f"Success Score:            {score_pct:.0f}% ({score_pct / 25:.0f}/4 KPIs met)\n"
-    cps = scenario_metrics.get('cost_per_success')
-    report += f"Cost per Successful Dsn:  {'${:.6f}'.format(cps) if cps is not None else 'N/A (unsuccessful)'}\n"
-    report += f"API Failures (retried):   {scenario_metrics.get('api_failures', 0)}\n"
-
-    print(report)
+    # Output report
+    print(report)  # Alternatively, use log_to_file(report, True) if logging is preferred

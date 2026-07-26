@@ -88,7 +88,7 @@ class Agents(metaclass=SingletonMeta):
         prompt = self.prompts['fix_error']['fix_whole_code'].format(
             code = code
         )
-        response_text = self._call_llm(self.gpt_oss, prompt, system=True, is_json=False)
+        response_text = self._call_llm(self.main_model, prompt, system=True, is_json=False)
         return response_text
 
 

@@ -1,6 +1,7 @@
 import numpy as np
 from typing import Dict, Any
 import time
+from datetime import datetime
 
 from backend_api.MuloDesigner.GaAgent.src.graph import create_ga_handler_graph
 from backend_api.MuloDesigner.GaAgent.src.utils import (
@@ -9,7 +10,8 @@ from backend_api.MuloDesigner.GaAgent.src.utils import (
     coerce_simulation_params,
     load_case_study,
 )
-from backend_api.MuloDesigner.GaAgent.src.logger import get_logger
+from backend_api.MuloDesigner.GaAgent.src.logger import get_logger, configure_logging
+
 
 # Get logger for this module
 logger = get_logger(__name__)
@@ -131,6 +133,8 @@ def run_ga_handler(
                                      "Kd": [0.005, 10.0]}},
         }
     """
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    configure_logging(verbose=False, log_file=f"logs/ga_run_{timestamp}.log")
 
     logger.info("=" * 80)
     logger.info("GA HANDLER - Tuning GA Configuration with Fixed Targets and Adjustable Weights")
