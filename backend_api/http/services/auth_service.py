@@ -70,7 +70,7 @@ DEFAULT_PLANS: list[tuple[str, str, Decimal, list[str], list[str]]] = [
         "Default plan for new registrations (no modules).",
         Decimal("0.00"),
         [],
-        ["gpt-4o-mini", "gpt-oss-120b"],
+        ["gpt-4o-mini"],
     ),
     (
         "Single Loop",

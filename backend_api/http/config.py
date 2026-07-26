@@ -30,7 +30,6 @@ ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "admin@example.com")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")
 
 DEFAULT_LLM_MODELS = [
-    "gpt-oss-120b",
     "gpt-5.5",
     "gpt-5.4",
     "gpt-5.4-mini",

@@ -106,6 +106,7 @@ def _migrate_schema() -> None:
 
     _migrate_plan_allowed_models()
     _migrate_bug_reports()
+    _migrate_project_llm_model()
 
 
 def _migrate_bug_reports() -> None:
@@ -144,6 +145,27 @@ def _migrate_bug_reports() -> None:
             conn.execute(text(statement))
 
 
+def _migrate_project_llm_model() -> None:
+    """Add projects.llm_model so each project is locked to the model chosen at setup."""
+    from sqlalchemy import inspect
+
+    inspector = inspect(engine)
+    if "projects" not in inspector.get_table_names():
+        return
+
+    columns = {col["name"] for col in inspector.get_columns("projects")}
+    if "llm_model" in columns:
+        return
+
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "ALTER TABLE projects ADD COLUMN llm_model VARCHAR(100) "
+                "NOT NULL DEFAULT 'gpt-4o'"
+            )
+        )
+
+
 def _migrate_plan_allowed_models() -> None:
     """Add plans.allowed_models and backfill once when the column is first added."""
     import json
@@ -163,7 +185,7 @@ def _migrate_plan_allowed_models() -> None:
     dialect = engine.dialect.name
     col_type = "JSONB" if dialect == "postgresql" else "JSON"
     catalog_json = json.dumps(list(DEFAULT_LLM_MODELS))
-    free_models_json = json.dumps(["gpt-4o-mini", "gpt-oss-120b"])
+    free_models_json = json.dumps(["gpt-4o-mini"])
     with engine.begin() as conn:
         conn.execute(
             text(

@@ -135,6 +135,7 @@ export function HomePage() {
         file_name: pipeline.fileName,
         file_type: pipeline.fileType,
         file_content: pipeline.fileContent,
+        llm_model: pipeline.model,
       })
       pipeline.setProjectId(project.id)
       if (pipeline.pipeline === 'muloDesign') {
@@ -207,6 +208,12 @@ export function HomePage() {
                 models={models}
                 value={pipeline.model}
                 onChange={pipeline.setModel}
+                disabled={Boolean(pipeline.projectId)}
+                hint={
+                  pipeline.projectId
+                    ? 'Locked for this project. Start a new setup to choose a different model.'
+                    : undefined
+                }
               />
             </div>
 

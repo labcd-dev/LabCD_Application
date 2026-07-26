@@ -208,6 +208,11 @@ export function ProjectDetailPage() {
               </p>
               <div className="flex flex-wrap gap-2">
                 <span className={statusBadgeClass(project.status)}>{project.status}</span>
+                {project.llm_model ? (
+                  <span className="rounded-md bg-surface-muted px-2 py-0.5 text-xs text-muted-text font-mono">
+                    {project.llm_model}
+                  </span>
+                ) : null}
                 {project.job_id ? (
                   <span className="rounded-md bg-surface-muted px-2 py-0.5 text-xs text-muted-text font-mono">
                     job {project.job_id.slice(0, 8)}…

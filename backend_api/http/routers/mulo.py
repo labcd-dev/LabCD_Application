@@ -2,8 +2,10 @@
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
+from sqlalchemy.orm import Session
 
 from backend_api.db.models import User
+from backend_api.db.session import get_db
 from backend_api.http.dependencies import assert_job_access, assert_model_allowed, require_action
 from backend_api.http.schemas.common import JobResponse
 from backend_api.http.schemas.mulo import (
@@ -15,6 +17,7 @@ from backend_api.http.schemas.mulo import (
     MuloSimulateRequest,
     MuloStartRequest,
 )
+from backend_api.http.services import project_service
 from backend_api.http.services.events import sse_response
 from backend_api.http.services.job_store import job_store
 from backend_api.http.services.mulo_service import (
@@ -49,13 +52,23 @@ def _owned_job(job_id: str, user: User):
     return job
 
 
+def _assert_mulo_model(user: User, db: Session, request: MuloInitRequest | MuloStartRequest) -> None:
+    llm_model = (request.run_config or {}).get("llm_model")
+    assert_model_allowed(user, llm_model)
+    try:
+        project_service.assert_project_llm_model(db, request.project_id, llm_model)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @router.post("/init", response_model=JobResponse)
 def init_mulo(
     request: MuloInitRequest,
     user: User = Depends(_mulo_user),
+    db: Session = Depends(get_db),
 ) -> JobResponse:
+    _assert_mulo_model(user, db, request)
     try:
-        assert_model_allowed(user, (request.run_config or {}).get("llm_model"))
         job_id = init_mulo_designer(
             request.run_config,
             request.controller_structure,
@@ -76,9 +89,10 @@ def init_mulo(
 def start_mulo(
     request: MuloStartRequest,
     user: User = Depends(_mulo_user),
+    db: Session = Depends(get_db),
 ) -> JobResponse:
+    _assert_mulo_model(user, db, request)
     try:
-        assert_model_allowed(user, (request.run_config or {}).get("llm_model"))
         job_id = start_mulo_job(
             request.run_config,
             request.controller_structure,

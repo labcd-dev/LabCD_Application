@@ -311,6 +311,7 @@ export const projectsApi = {
     file_name?: string
     file_type?: string
     file_content?: string
+    llm_model?: string
     control_objective?: string
   }) =>
     apiFetch<ProjectDetail>('/projects', {
