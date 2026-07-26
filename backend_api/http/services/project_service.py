@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Optional
 
 from sqlalchemy.orm import Session, joinedload
@@ -10,6 +11,7 @@ from sqlalchemy.orm import Session, joinedload
 from backend_api.common.serialization import make_serializable
 from backend_api.db.models import Project, User
 from backend_api.db.session import SessionLocal
+from backend_api.http.config import RESULTS_DIR
 
 VALID_PIPELINE_TYPES = frozenset({"siloDesign", "muloDesign"})
 VALID_STATUSES = frozenset({"draft", "running", "completed", "failed", "cancelled"})
@@ -185,6 +187,27 @@ def assert_project_access(project: Project, user: User) -> None:
         return
     if project.user_id != user.id:
         raise ProjectAccessDenied("Project access denied")
+
+
+def resolve_project_artifact_path(project: Project, filename: str) -> Path:
+    """Return a safe RESULTS_DIR path for a project-owned artifact filename."""
+    safe_name = Path(filename).name
+    if not safe_name or safe_name != Path(filename.replace("\\", "/")).name:
+        raise ValueError("Invalid artifact filename")
+
+    results = project.results if isinstance(project.results, dict) else {}
+    allowed = {
+        Path(str(results[key])).name
+        for key in ("pdf_file", "time_response_file")
+        if isinstance(results.get(key), str) and results.get(key)
+    }
+    if allowed and safe_name not in allowed:
+        raise FileNotFoundError("Artifact not found for this project")
+
+    file_path = Path(RESULTS_DIR) / safe_name
+    if not file_path.exists() or not file_path.is_file():
+        raise FileNotFoundError("Artifact not found")
+    return file_path
 
 
 def assert_project_llm_model(

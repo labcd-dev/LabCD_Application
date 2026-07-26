@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react'
+import { FileText } from 'lucide-react'
+import { adminApi, projectsApi } from '../api/endpoints'
 import type { ProjectPipelineType } from '../api/types'
 import { ComputationalProfilingPanel } from './ComputationalProfilingPanel'
 import { DesignIterationReport } from './DesignIterationReport'
@@ -8,6 +10,7 @@ import { JsonViewer } from './JsonViewer'
 import { PlotlyChart } from './PlotlyChart'
 import { StatusMessage } from './StatusMessage'
 import { Tabs } from './Tabs'
+import { TrimmerEquilibriumResults } from './TrimmerEquilibriumResults'
 import type { LlmResponseEntry } from '../lib/llmResponseParser'
 import type { StateHistoryEntry } from '../lib/monitorStateParser'
 import type { MuloPlotData } from '../lib/muloDesignConfig'
@@ -17,11 +20,13 @@ import {
   buildMetricsCharts,
   buildSummaryCharts,
 } from '../lib/muloPlotCharts'
-import { cardPanel, mutedText } from '../lib/classes'
+import { btnBase, cardPanel, mutedText } from '../lib/classes'
 
 interface ProjectResultsViewProps {
   pipelineType: ProjectPipelineType
   results?: Record<string, unknown> | null
+  projectId?: number
+  artifactScope?: 'user' | 'admin'
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -207,7 +212,51 @@ function MuloResults({ results }: { results: Record<string, unknown> }) {
   return <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
 }
 
-export function ProjectResultsView({ pipelineType, results }: ProjectResultsViewProps) {
+function MuloTrimmerProjectResults({
+  results,
+  projectId,
+  artifactScope,
+}: {
+  results: Record<string, unknown>
+  projectId?: number
+  artifactScope: 'user' | 'admin'
+}) {
+  const trimmer = asRecord(results.trimmer)
+  const trimmerResult = trimmer?.result
+  const pdfFile = typeof results.pdf_file === 'string' ? results.pdf_file : null
+  const pdfName = pdfFile ? (pdfFile.split(/[/\\]/).pop() ?? pdfFile) : null
+  const pdfUrl =
+    projectId && pdfName
+      ? artifactScope === 'admin'
+        ? adminApi.downloadProjectArtifact(projectId, pdfName)
+        : projectsApi.downloadArtifact(projectId, pdfName)
+      : null
+
+  return (
+    <div className="space-y-4">
+      {pdfUrl ? (
+        <div className="flex flex-wrap gap-2">
+          <a href={pdfUrl} target="_blank" rel="noopener noreferrer" className={btnBase}>
+            <FileText className="size-4" aria-hidden />
+            Download PDF
+          </a>
+        </div>
+      ) : null}
+      {trimmerResult ? (
+        <TrimmerEquilibriumResults result={trimmerResult} />
+      ) : (
+        <p className={mutedText}>No trimmer equilibrium data was saved for this project.</p>
+      )}
+    </div>
+  )
+}
+
+export function ProjectResultsView({
+  pipelineType,
+  results,
+  projectId,
+  artifactScope = 'user',
+}: ProjectResultsViewProps) {
   if (!results) {
     return <p className={mutedText}>No results saved yet.</p>
   }
@@ -225,6 +274,15 @@ export function ProjectResultsView({ pipelineType, results }: ProjectResultsView
   }
 
   if (pipelineType === 'muloDesign') {
+    if (asRecord(results.trimmer)) {
+      return (
+        <MuloTrimmerProjectResults
+          results={results}
+          projectId={projectId}
+          artifactScope={artifactScope}
+        />
+      )
+    }
     return <MuloResults results={results} />
   }
 

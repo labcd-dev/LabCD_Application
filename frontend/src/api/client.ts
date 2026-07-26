@@ -85,6 +85,17 @@ export function artifactUrl(jobId: string, filename: string): string {
   return token ? `${base}?access_token=${encodeURIComponent(token)}` : base
 }
 
+export function projectArtifactUrl(
+  projectId: number,
+  filename: string,
+  scope: 'user' | 'admin' = 'user',
+): string {
+  const token = getAuthToken()
+  const prefix = scope === 'admin' ? `/admin/projects` : `/projects`
+  const base = `${API_BASE}${prefix}/${projectId}/artifacts/${encodeURIComponent(filename)}`
+  return token ? `${base}?access_token=${encodeURIComponent(token)}` : base
+}
+
 export function streamUrl(module: string, jobId: string): string {
   const token = getAuthToken()
   const base = `${API_BASE}/${module}/${jobId}/stream`

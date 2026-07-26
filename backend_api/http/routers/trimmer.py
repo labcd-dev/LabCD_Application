@@ -2,11 +2,14 @@
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
+from sqlalchemy.orm import Session
 
 from backend_api.db.models import User
+from backend_api.db.session import get_db
 from backend_api.http.dependencies import assert_job_access, assert_model_allowed, require_action
 from backend_api.http.schemas.common import JobResponse
 from backend_api.http.schemas.trimmer import TrimmerInputRequest, TrimmerStartRequest
+from backend_api.http.services import project_service
 from backend_api.http.services.events import sse_response
 from backend_api.http.services.job_store import job_store
 from backend_api.http.services.trimmer_service import (
@@ -24,16 +27,22 @@ router = APIRouter(prefix="/trimmer", tags=["trimmer"])
 def start_trimmer(
     request: TrimmerStartRequest,
     user: User = Depends(require_action("module:trimmer")),
+    db: Session = Depends(get_db),
 ) -> JobResponse:
     if not user.has_action("pipeline:mulo"):
         raise HTTPException(status_code=403, detail="Missing required action: pipeline:mulo")
     assert_model_allowed(user, request.model)
+    try:
+        project_service.assert_project_llm_model(db, request.project_id, request.model)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     job_id = start_trimmer_job(
         request.file_content,
         request.file_name,
         request.model,
         request.trimming_params,
         user_id=user.id,
+        project_id=request.project_id,
     )
     job = job_store.get(job_id)
     return JobResponse(job_id=job_id, module=job.module, status=job.status.value)

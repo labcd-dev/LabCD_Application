@@ -113,6 +113,7 @@ export function MuloTrimmerStep({ onComplete }: MuloTrimmerStepProps) {
         model: pipeline.model,
         trimming_params: trimmingParams,
         states_inputs: pipeline.statesInputs,
+        project_id: pipeline.projectId,
       })
       pipeline.setTrimmerJobId(job.job_id)
       pipeline.setTrimmingParams(trimmingParams)

@@ -11,6 +11,7 @@ class TrimmerStartRequest(BaseModel):
     model: str = "gpt-oss-120b"
     trimming_params: Dict[str, Any] = Field(default_factory=dict)
     states_inputs: List[str] = Field(default_factory=list)
+    project_id: Optional[int] = None
 
 
 class TrimmerInputRequest(BaseModel):

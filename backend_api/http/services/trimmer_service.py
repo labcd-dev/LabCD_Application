@@ -12,6 +12,27 @@ from backend_api.Trimmer.workflow_helpers import build_trimmer_initial_state, fi
 from backend_api.common.serialization import make_serializable
 from backend_api.http.config import RESULTS_DIR
 from backend_api.http.services.job_store import JobStatus, job_store
+from backend_api.http.services.project_service import link_or_create_for_job, sync_project_from_job
+
+
+def _trimmer_project_results(artifacts: Dict[str, Any]) -> Dict[str, Any]:
+    """Build the persisted project.results payload from trimmer artifacts."""
+    config = artifacts.get("config") or {}
+    safe_config = {
+        key: value for key, value in config.items() if key not in {"system_f", "system_f_code"}
+    }
+    payload: Dict[str, Any] = {
+        "trimmer": {
+            "result": artifacts.get("result") or {},
+            "config": safe_config,
+        },
+        "safe_system_name": artifacts.get("safe_system_name") or "",
+    }
+    if artifacts.get("pdf_file"):
+        payload["pdf_file"] = artifacts["pdf_file"]
+    if artifacts.get("time_response_file"):
+        payload["time_response_file"] = artifacts["time_response_file"]
+    return make_serializable(payload)
 
 
 def _create_logger(job_id: str) -> logging.Logger:
@@ -83,6 +104,12 @@ def _trimmer_worker(job_id: str) -> None:
                 },
             )
             job.touch(JobStatus.FAILED)
+            sync_project_from_job(
+                project_id=job.metadata.get("project_id"),
+                job_id=job_id,
+                status="failed",
+                error=summary["error"],
+            )
             return
 
         final_state = summary.get("final_state") or job.metadata.get("final_values") or {}
@@ -93,6 +120,13 @@ def _trimmer_worker(job_id: str) -> None:
         # /artifacts on SSE "done" never race an empty payload.
         _finalize_job(job_id)
         job.touch(JobStatus.COMPLETED)
+        artifacts = job.metadata.get("artifacts") or {}
+        sync_project_from_job(
+            project_id=job.metadata.get("project_id"),
+            job_id=job_id,
+            status="completed",
+            results=_trimmer_project_results(artifacts),
+        )
         job.event_queue.put({"type": "done", "summary": job.metadata["summary"]})
     except HumanInputRequired as exc:
         job.metadata["pending_request"] = exc.request
@@ -102,6 +136,12 @@ def _trimmer_worker(job_id: str) -> None:
         job.error = str(exc)
         job.event_queue.put({"type": "error", "content": str(exc)})
         job.touch(JobStatus.FAILED)
+        sync_project_from_job(
+            project_id=job.metadata.get("project_id"),
+            job_id=job_id,
+            status="failed",
+            error=str(exc),
+        )
 
 
 def _finalize_job(job_id: str) -> None:
@@ -126,6 +166,7 @@ def start_trimmer_job(
     model: str,
     trimming_params: Dict[str, Any],
     user_id: int | None = None,
+    project_id: int | None = None,
 ) -> str:
     logger = _create_logger(file_name)
     initial_state = build_trimmer_initial_state(
@@ -150,6 +191,18 @@ def start_trimmer_job(
         },
         user_id=user_id,
     )
+    linked_project_id = link_or_create_for_job(
+        user_id=user_id,
+        project_id=project_id,
+        pipeline_type="muloDesign",
+        job_id=job.id,
+        file_name=file_name or "",
+        file_type="python",
+        file_content=file_content or "",
+        title=file_name or None,
+    )
+    if linked_project_id is not None:
+        job.metadata["project_id"] = linked_project_id
     thread = threading.Thread(target=_trimmer_worker, args=(job.id,), daemon=True)
     job.thread = thread
     thread.start()
@@ -323,6 +376,14 @@ def generate_trimmer_pdf(job_id: str) -> Dict[str, Any]:
     artifacts = dict(artifacts)
     artifacts["pdf_file"] = pdf_filename
     job.metadata["artifacts"] = artifacts
+
+    # Keep project completed; refresh results so the PDF is downloadable from the view page.
+    sync_project_from_job(
+        project_id=job.metadata.get("project_id"),
+        job_id=job_id,
+        status="completed",
+        results=_trimmer_project_results(artifacts),
+    )
 
     return {
         "filename": pdf_filename,

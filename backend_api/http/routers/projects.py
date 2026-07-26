@@ -1,6 +1,7 @@
 """User-facing project history routes."""
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from backend_api.db.models import User
@@ -98,3 +99,26 @@ def update_my_project(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return ProjectDetail(**project_service.project_to_detail(project))
+
+
+@router.get("/{project_id}/artifacts/{filename}")
+def download_my_project_artifact(
+    project_id: int,
+    filename: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    project = project_service.get_project(db, project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    try:
+        project_service.assert_project_access(project, user)
+    except ProjectAccessDenied as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    try:
+        file_path = project_service.resolve_project_artifact_path(project, filename)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return FileResponse(path=file_path, filename=file_path.name)

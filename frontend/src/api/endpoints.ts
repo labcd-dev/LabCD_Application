@@ -1,4 +1,4 @@
-import { apiFetch, artifactUrl, getAuthToken } from './client'
+import { apiFetch, artifactUrl, getAuthToken, projectArtifactUrl } from './client'
 import type {
   ActionInfo,
   ArtifactResponse,
@@ -191,6 +191,8 @@ export const adminApi = {
   },
   getProject: (projectId: number) =>
     apiFetch<ProjectDetail>(`/admin/projects/${projectId}`),
+  downloadProjectArtifact: (projectId: number, filename: string) =>
+    projectArtifactUrl(projectId, filename, 'admin'),
   updateProject: (
     projectId: number,
     body: { title?: string; status?: string },
@@ -335,6 +337,8 @@ export const projectsApi = {
       method: 'PATCH',
       body: JSON.stringify(body),
     }),
+  downloadArtifact: (projectId: number, filename: string) =>
+    projectArtifactUrl(projectId, filename, 'user'),
 }
 
 export const healthApi = {
@@ -443,6 +447,7 @@ export const trimmerApi = {
     model?: string
     trimming_params?: Record<string, unknown>
     states_inputs?: string[]
+    project_id?: number | null
   }) =>
     apiFetch<JobResponse>('/trimmer/start', {
       method: 'POST',

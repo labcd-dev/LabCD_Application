@@ -91,7 +91,15 @@ export function ProjectDetailPage() {
     void load()
   }, [id, refreshProject])
 
-  const isLive = project?.status === 'running' && Boolean(project.job_id)
+  const isLive =
+    project?.status === 'running'
+    && Boolean(project.job_id)
+    && !(
+      project.results
+      && typeof project.results === 'object'
+      && !Array.isArray(project.results)
+      && 'trimmer' in project.results
+    )
 
   const fetchWhileRunning = useCallback(async () => {
     if (!Number.isFinite(id)) return null
@@ -178,11 +186,18 @@ export function ProjectDetailPage() {
   }
 
   const liveJobId = project.job_id
+  const hasTrimmerResults = Boolean(
+    project.results
+    && typeof project.results === 'object'
+    && !Array.isArray(project.results)
+    && 'trimmer' in project.results,
+  )
   const showSiloLive =
     project.pipeline_type === 'siloDesign' && project.status === 'running' && Boolean(liveJobId)
   const showMuloLive =
     project.pipeline_type === 'muloDesign'
     && Boolean(liveJobId)
+    && !hasTrimmerResults
     && (project.status === 'running' || muloAwaitingContinue)
   const showResults = !showSiloLive && !showMuloLive
 
@@ -309,7 +324,11 @@ export function ProjectDetailPage() {
           <p className="mt-0 mb-3 text-sm text-muted-text">
             Snapshot saved when the design job finished (or last update).
           </p>
-          <ProjectResultsView pipelineType={project.pipeline_type} results={project.results} />
+          <ProjectResultsView
+            pipelineType={project.pipeline_type}
+            results={project.results}
+            projectId={project.id}
+          />
         </div>
       )}
     </section>

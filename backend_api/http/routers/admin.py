@@ -1,7 +1,7 @@
 """Admin routes for managing users, plans, actions, and projects."""
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
 from backend_api.db.models import Action, User
@@ -444,6 +444,25 @@ def update_any_project(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return ProjectDetail(**project_service.project_to_detail(project, include_owner=True))
+
+
+@router.get("/projects/{project_id}/artifacts/{filename}")
+def download_any_project_artifact(
+    project_id: int,
+    filename: str,
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    project = project_service.get_project(db, project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    try:
+        file_path = project_service.resolve_project_artifact_path(project, filename)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return FileResponse(path=file_path, filename=file_path.name)
 
 
 @router.delete("/projects/{project_id}", status_code=status.HTTP_204_NO_CONTENT)

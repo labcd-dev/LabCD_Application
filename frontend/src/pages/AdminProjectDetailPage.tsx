@@ -100,7 +100,12 @@ export function AdminProjectDetailPage() {
 
       <div className={cardPanel}>
         <h2 className="m-0 mb-2 text-lg font-semibold text-foreground">Results</h2>
-        <ProjectResultsView pipelineType={project.pipeline_type} results={project.results} />
+        <ProjectResultsView
+          pipelineType={project.pipeline_type}
+          results={project.results}
+          projectId={project.id}
+          artifactScope="admin"
+        />
       </div>
     </div>
   )
