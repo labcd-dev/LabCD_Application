@@ -69,7 +69,7 @@ export function FeedbackSurveyModal({
         onClick={onDismiss}
       />
       <div
-        className="admin-slide-in relative z-10 w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border border-border bg-surface-elevated p-6 shadow-2xl"
+        className="admin-slide-in relative z-10 w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border border-border bg-surface-elevated p-4 shadow-2xl sm:p-6"
         role="dialog"
         aria-modal="true"
         aria-labelledby="feedback-survey-title"

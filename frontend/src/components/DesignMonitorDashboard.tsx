@@ -113,7 +113,7 @@ function SummaryCards({
   const stable = summary.metrics?.stable
 
   return (
-    <div className="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-3">
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fit,minmax(140px,1fr))]">
       <MetricCard label="Iteration" value={`${summary.iteration} / ${summary.maxIterations}`} />
       <MetricCard
         label="Controller"
@@ -352,7 +352,7 @@ function SimulationPanel({
         <label className="flex flex-col gap-1 text-sm">
           <span className="text-label font-medium">View step</span>
           <select
-            className={`${fieldInput} min-w-[220px] py-2`}
+            className={`${fieldInput} w-full min-w-0 sm:min-w-[220px] py-2`}
             value={stepIndex}
             onChange={(event) => onSelectStep(Number(event.target.value))}
           >
@@ -366,7 +366,7 @@ function SimulationPanel({
         </label>
       </div>
 
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(120px,1fr))] gap-2 mb-4">
+      <div className="grid grid-cols-2 gap-2 mb-4 sm:grid-cols-[repeat(auto-fit,minmax(120px,1fr))]">
         {Object.entries(step.params).map(([key, value]) => (
           <div
             key={key}
@@ -440,7 +440,7 @@ function IterationsTable({
         subtitle="Click a row to inspect trajectory and control signals"
       />
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-sm">
+        <table className="w-full min-w-[560px] border-collapse text-sm">
           <thead>
             <tr className="border-b border-border text-left text-label">
               <th className="py-2 pr-3 font-semibold">Step</th>

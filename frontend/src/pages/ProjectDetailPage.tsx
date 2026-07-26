@@ -184,7 +184,7 @@ export function ProjectDetailPage() {
             <span>Title</span>
             <div className="flex flex-wrap gap-2">
               <input
-                className={`${fieldInput} flex-1 min-w-[200px]`}
+                className={`${fieldInput} min-w-0 flex-1 basis-full sm:basis-auto sm:min-w-[200px]`}
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
               />
@@ -199,7 +199,7 @@ export function ProjectDetailPage() {
         ) : (
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="space-y-2">
-              <h2 className="m-0 text-2xl font-semibold tracking-tight text-foreground">
+              <h2 className="m-0 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
                 {project.title}
               </h2>
               <p className={`${pageIntro} m-0`}>
@@ -220,11 +220,11 @@ export function ProjectDetailPage() {
                 ) : null}
               </div>
             </div>
-            <div className="flex gap-2">
+            <div className="flex w-full flex-wrap gap-2 sm:w-auto">
               {canRetryProject(project.status) && !muloAwaitingContinue && (
                 <button
                   type="button"
-                  className={btnPrimary}
+                  className={`${btnPrimary} max-sm:flex-1`}
                   disabled={retrying}
                   onClick={() => void handleRetry()}
                 >
@@ -232,7 +232,7 @@ export function ProjectDetailPage() {
                   {retrying ? 'Opening…' : 'Retry Project'}
                 </button>
               )}
-              <button type="button" className={btnBase} onClick={() => setRenaming(true)}>
+              <button type="button" className={`${btnBase} max-sm:flex-1`} onClick={() => setRenaming(true)}>
                 <Pencil className="size-3.5" />
                 Rename
               </button>

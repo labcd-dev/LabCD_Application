@@ -37,7 +37,7 @@ export function ComputationalProfilingPanel({
         <h3 className="m-0 mb-3 text-base font-semibold text-foreground">
           Computational Profiling
         </h3>
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fit,minmax(140px,1fr))]">
           <MetricCard
             label="Scenarios Completed"
             value={`${summary.nSuccessful} / ${summary.nTotal}`}

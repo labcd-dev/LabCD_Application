@@ -288,7 +288,7 @@ export function HomePage() {
                   readOnly
                   language={pipeline.fileType === 'matlab' ? 'matlab' : 'python'}
                 />
-                <div className="flex gap-3 flex-wrap mt-4">
+                <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-3">
                   <button type="button" className={btnBase} onClick={goBackToUpload}>
                     <ArrowLeft className="size-4" aria-hidden />
                     Back
@@ -297,7 +297,7 @@ export function HomePage() {
                     <Pencil className="size-4" aria-hidden />
                     Edit Code
                   </button>
-                  <button type="button" className={btnPrimary} onClick={() => void runStandardize()}>
+                  <button type="button" className={`${btnPrimary} max-sm:w-full`} onClick={() => void runStandardize()}>
                     <Sparkles className="size-4" aria-hidden />
                     Continue
                   </button>
@@ -349,14 +349,14 @@ export function HomePage() {
               height={300}
               language={pipeline.fileType === 'matlab' ? 'matlab' : 'python'}
             />
-            <div className="flex gap-3 flex-wrap mt-4">
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-3">
               <button type="button" className={btnBase} onClick={goBackFromReady}>
                 <ArrowLeft className="size-4" aria-hidden />
                 Back
               </button>
               <button
                 type="button"
-                className={`${btnPrimary} ${btnWide} setup-cta`}
+                className={`${btnPrimary} w-full setup-cta sm:mt-0 sm:w-auto`}
                 onClick={() => void proceedToPipeline()}
               >
                 Continue to {nextLabel}

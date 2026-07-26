@@ -126,7 +126,7 @@ function IterationCard({
     >
       <button
         type="button"
-        className="w-full grid grid-cols-[1fr_auto_auto] items-center gap-3 px-4 py-3.5 border-none cursor-pointer text-left font-inherit text-inherit hover:bg-surface-hover"
+        className="flex w-full flex-wrap items-center gap-2 px-3 py-3 text-left font-inherit text-inherit border-none cursor-pointer hover:bg-surface-hover sm:grid sm:grid-cols-[1fr_auto_auto] sm:gap-3 sm:px-4 sm:py-3.5"
         style={{
           background: isLatest
             ? 'var(--app-iteration-latest-header)'
@@ -151,7 +151,7 @@ function IterationCard({
           )}
           {isLatest && <Badge tone="latest" value="Latest" />}
         </div>
-        <span className="text-foreground-subtle w-4 flex items-center justify-center" aria-hidden>
+        <span className="ml-auto flex w-4 items-center justify-center text-foreground-subtle sm:ml-0" aria-hidden>
           {isExpanded ? (
             <ChevronDown className="size-4" />
           ) : (

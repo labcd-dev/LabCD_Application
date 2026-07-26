@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import EditorImport from 'react-simple-code-editor'
 import type { ComponentProps, FC } from 'react'
 import { highlight, languages } from 'prismjs'
@@ -26,6 +27,22 @@ function highlightCode(code: string, language: 'python' | 'matlab') {
   return highlight(code, grammar, lang)
 }
 
+function useResponsiveEditorHeight(height: number) {
+  const [resolved, setResolved] = useState(height)
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 640px)')
+    const update = () => {
+      setResolved(mq.matches ? Math.min(height, 260) : height)
+    }
+    update()
+    mq.addEventListener('change', update)
+    return () => mq.removeEventListener('change', update)
+  }, [height])
+
+  return resolved
+}
+
 export function CodePreview({
   value,
   onChange,
@@ -34,11 +51,12 @@ export function CodePreview({
   language = 'python',
 }: CodePreviewProps) {
   const isEditable = !readOnly && Boolean(onChange)
+  const resolvedHeight = useResponsiveEditorHeight(height)
 
   return (
     <div
       className={`code-editor ${codePreview} overflow-auto`}
-      style={{ height, minHeight: height }}
+      style={{ height: resolvedHeight, minHeight: Math.min(resolvedHeight, 180) }}
     >
       <Editor
         value={value}

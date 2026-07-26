@@ -69,7 +69,7 @@ export function ProfileSurveyModal({ onCompleted }: ProfileSurveyModalProps) {
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
       <div className="admin-fade-in absolute inset-0 bg-foreground/45 backdrop-blur-[2px]" />
       <div
-        className="admin-slide-in relative z-10 w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border border-border bg-surface-elevated p-6 shadow-2xl"
+        className="admin-slide-in relative z-10 w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border border-border bg-surface-elevated p-4 shadow-2xl sm:p-6"
         role="dialog"
         aria-modal="true"
         aria-labelledby="profile-survey-title"
