@@ -45,7 +45,7 @@ DEFAULT_MULO_RUN_CONFIG: Dict[str, Any] = {
     "web_search_model": None,
     "max_attempts": 5,
     "buffer_size": 3,
-    "max_wall_clock": 600.0,
+    "max_wall_clock": 120.0,
     "max_cost_budget": 1.0,
     "prompt_variant": "elaborate",
     "control_objective": "",
@@ -58,7 +58,7 @@ def normalize_run_config(run_config: Dict[str, Any]) -> Dict[str, Any]:
     merged["max_attempts"] = max(int(float(merged.get("max_attempts", 5))), 1)
     merged["seed"] = int(float(merged.get("seed", 42)))
     merged["buffer_size"] = max(int(float(merged.get("buffer_size", 3))), 1)
-    merged["max_wall_clock"] = float(merged.get("max_wall_clock", 600.0))
+    merged["max_wall_clock"] = float(merged.get("max_wall_clock", 120.0))
     merged["max_cost_budget"] = float(merged.get("max_cost_budget", 1.0))
     return merged
 
@@ -356,6 +356,7 @@ def simulate_mulo_response(
     ki: float,
     kd: float,
     signal_type: str,
+    amplitude: float | None = None,
 ) -> Dict[str, Any]:
     """Simulate step/ramp/sine response with updated PID gains."""
     job = job_store.get(job_id)
@@ -379,12 +380,18 @@ def simulate_mulo_response(
     input_channel_name = controller["controlled_variable_in_equation"].capitalize()
     y_label = controller["controlled_variable"]
     unit = controller.get("target", {}).get("unit", "")
+    sim_amplitude = (
+        float(amplitude)
+        if amplitude is not None
+        else float(designer.generate_target(controller))
+    )
 
     t_eval, trajectory, ref_signal = simulate_system_response(
         code,
         designer.case_study,
         input_channel_name,
         signal_type,
+        amplitude=sim_amplitude,
     )
 
     import re
@@ -400,4 +407,5 @@ def simulate_mulo_response(
         "y_label": y_label,
         "unit": unit,
         "code": code,
+        "amplitude": sim_amplitude,
     }

@@ -43,6 +43,7 @@ def start_recommender(
         request.model,
         request.step,
         user_id=user.id,
+        user_prompt=request.user_prompt,
     )
     job = job_store.get(job_id)
     return JobResponse(job_id=job_id, module=job.module, status=job.status.value)

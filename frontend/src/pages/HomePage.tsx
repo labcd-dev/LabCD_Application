@@ -26,6 +26,8 @@ import {
   btnPrimary,
   btnWide,
   cardPanel,
+  fieldInput,
+  fieldLabel,
   pageIntro,
   pageSection,
 } from '../lib/classes'
@@ -228,6 +230,18 @@ export function HomePage() {
               value={pipeline.pipeline}
               onChange={pipeline.setPipeline}
             />
+
+            {pipeline.pipeline === 'muloDesign' && (
+              <label className={`${fieldLabel} mt-4`}>
+                <span>Design Instructions (Optional)</span>
+                <textarea
+                  className={`${fieldInput} min-h-24`}
+                  placeholder="e.g., Prioritize PID tuning algorithms, explore cascaded loops, or define MIMO architectures..."
+                  value={pipeline.userPrompt}
+                  onChange={(e) => pipeline.setUserPrompt(e.target.value)}
+                />
+              </label>
+            )}
 
             {pipeline.pipeline && pipeline.fileContent && (
               <button

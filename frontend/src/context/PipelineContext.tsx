@@ -7,6 +7,7 @@ interface PipelineState {
   fileContent: string
   model: string
   pipeline: PipelineType
+  userPrompt: string
   changeApplied: boolean
   humanIntervention: boolean
   projectId: number | null
@@ -23,6 +24,7 @@ interface PipelineContextValue extends PipelineState {
   setFile: (name: string, type: string, content: string) => void
   setModel: (model: string) => void
   setPipeline: (pipeline: PipelineType) => void
+  setUserPrompt: (userPrompt: string) => void
   setProjectId: (projectId: number | null) => void
   setRegularizeResult: (content: string, changeApplied: boolean, humanIntervention: boolean) => void
   setRecommenderJobId: (jobId: string | null) => void
@@ -44,6 +46,7 @@ const initialState: PipelineState = {
   fileContent: '',
   model: 'gpt-4o',
   pipeline: null,
+  userPrompt: '',
   changeApplied: false,
   humanIntervention: false,
   projectId: null,
@@ -68,6 +71,7 @@ export function PipelineProvider({ children }: { children: ReactNode }) {
         setState((prev) => ({ ...prev, fileName, fileType, fileContent, projectId: null })),
       setModel: (model) => setState((prev) => ({ ...prev, model })),
       setPipeline: (pipeline) => setState((prev) => ({ ...prev, pipeline })),
+      setUserPrompt: (userPrompt) => setState((prev) => ({ ...prev, userPrompt })),
       setProjectId: (projectId) => setState((prev) => ({ ...prev, projectId })),
       setRegularizeResult: (fileContent, changeApplied, humanIntervention) =>
         setState((prev) => ({ ...prev, fileContent, changeApplied, humanIntervention })),

@@ -96,6 +96,7 @@ export interface MuloSimulateResponse {
   y_label: string
   unit: string
   code: string
+  amplitude?: number
 }
 
 export type PipelineType = 'siloDesign' | 'muloDesign' | null

@@ -134,7 +134,18 @@ export function MuloTrimmerStep({ onComplete }: MuloTrimmerStepProps) {
           {step === 'results' && artifacts && (
             <>
               <StatusMessage type="success" message="Trimmer completed." />
-              <JsonViewer data={artifacts.result ?? artifacts} title="Equilibrium Results" />
+              {artifacts.result && Object.keys(artifacts.result as object).length > 0 ? (
+                <JsonViewer
+                  data={artifacts.result}
+                  title="Equilibrium Results"
+                  defaultOpen
+                />
+              ) : (
+                <StatusMessage
+                  type="warning"
+                  message="Trimmer finished but no equilibrium result payload was returned. Re-run Trimmer or check the activity log."
+                />
+              )}
               <div className="flex gap-3 flex-wrap mt-4">
                 <button type="button" className={btnBase} onClick={restartTrimmer}>
                   <RotateCcw className="size-4" aria-hidden />

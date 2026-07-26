@@ -410,6 +410,7 @@ export const recommenderApi = {
     file_name: string
     model?: string
     step?: string
+    user_prompt?: string
   }) =>
     apiFetch<JobResponse>('/recommender/start', {
       method: 'POST',
@@ -531,7 +532,13 @@ export const muloApi = {
 
   simulate: (
     jobId: string,
-    body: { kp: number; ki: number; kd: number; signal_type: string },
+    body: {
+      kp: number
+      ki: number
+      kd: number
+      signal_type: string
+      amplitude?: number
+    },
   ) =>
     apiFetch<MuloSimulateResponse>(`/mulo/${jobId}/simulate`, {
       method: 'POST',

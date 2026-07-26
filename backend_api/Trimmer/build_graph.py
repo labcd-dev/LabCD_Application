@@ -164,15 +164,17 @@ def run_trimmer_workflow(graph, initial_state, q=None, config=None) -> dict:
         "token_usage": {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0},
         "price": 0.0,
         "pending_request": None,
+        "final_state": {},
     }
 
-    # Provide a default thread configuration if none is passed
-    if config is None:
-        config = {"configurable": {"thread_id": "trimmer_default"}}
-
     try:
-        # Stream updates, custom events, and state values to the queue
-        for mode, content in graph.stream(initial_state, config, stream_mode=["updates", "custom", "values"]):
+        # Graph is compiled without a checkpointer; only pass config when provided.
+        stream_iter = (
+            graph.stream(initial_state, config, stream_mode=["updates", "custom", "values"])
+            if config is not None
+            else graph.stream(initial_state, stream_mode=["updates", "custom", "values"])
+        )
+        for mode, content in stream_iter:
             if q is not None:
                 q.put({"type": "stream", "mode": mode, "content": content})
 
@@ -180,6 +182,7 @@ def run_trimmer_workflow(graph, initial_state, q=None, config=None) -> dict:
             if mode == "values":
                 final_result = content
 
+        result["final_state"] = final_result
 
         # Extract costs, tokens, and stability status from the final state dictionary
         if final_result:

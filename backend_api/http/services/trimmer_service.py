@@ -6,7 +6,7 @@ import logging
 import threading
 from typing import Any, Dict
 
-from backend_api.Trimmer.build_graph import build_workflow_graph
+from backend_api.Trimmer.build_graph import build_workflow_graph, run_trimmer_workflow
 from backend_api.Trimmer.services.human_input import HumanInputRequired, normalize_human_answer
 from backend_api.Trimmer.workflow_helpers import build_trimmer_initial_state, finalize_trimmer_run
 from backend_api.common.serialization import make_serializable
@@ -26,18 +26,70 @@ def _create_logger(job_id: str) -> logging.Logger:
     return logger
 
 
+class _JobEventQueue:
+    """Queue adapter that serializes stream payloads for SSE clients."""
+
+    def __init__(self, job: Any) -> None:
+        self._job = job
+
+    def put(self, item: Dict[str, Any]) -> None:
+        payload = dict(item)
+        if payload.get("type") == "stream":
+            mode = payload.get("mode")
+            # Keep raw values for finalize; serialize only the SSE payload.
+            if mode == "values" and isinstance(payload.get("content"), dict):
+                self._job.metadata["final_values"] = payload["content"]
+            payload["content"] = make_serializable(payload.get("content"))
+        elif "content" in payload:
+            payload["content"] = make_serializable(payload["content"])
+        if "summary" in payload:
+            payload["summary"] = make_serializable(payload["summary"])
+        self._job.event_queue.put(payload)
+
+
 def _trimmer_worker(job_id: str) -> None:
     job = job_store.get(job_id)
     graph = job.metadata["graph"]
     initial_state = job.metadata["initial_state"]
+    event_queue = _JobEventQueue(job)
 
     try:
         job.touch(JobStatus.RUNNING)
-        for mode, content in graph.stream(initial_state, stream_mode=["updates", "custom", "values"]):
-            job.event_queue.put({"type": "stream", "mode": mode, "content": make_serializable(content)})
-            if mode == "values":
-                job.metadata["final_values"] = make_serializable(content)
-        job.event_queue.put({"type": "done"})
+        # Match the previous production stream call (no checkpointer config).
+        summary = run_trimmer_workflow(graph, initial_state, event_queue, config=None)
+        job.metadata["summary"] = make_serializable(
+            {key: value for key, value in summary.items() if key != "final_state"},
+        )
+
+        if summary.get("flag") == "human_input":
+            job.metadata["pending_request"] = summary.get("pending_request")
+            job.event_queue.put(
+                {
+                    "type": "human_input",
+                    "content": summary.get("pending_request"),
+                    "summary": job.metadata["summary"],
+                },
+            )
+            job.touch(JobStatus.WAITING_INPUT)
+            return
+
+        if summary.get("error"):
+            job.error = summary["error"]
+            job.event_queue.put(
+                {
+                    "type": "error",
+                    "content": summary["error"],
+                    "summary": job.metadata["summary"],
+                },
+            )
+            job.touch(JobStatus.FAILED)
+            return
+
+        final_state = summary.get("final_state") or job.metadata.get("final_values") or {}
+        if final_state:
+            job.metadata["final_values"] = final_state
+
+        job.event_queue.put({"type": "done", "summary": job.metadata["summary"]})
         _finalize_job(job_id)
         job.touch(JobStatus.COMPLETED)
     except HumanInputRequired as exc:
@@ -54,9 +106,16 @@ def _finalize_job(job_id: str) -> None:
     job = job_store.get(job_id)
     final_values = job.metadata.get("final_values", {})
     if not final_values:
+        job.metadata["artifacts"] = {
+            "result": {},
+            "config": {},
+            "pdf_file": None,
+            "safe_system_name": job.metadata.get("file_name", ""),
+            "output_dir": str(RESULTS_DIR),
+        }
         return
     artifacts = finalize_trimmer_run(final_values, job.metadata["file_name"], str(RESULTS_DIR))
-    job.metadata["artifacts"] = artifacts
+    job.metadata["artifacts"] = make_serializable(artifacts)
 
 
 def start_trimmer_job(
