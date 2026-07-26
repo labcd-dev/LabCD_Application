@@ -32,6 +32,48 @@ import { btnBase, btnPrimary, btnWide, fieldInput, fieldLabel, pageIntro, pageSe
 
 type DataSource = 'case_study' | 'pipeline'
 
+/** Resolve controller structure from handoff JSON string or recommender controller_json keys. */
+function resolvePipelineController(
+  controllerJson: Record<string, unknown>,
+  handoffChosen?: string | null,
+): { pid_loops: MuloPidLoop[] } {
+  const tryParse = (value: unknown): { pid_loops: MuloPidLoop[] } | null => {
+    if (value == null) return null
+    if (typeof value === 'object' && !Array.isArray(value) && 'pid_loops' in value) {
+      return value as { pid_loops: MuloPidLoop[] }
+    }
+    if (typeof value === 'string') {
+      const stripped = value.trim()
+      if (!stripped) return null
+      if (stripped.startsWith('{')) {
+        return JSON.parse(stripped) as { pid_loops: MuloPidLoop[] }
+      }
+      return tryParse(controllerJson[stripped])
+    }
+    return null
+  }
+
+  const fromHandoff = tryParse(handoffChosen)
+  if (fromHandoff?.pid_loops?.length) return fromHandoff
+
+  const fromInitial = tryParse(controllerJson.Initial_controller)
+  if (fromInitial?.pid_loops?.length) return fromInitial
+
+  for (const value of Object.values(controllerJson)) {
+    const parsed = tryParse(value)
+    if (parsed?.pid_loops?.length) return parsed
+  }
+
+  throw new Error('Chosen controller not found in recommender state.')
+}
+
+function chosenControllerLabel(handoffChosen?: string | null): string {
+  if (!handoffChosen) return 'default'
+  const stripped = handoffChosen.trim()
+  if (stripped.startsWith('{')) return 'selected controller'
+  return stripped
+}
+
 function resolveInitialPipelineStep(
   stepParam: string | null,
   hasRecommender: boolean,
@@ -211,13 +253,15 @@ export function MuloPage() {
       recommenderApi.state(pipeline.recommenderJobId),
       trimmerApi.artifacts(pipeline.trimmerJobId),
     ])
-    const controllerJson = (recState.controller_json ?? {}) as Record<string, string>
-    const chosen = pipeline.handoff?.chosen_controller ?? controllerJson.Initial_controller
-    if (!chosen || !controllerJson[chosen]) {
-      throw new Error('Chosen controller not found in recommender state.')
-    }
-    const controller = JSON.parse(controllerJson[chosen]) as { pid_loops: MuloPidLoop[] }
-    const systemIdentification = JSON.parse(String(recState.system_identification ?? '{}'))
+    const controllerJson = (recState.controller_json ?? {}) as Record<string, unknown>
+    const controller = resolvePipelineController(
+      controllerJson,
+      pipeline.handoff?.chosen_controller,
+    )
+    const systemIdentification =
+      typeof recState.system_identification === 'string'
+        ? JSON.parse(recState.system_identification || '{}')
+        : ((recState.system_identification as Record<string, unknown>) ?? {})
     const trimmingResult = (trimArtifacts.result ?? trimArtifacts) as Record<string, unknown>
 
     return {
@@ -415,7 +459,7 @@ export function MuloPage() {
               ) : (
                 <StatusMessage
                   type="info"
-                  message={`Using pipeline data: ${pipeline.fileName || 'uploaded file'} with chosen controller "${pipeline.handoff?.chosen_controller ?? 'default'}".`}
+                  message={`Using pipeline data: ${pipeline.fileName || 'uploaded file'} with chosen controller "${chosenControllerLabel(pipeline.handoff?.chosen_controller)}".`}
                 />
               )}
 

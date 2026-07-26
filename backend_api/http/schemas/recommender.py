@@ -10,6 +10,7 @@ class RecommenderStartRequest(BaseModel):
     file_name: str
     model: str = "gpt-oss-120b"
     step: str = "initial_run"
+    user_prompt: str = ""
 
 
 class RagDecisionRequest(BaseModel):

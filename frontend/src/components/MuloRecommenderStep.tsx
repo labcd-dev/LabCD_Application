@@ -57,6 +57,7 @@ export function MuloRecommenderStep({ onComplete }: MuloRecommenderStepProps) {
         file_name: pipeline.fileName,
         model: pipeline.model,
         step: recommenderStep,
+        user_prompt: pipeline.userPrompt,
       })
       pipeline.setRecommenderJobId(job.job_id)
       setStep('running')

@@ -88,7 +88,7 @@ export const DEFAULT_MULO_RUN_CONFIG: MuloRunConfig = {
   web_search_model: null,
   max_attempts: 5,
   buffer_size: 3,
-  max_wall_clock: 600,
+  max_wall_clock: 120,
   max_cost_budget: 1,
   prompt_variant: 'elaborate',
   control_objective: '',

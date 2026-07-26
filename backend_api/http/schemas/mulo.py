@@ -47,6 +47,7 @@ class MuloSimulateRequest(BaseModel):
     ki: float
     kd: float
     signal_type: str = Field(default="Step", pattern="^(Step|Ramp|Sine)$")
+    amplitude: Optional[float] = None
 
 
 class MuloDesignerStateResponse(BaseModel):
