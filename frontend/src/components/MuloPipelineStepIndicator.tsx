@@ -9,12 +9,19 @@ interface StepDef {
   label: string
   description: string
   icon: LucideIcon
+  comingSoon?: boolean
 }
 
 const STEPS: StepDef[] = [
   { id: 'recommender', label: 'Recommender', description: 'Architecture', icon: GitBranch },
   { id: 'trimmer', label: 'Trimmer', description: 'Equilibrium', icon: Scissors },
-  { id: 'designer', label: 'Designer', description: 'Multi-loop GA', icon: Settings2 },
+  {
+    id: 'designer',
+    label: 'Designer',
+    description: 'Coming soon',
+    icon: Settings2,
+    comingSoon: true,
+  },
 ]
 
 function stepToIndex(step: MuloPipelineStep): number {
@@ -40,11 +47,14 @@ export function MuloPipelineStepIndicator({
         <ol className="setup-steps__list setup-steps__list--mulo">
           {STEPS.map((pipelineStep, index) => {
             const Icon = pipelineStep.icon
+            const isComingSoon = Boolean(pipelineStep.comingSoon)
             const isComplete =
-              completedSteps.includes(pipelineStep.id) || index < activeIndex
-            const isActive = index === activeIndex
-            const isPending = index > activeIndex
-            const isClickable = Boolean(onStepClick) && (isComplete || isActive)
+              !isComingSoon &&
+              (completedSteps.includes(pipelineStep.id) || index < activeIndex)
+            const isActive = !isComingSoon && index === activeIndex
+            const isPending = isComingSoon || index > activeIndex
+            const isClickable =
+              Boolean(onStepClick) && !isComingSoon && (isComplete || isActive)
 
             return (
               <li
@@ -54,6 +64,7 @@ export function MuloPipelineStepIndicator({
                   isComplete && 'setup-steps__item--complete',
                   isActive && 'setup-steps__item--active',
                   isPending && 'setup-steps__item--pending',
+                  isComingSoon && 'setup-steps__item--coming-soon',
                 ]
                   .filter(Boolean)
                   .join(' ')}

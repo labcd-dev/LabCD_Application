@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { RotateCcw } from 'lucide-react'
 import { healthApi, jobsApi, recommenderApi } from '../api/endpoints'
 import { ActivityLog } from './ActivityLog'
@@ -36,6 +36,8 @@ export function MuloRecommenderStep({ onComplete }: MuloRecommenderStepProps) {
   const [loading, setLoading] = useState(false)
   const [ragError, setRagError] = useState('')
   const [chosenController, setChosenController] = useState<string | null>(null)
+  /** Only assess RAG completion after a RAG enhancement run (not the initial recommender). */
+  const pendingRagAssessment = useRef(false)
 
   const jobId = pipeline.recommenderJobId
   const stream = useJobStream({ module: 'recommender', jobId, enabled: step === 'running' })
@@ -51,6 +53,8 @@ export function MuloRecommenderStep({ onComplete }: MuloRecommenderStepProps) {
     }
     setLoading(true)
     setError(null)
+    setRagError('')
+    pendingRagAssessment.current = false
     try {
       const job = await recommenderApi.start({
         file_content: pipeline.fileContent,
@@ -83,11 +87,16 @@ export function MuloRecommenderStep({ onComplete }: MuloRecommenderStepProps) {
   useEffect(() => {
     if (stream.isDone && step === 'running') {
       void loadState().then(async () => {
-        if (jobId) {
+        if (!jobId) return
+        if (pendingRagAssessment.current) {
+          pendingRagAssessment.current = false
           const ragStatus = await recommenderApi.ragStatus(jobId)
-          setRagError(ragStatus.error_message)
+          setRagError(ragStatus.error_message || '')
           setStep(ragStatus.next_step === 'comparison' ? 'comparison' : 'review')
+          return
         }
+        setRagError('')
+        setStep('review')
       })
     }
   }, [stream.isDone, step, jobId, loadState])
@@ -95,6 +104,8 @@ export function MuloRecommenderStep({ onComplete }: MuloRecommenderStepProps) {
   const startRag = async () => {
     if (!jobId) return
     setLoading(true)
+    setRagError('')
+    pendingRagAssessment.current = true
     try {
       const job = await recommenderApi.ragDecision(jobId, {
         flags: ragFlags,
@@ -103,6 +114,7 @@ export function MuloRecommenderStep({ onComplete }: MuloRecommenderStepProps) {
       pipeline.setRecommenderJobId(job.job_id)
       setStep('running')
     } catch (err) {
+      pendingRagAssessment.current = false
       setError(err instanceof Error ? err.message : 'RAG decision failed')
     } finally {
       setLoading(false)
@@ -148,6 +160,7 @@ export function MuloRecommenderStep({ onComplete }: MuloRecommenderStepProps) {
     setRagFlags([])
     setRagError('')
     setError(null)
+    pendingRagAssessment.current = false
     setActiveTab('process')
     setStep('idle')
   }
@@ -160,6 +173,20 @@ export function MuloRecommenderStep({ onComplete }: MuloRecommenderStepProps) {
     const filename = `${pipeline.fileName}_controller_graph_Initial.png`
     return jobsApi.downloadArtifact(jobId, filename)
   }, [jobId, pipeline.fileName])
+
+  const ragGraphEntries = useMemo(() => {
+    if (!jobId) return []
+    return Object.entries(controllerGraph)
+      .filter(([key]) => key !== 'Initial_controller')
+      .map(([key, path]) => {
+        const filename = String(path).replace(/\\/g, '/').split('/').pop() || ''
+        return {
+          key,
+          url: filename ? jobsApi.downloadArtifact(jobId, filename) : '',
+        }
+      })
+      .filter((entry) => entry.url)
+  }, [controllerGraph, jobId])
 
   const resultImageClass = 'max-w-full border border-border rounded-lg my-4'
 
@@ -243,14 +270,12 @@ export function MuloRecommenderStep({ onComplete }: MuloRecommenderStepProps) {
                     <figcaption>Original Output</figcaption>
                   </figure>
                 )}
-                {Object.entries(controllerGraph).map(([key, path]) =>
-                  key !== 'Initial_controller' ? (
-                    <figure key={key}>
-                      <img src={path} alt={key} className={resultImageClass} />
-                      <figcaption>{key}</figcaption>
-                    </figure>
-                  ) : null,
-                )}
+                {ragGraphEntries.map((entry) => (
+                  <figure key={entry.key}>
+                    <img src={entry.url} alt={entry.key} className={resultImageClass} />
+                    <figcaption>{entry.key}</figcaption>
+                  </figure>
+                ))}
               </div>
               <div className="flex flex-col gap-2">
                 {controllerKeys.map((key) => (

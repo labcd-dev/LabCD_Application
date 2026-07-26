@@ -50,6 +50,12 @@ export interface TrimmerArtifactsResponse {
   pdf_file?: string
   safe_system_name: string
   output_dir: string
+  time_response_file?: string
+}
+
+export interface TrimmerTimeResponseResponse {
+  filename: string
+  message: string
 }
 
 export interface CaseStudiesResponse {

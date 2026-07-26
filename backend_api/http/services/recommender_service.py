@@ -144,5 +144,15 @@ def build_trimmer_handoff(job_id: str, chosen_controller: Optional[str] = None) 
 
 
 def assess_rag(job_id: str) -> Dict[str, Optional[str]]:
+    from backend_api.http.config import RESULTS_DIR
+
     job = job_store.get(job_id)
-    return assess_rag_completion(job.metadata["file_name"])
+    state = get_recommender_state(job_id)
+    controller_graph = state.get("controller_graph")
+    controller_json = state.get("controller_json")
+    return assess_rag_completion(
+        job.metadata["file_name"],
+        results_dir=RESULTS_DIR,
+        controller_graph=controller_graph if isinstance(controller_graph, dict) else None,
+        controller_json=controller_json if isinstance(controller_json, dict) else None,
+    )

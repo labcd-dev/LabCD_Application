@@ -25,3 +25,14 @@ class TrimmerArtifactsResponse(BaseModel):
     pdf_file: Optional[str] = None
     safe_system_name: str = ""
     output_dir: str = ""
+    time_response_file: Optional[str] = None
+
+
+class TrimmerTimeResponseResponse(BaseModel):
+    filename: str
+    message: str = ""
+
+
+class TrimmerPdfResponse(BaseModel):
+    filename: str
+    message: str = ""

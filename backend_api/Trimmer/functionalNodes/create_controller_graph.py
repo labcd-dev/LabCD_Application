@@ -81,7 +81,9 @@ class Plotter:
         if save_path:
             plt.savefig(save_path, dpi=150, bbox_inches='tight')
             print(f"Plot saved to {save_path}")
-        plt.show()
+            plt.close(fig)
+        else:
+            plt.show()
 
 
 def analyze_result(state: WorkflowState, writer, agents) -> WorkflowState:

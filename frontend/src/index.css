@@ -472,6 +472,73 @@
   color: var(--app-muted-text);
 }
 
+.setup-steps__item--coming-soon .setup-steps__icon-wrap {
+  border-style: dashed;
+  opacity: 0.85;
+}
+
+.setup-steps__item--coming-soon .setup-steps__description {
+  color: var(--app-primary);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+@keyframes designer-coming-soon-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.75rem) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes designer-coming-soon-glow {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.9);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.05);
+  }
+}
+
+@keyframes designer-coming-soon-icon {
+  0%,
+  100% {
+    transform: rotate(-6deg) scale(1);
+  }
+  50% {
+    transform: rotate(6deg) scale(1.08);
+  }
+}
+
+.designer-coming-soon-modal {
+  animation: designer-coming-soon-in 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.designer-coming-soon-modal__glow {
+  pointer-events: none;
+  position: absolute;
+  inset: -20% -10% auto;
+  height: 55%;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--app-primary) 28%, transparent),
+    transparent 70%
+  );
+  animation: designer-coming-soon-glow 2.4s ease-in-out infinite;
+}
+
+.designer-coming-soon-modal__icon {
+  animation: designer-coming-soon-icon 2s ease-in-out infinite;
+}
+
 /* Pipeline selector */
 
 .pipeline-selector {
@@ -996,7 +1063,10 @@
   .admin-slide-in,
   .bug-report-success,
   .bug-report-success__ring,
-  .bug-report-success__check {
+  .bug-report-success__check,
+  .designer-coming-soon-modal,
+  .designer-coming-soon-modal__glow,
+  .designer-coming-soon-modal__icon {
     animation: none;
   }
 

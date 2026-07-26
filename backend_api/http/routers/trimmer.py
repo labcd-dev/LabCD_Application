@@ -10,6 +10,8 @@ from backend_api.http.schemas.trimmer import TrimmerInputRequest, TrimmerStartRe
 from backend_api.http.services.events import sse_response
 from backend_api.http.services.job_store import job_store
 from backend_api.http.services.trimmer_service import (
+    generate_trimmer_pdf,
+    generate_trimmer_time_response,
     get_trimmer_artifacts,
     start_trimmer_job,
     submit_trimmer_input,
@@ -77,3 +79,37 @@ def trimmer_artifacts(
         return get_trimmer_artifacts(job_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Job not found") from exc
+
+
+@router.post("/{job_id}/time-response")
+def trimmer_time_response(
+    job_id: str,
+    user: User = Depends(require_action("module:trimmer")),
+) -> dict:
+    try:
+        job = job_store.get(job_id)
+        assert_job_access(job, user)
+        return generate_trimmer_time_response(job_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Job not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to generate time response: {exc}") from exc
+
+
+@router.post("/{job_id}/pdf")
+def trimmer_pdf(
+    job_id: str,
+    user: User = Depends(require_action("module:trimmer")),
+) -> dict:
+    try:
+        job = job_store.get(job_id)
+        assert_job_access(job, user)
+        return generate_trimmer_pdf(job_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Job not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to generate PDF: {exc}") from exc

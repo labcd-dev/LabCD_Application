@@ -1,4 +1,5 @@
 from backend_api.Recommender.states import OverallState
+from backend_api.http.config import RESULTS_DIR
 import json
 import os
 from graphviz import Digraph
@@ -119,8 +120,9 @@ def create_controller_graph(messages: OverallState, writer):
     controller_graph = messages.get("controller_graph", {})
     process = messages.get("control_design_process")
 
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     filepath = os.path.join(
-        "results",
+        str(RESULTS_DIR),
         f"{messages['file_name']}_controller_graph_{process}"
     )
     key = f"{process}_controller"

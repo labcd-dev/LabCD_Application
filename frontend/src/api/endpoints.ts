@@ -457,6 +457,16 @@ export const trimmerApi = {
 
   artifacts: (jobId: string) =>
     apiFetch<TrimmerArtifactsResponse>(`/trimmer/${jobId}/artifacts`),
+
+  timeResponse: (jobId: string) =>
+    apiFetch<{ filename: string; message: string }>(`/trimmer/${jobId}/time-response`, {
+      method: 'POST',
+    }),
+
+  generatePdf: (jobId: string) =>
+    apiFetch<{ filename: string; message: string }>(`/trimmer/${jobId}/pdf`, {
+      method: 'POST',
+    }),
 }
 
 export const siloApi = {

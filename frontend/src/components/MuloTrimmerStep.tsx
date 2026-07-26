@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
-import { RotateCcw } from 'lucide-react'
-import { trimmerApi } from '../api/endpoints'
+import { FileText, RotateCcw } from 'lucide-react'
+import { jobsApi, trimmerApi } from '../api/endpoints'
+import type { TrimmerArtifactsResponse } from '../api/types'
 import { ActivityLog } from './ActivityLog'
 import { HumanInputForm } from './HumanInputForm'
-import { JsonViewer } from './JsonViewer'
 import { ProgressBar } from './ProgressBar'
 import { StatusMessage } from './StatusMessage'
 import { Tabs } from './Tabs'
+import { TrimmerEquilibriumResults } from './TrimmerEquilibriumResults'
 import { usePipeline } from '../context/PipelineContext'
 import { useJobStream } from '../hooks/useJobStream'
 import { btnBase, btnPrimary, fieldInput, fieldLabel } from '../lib/classes'
@@ -15,6 +16,34 @@ type Step = 'operating' | 'running' | 'results'
 
 interface MuloTrimmerStepProps {
   onComplete: () => void
+}
+
+function hasEquilibriumResult(artifacts: Record<string, unknown> | null | undefined): boolean {
+  const result = artifacts?.result
+  return Boolean(result && typeof result === 'object' && Object.keys(result as object).length > 0)
+}
+
+async function fetchTrimmerArtifacts(
+  jobId: string,
+  attempts = 8,
+  delayMs = 250,
+): Promise<TrimmerArtifactsResponse> {
+  let last: TrimmerArtifactsResponse | null = null
+  for (let i = 0; i < attempts; i += 1) {
+    last = await trimmerApi.artifacts(jobId)
+    if (hasEquilibriumResult(last as unknown as Record<string, unknown>)) {
+      return last
+    }
+    if (i < attempts - 1) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs))
+    }
+  }
+  return last ?? {
+    result: {},
+    config: {},
+    safe_system_name: '',
+    output_dir: '',
+  }
 }
 
 export function MuloTrimmerStep({ onComplete }: MuloTrimmerStepProps) {
@@ -29,6 +58,12 @@ export function MuloTrimmerStep({ onComplete }: MuloTrimmerStepProps) {
   const [loading, setLoading] = useState(false)
   const [artifacts, setArtifacts] = useState<Record<string, unknown> | null>(null)
   const [submittingInput, setSubmittingInput] = useState(false)
+  const [plotLoading, setPlotLoading] = useState(false)
+  const [plotError, setPlotError] = useState<string | null>(null)
+  const [plotFilename, setPlotFilename] = useState<string | null>(null)
+  const [pdfLoading, setPdfLoading] = useState(false)
+  const [pdfError, setPdfError] = useState<string | null>(null)
+  const [pdfFilename, setPdfFilename] = useState<string | null>(null)
 
   const jobId = pipeline.trimmerJobId
   const stream = useJobStream({ module: 'trimmer', jobId, enabled: step === 'running' })
@@ -43,10 +78,22 @@ export function MuloTrimmerStep({ onComplete }: MuloTrimmerStepProps) {
   }, [pipeline.handoff, pipeline.statesInputs])
 
   useEffect(() => {
-    if (pipeline.trimmerJobId && step === 'results' && !artifacts) {
-      void trimmerApi.artifacts(pipeline.trimmerJobId).then((res) => {
+    // Only auto-load when artifacts were never fetched (null), not when empty.
+    if (pipeline.trimmerJobId && step === 'results' && artifacts === null) {
+      let cancelled = false
+      void fetchTrimmerArtifacts(pipeline.trimmerJobId).then((res) => {
+        if (cancelled) return
         setArtifacts(res as unknown as Record<string, unknown>)
+        if (res.time_response_file) {
+          setPlotFilename(res.time_response_file)
+        }
+        if (res.pdf_file) {
+          setPdfFilename(res.pdf_file.split(/[/\\]/).pop() ?? res.pdf_file)
+        }
       })
+      return () => {
+        cancelled = true
+      }
     }
   }, [pipeline.trimmerJobId, step, artifacts])
 
@@ -78,13 +125,25 @@ export function MuloTrimmerStep({ onComplete }: MuloTrimmerStepProps) {
   }
 
   useEffect(() => {
-    if (stream.isDone && step === 'running' && jobId) {
-      void trimmerApi.artifacts(jobId).then((res) => {
+    if (stream.isDone && jobId && step === 'running') {
+      if (stream.error) {
+        setError(stream.error)
+        return
+      }
+      let cancelled = false
+      void fetchTrimmerArtifacts(jobId).then((res) => {
+        if (cancelled) return
         setArtifacts(res as unknown as Record<string, unknown>)
+        if (res.time_response_file) {
+          setPlotFilename(res.time_response_file)
+        }
         setStep('results')
       })
+      return () => {
+        cancelled = true
+      }
     }
-  }, [stream.isDone, step, jobId])
+  }, [stream.isDone, jobId, step, stream.error])
 
   const submitHumanInput = async (answer: string) => {
     if (!jobId || !stream.humanInput) return
@@ -108,9 +167,48 @@ export function MuloTrimmerStep({ onComplete }: MuloTrimmerStepProps) {
     pipeline.setMuloJobId(null)
     setArtifacts(null)
     setError(null)
+    setPlotError(null)
+    setPlotFilename(null)
+    setPdfError(null)
+    setPdfFilename(null)
     setActiveTab('process')
     setStep('operating')
   }
+
+  const generateTimeResponse = async () => {
+    if (!jobId) return
+    setPlotLoading(true)
+    setPlotError(null)
+    try {
+      const res = await trimmerApi.timeResponse(jobId)
+      setPlotFilename(res.filename)
+    } catch (err) {
+      setPlotError(err instanceof Error ? err.message : 'Failed to generate time response')
+    } finally {
+      setPlotLoading(false)
+    }
+  }
+
+  const generatePdf = async () => {
+    if (!jobId) return
+    setPdfLoading(true)
+    setPdfError(null)
+    try {
+      const res = await trimmerApi.generatePdf(jobId)
+      setPdfFilename(res.filename)
+      window.open(jobsApi.downloadArtifact(jobId, res.filename), '_blank', 'noopener,noreferrer')
+      onComplete()
+    } catch (err) {
+      setPdfError(err instanceof Error ? err.message : 'Failed to generate PDF')
+    } finally {
+      setPdfLoading(false)
+    }
+  }
+
+  const plotUrl =
+    jobId && plotFilename ? jobsApi.downloadArtifact(jobId, plotFilename) : null
+  const pdfUrl =
+    jobId && pdfFilename ? jobsApi.downloadArtifact(jobId, pdfFilename) : null
 
   const tabs = [
     {
@@ -134,32 +232,78 @@ export function MuloTrimmerStep({ onComplete }: MuloTrimmerStepProps) {
           {step === 'results' && artifacts && (
             <>
               <StatusMessage type="success" message="Trimmer completed." />
-              {artifacts.result && Object.keys(artifacts.result as object).length > 0 ? (
-                <JsonViewer
-                  data={artifacts.result}
-                  title="Equilibrium Results"
-                  defaultOpen
-                />
+              {hasEquilibriumResult(artifacts) ? (
+                <TrimmerEquilibriumResults result={artifacts.result} />
               ) : (
                 <StatusMessage
                   type="warning"
                   message="Trimmer finished but no equilibrium result payload was returned. Re-run Trimmer or check the activity log."
                 />
               )}
+              {pdfError && <StatusMessage type="error" message={pdfError} />}
               <div className="flex gap-3 flex-wrap mt-4">
                 <button type="button" className={btnBase} onClick={restartTrimmer}>
                   <RotateCcw className="size-4" aria-hidden />
                   Change Settings & Re-run
                 </button>
-                <button type="button" className={btnPrimary} onClick={onComplete}>
-                  Continue to Multi Loop Designer
+                <button
+                  type="button"
+                  className={btnPrimary}
+                  disabled={pdfLoading || !jobId || !hasEquilibriumResult(artifacts)}
+                  onClick={() => void generatePdf()}
+                >
+                  <FileText className="size-4" aria-hidden />
+                  {pdfLoading ? 'Generating PDF…' : 'Generate PDF'}
                 </button>
+                {pdfUrl && (
+                  <a
+                    href={pdfUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={btnBase}
+                  >
+                    Download PDF
+                  </a>
+                )}
               </div>
             </>
           )}
         </>
       ),
     },
+    ...(step === 'results'
+      ? [
+          {
+            id: 'time-response',
+            label: 'Time Response',
+            content: (
+              <>
+                <p className="text-muted-text leading-relaxed m-0">
+                  Simulate open dynamics around the trimmed equilibrium and plot state trajectories.
+                </p>
+                {plotError && <StatusMessage type="error" message={plotError} />}
+                <div className="flex gap-3 flex-wrap mt-4">
+                  <button
+                    type="button"
+                    className={btnPrimary}
+                    disabled={plotLoading || !jobId}
+                    onClick={() => void generateTimeResponse()}
+                  >
+                    {plotLoading ? 'Generating…' : 'Generate Time Response Plot'}
+                  </button>
+                </div>
+                {plotUrl && (
+                  <img
+                    src={plotUrl}
+                    alt="Time response simulation"
+                    className="max-w-full border border-border rounded-lg my-4"
+                  />
+                )}
+              </>
+            ),
+          },
+        ]
+      : []),
     {
       id: 'logs',
       label: 'Activity Log',
