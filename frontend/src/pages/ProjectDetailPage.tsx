@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Pencil, RotateCcw } from 'lucide-react'
 import { projectsApi, muloApi } from '../api/endpoints'
@@ -9,6 +9,7 @@ import { ProjectResultsView } from '../components/ProjectResultsView'
 import { SiloLiveRunPanel } from '../components/SiloLiveRunPanel'
 import { StatusMessage } from '../components/StatusMessage'
 import { usePipeline } from '../context/PipelineContext'
+import { useFeedbackSurveyPrompt } from '../hooks/useFeedbackSurveyPrompt'
 import { usePoll } from '../hooks/usePoll'
 import {
   btnBase,
@@ -35,6 +36,8 @@ export function ProjectDetailPage() {
   const [title, setTitle] = useState('')
   const [retrying, setRetrying] = useState(false)
   const [muloAwaitingContinue, setMuloAwaitingContinue] = useState(false)
+  const { promptAfterDesignSuccess, feedbackModal } = useFeedbackSurveyPrompt()
+  const prevStatusRef = useRef<string | null>(null)
 
   const refreshProject = useCallback(async () => {
     if (!Number.isFinite(id)) return null
@@ -46,6 +49,7 @@ export function ProjectDetailPage() {
 
   useEffect(() => {
     setMuloAwaitingContinue(false)
+    prevStatusRef.current = null
   }, [id])
 
   useEffect(() => {
@@ -115,6 +119,17 @@ export function ProjectDetailPage() {
     }
   }, [project?.status])
 
+  // Keep the survey modal on this page: live panels unmount when status becomes
+  // completed, which previously discarded the prompt mid-flight.
+  useEffect(() => {
+    if (!project) return
+    const prev = prevStatusRef.current
+    prevStatusRef.current = project.status
+    if (prev === 'running' && project.status === 'completed') {
+      void promptAfterDesignSuccess()
+    }
+  }, [project, promptAfterDesignSuccess])
+
   const handleRunTerminal = useCallback(() => {
     void refreshProject().catch(() => {})
   }, [refreshProject])
@@ -173,6 +188,7 @@ export function ProjectDetailPage() {
 
   return (
     <section className={pageSection}>
+      {feedbackModal}
       <Link to="/projects" className={`${btnBase} ${btnCompact} w-fit`}>
         <ArrowLeft className="size-3.5" />
         All projects
@@ -262,13 +278,18 @@ export function ProjectDetailPage() {
             while this one continues.
           </p>
           {showSiloLive && liveJobId && (
-            <SiloLiveRunPanel jobId={liveJobId} onTerminal={handleRunTerminal} />
+            <SiloLiveRunPanel
+              jobId={liveJobId}
+              onTerminal={handleRunTerminal}
+              onDesignSuccess={promptAfterDesignSuccess}
+            />
           )}
           {showMuloLive && liveJobId && (
             <MuloLiveRunPanel
               jobId={liveJobId}
               onTerminal={handleRunTerminal}
               onAwaitingContinueChange={handleAwaitingContinue}
+              onDesignSuccess={promptAfterDesignSuccess}
             />
           )}
         </div>

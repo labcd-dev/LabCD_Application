@@ -9,7 +9,6 @@ import { ProcessingCard } from './ProcessingCard'
 import { ProgressBar } from './ProgressBar'
 import { StatusMessage } from './StatusMessage'
 import { Tabs } from './Tabs'
-import { useFeedbackSurveyPrompt } from '../hooks/useFeedbackSurveyPrompt'
 import { useJobStream } from '../hooks/useJobStream'
 import { useMonitorState } from '../hooks/useMonitorState'
 import { usePoll } from '../hooks/usePoll'
@@ -18,14 +17,15 @@ import { btnBase, mutedText } from '../lib/classes'
 interface SiloLiveRunPanelProps {
   jobId: string
   onTerminal?: () => void
+  /** Parent-owned survey prompt; must outlive this panel unmounting on completion. */
+  onDesignSuccess?: () => void | Promise<void>
 }
 
-export function SiloLiveRunPanel({ jobId, onTerminal }: SiloLiveRunPanelProps) {
+export function SiloLiveRunPanel({ jobId, onTerminal, onDesignSuccess }: SiloLiveRunPanelProps) {
   const [activeTab, setActiveTab] = useState('state')
   const [cancelling, setCancelling] = useState(false)
   const [cancelError, setCancelError] = useState<string | null>(null)
   const stream = useJobStream({ module: 'silo', jobId, enabled: true })
-  const { promptAfterDesignSuccess, feedbackModal } = useFeedbackSurveyPrompt()
   const promptedJobRef = useRef<string | null>(null)
   const notifiedTerminalRef = useRef<string | null>(null)
 
@@ -43,8 +43,8 @@ export function SiloLiveRunPanel({ jobId, onTerminal }: SiloLiveRunPanelProps) {
     if (!stream.isDone || stream.error || stream.isCancelled) return
     if (promptedJobRef.current === jobId) return
     promptedJobRef.current = jobId
-    void promptAfterDesignSuccess()
-  }, [stream.isDone, stream.error, stream.isCancelled, jobId, promptAfterDesignSuccess])
+    void onDesignSuccess?.()
+  }, [stream.isDone, stream.error, stream.isCancelled, jobId, onDesignSuccess])
 
   useEffect(() => {
     const terminal = stream.isDone || stream.isCancelled || Boolean(stream.error)
@@ -158,10 +158,5 @@ export function SiloLiveRunPanel({ jobId, onTerminal }: SiloLiveRunPanelProps) {
     },
   ]
 
-  return (
-    <>
-      {feedbackModal}
-      <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
-    </>
-  )
+  return <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
 }

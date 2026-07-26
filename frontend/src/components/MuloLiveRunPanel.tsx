@@ -3,7 +3,6 @@ import { muloApi } from '../api/endpoints'
 import type { MuloDesignerStateResponse } from '../api/types'
 import { MuloOptimizationDashboard } from './MuloOptimizationDashboard'
 import { StatusMessage } from './StatusMessage'
-import { useFeedbackSurveyPrompt } from '../hooks/useFeedbackSurveyPrompt'
 import {
   buildMuloRunConfig,
   type MuloRunConfig,
@@ -16,6 +15,8 @@ interface MuloLiveRunPanelProps {
   onTerminal?: () => void
   /** True while a cascade loop finished but more loops remain. */
   onAwaitingContinueChange?: (awaiting: boolean) => void
+  /** Parent-owned survey prompt; must outlive this panel unmounting on completion. */
+  onDesignSuccess?: () => void | Promise<void>
 }
 
 function runConfigFromState(state: MuloDesignerStateResponse | null): MuloRunConfig {
@@ -33,13 +34,13 @@ export function MuloLiveRunPanel({
   jobId,
   onTerminal,
   onAwaitingContinueChange,
+  onDesignSuccess,
 }: MuloLiveRunPanelProps) {
   const [designerState, setDesignerState] = useState<MuloDesignerStateResponse | null>(null)
   const [runKey, setRunKey] = useState(0)
   const [phase, setPhase] = useState<'running' | 'complete'>('running')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const { promptAfterDesignSuccess, feedbackModal } = useFeedbackSurveyPrompt()
 
   useEffect(() => {
     let active = true
@@ -71,10 +72,10 @@ export function MuloLiveRunPanel({
       setDesignerState(state)
       setPhase('complete')
       onAwaitingContinueChange?.(Boolean(!state.is_complete))
-      void promptAfterDesignSuccess()
+      void onDesignSuccess?.()
       onTerminal?.()
     },
-    [promptAfterDesignSuccess, onTerminal, onAwaitingContinueChange],
+    [onDesignSuccess, onTerminal, onAwaitingContinueChange],
   )
 
   const continueNextLoop = async () => {
@@ -104,7 +105,6 @@ export function MuloLiveRunPanel({
 
   return (
     <div className="flex flex-col gap-4">
-      {feedbackModal}
       {error && <StatusMessage type="error" message={error} />}
 
       {(phase === 'running' || phase === 'complete') && (
