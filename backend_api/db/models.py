@@ -228,6 +228,7 @@ class Project(Base):
     file_name: Mapped[str] = mapped_column(String(255), default="", nullable=False)
     file_type: Mapped[str] = mapped_column(String(40), default="python", nullable=False)
     file_content: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    llm_model: Mapped[str] = mapped_column(String(100), default="gpt-4o", nullable=False)
     control_objective: Mapped[str | None] = mapped_column(Text, nullable=True)
     job_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     results: Mapped[dict[str, Any] | None] = mapped_column(JsonDict, nullable=True)

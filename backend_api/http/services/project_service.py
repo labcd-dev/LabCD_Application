@@ -43,6 +43,7 @@ def project_to_summary(project: Project, *, include_owner: bool = False) -> dict
         "status": project.status,
         "file_name": project.file_name,
         "file_type": project.file_type,
+        "llm_model": project.llm_model or "gpt-4o",
         "has_results": bool(project.results),
         "job_id": project.job_id,
         "created_at": project.created_at,
@@ -71,6 +72,7 @@ def create_project(
     file_name: str = "",
     file_type: str = "python",
     file_content: str = "",
+    llm_model: str = "gpt-4o",
     control_objective: str | None = None,
     status: str = "draft",
     job_id: str | None = None,
@@ -81,6 +83,7 @@ def create_project(
     if status not in VALID_STATUSES:
         raise ValueError(f"Invalid status: {status}")
 
+    locked_model = (llm_model or "").strip() or "gpt-4o"
     project = Project(
         user_id=user_id,
         title=_title_from(title or control_objective, file_name, pipeline_type),
@@ -89,6 +92,7 @@ def create_project(
         file_name=file_name or "",
         file_type=file_type or "python",
         file_content=file_content or "",
+        llm_model=locked_model,
         control_objective=control_objective,
         job_id=job_id,
         results=make_serializable(results) if results is not None else None,
@@ -181,6 +185,27 @@ def assert_project_access(project: Project, user: User) -> None:
         return
     if project.user_id != user.id:
         raise ProjectAccessDenied("Project access denied")
+
+
+def assert_project_llm_model(
+    db: Session,
+    project_id: int | None,
+    requested_model: str | None,
+) -> None:
+    """Reject job starts that try to use a different model than the project lock."""
+    if project_id is None:
+        return
+    project = get_project(db, project_id)
+    if project is None:
+        return
+    locked = (project.llm_model or "").strip()
+    if not locked:
+        return
+    requested = (requested_model or "").strip()
+    if requested and requested != locked:
+        raise ValueError(
+            f"This project is locked to model '{locked}' and cannot use '{requested}'."
+        )
 
 
 def sync_project_from_job(

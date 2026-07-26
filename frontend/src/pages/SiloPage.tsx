@@ -1,9 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { ArrowLeft } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { healthApi, siloApi } from '../api/endpoints'
+import { siloApi } from '../api/endpoints'
 import { CodePreview } from '../components/CodePreview'
-import { ModelSelect } from '../components/ModelSelect'
 import { SiloAdvancedSettings } from '../components/SiloAdvancedSettings'
 import { StatusMessage } from '../components/StatusMessage'
 import { usePipeline } from '../context/PipelineContext'
@@ -26,7 +25,6 @@ import {
 export function SiloPage() {
   const navigate = useNavigate()
   const pipeline = usePipeline()
-  const [models, setModels] = useState<string[]>(['gpt-4o'])
   const [objective, setObjective] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -34,10 +32,6 @@ export function SiloPage() {
   const [advancedConfig, setAdvancedConfig] = useState<SiloAdvancedConfig>(
     DEFAULT_SILO_ADVANCED_CONFIG,
   )
-
-  useEffect(() => {
-    healthApi.models().then((res) => setModels(res.llm_models)).catch(() => {})
-  }, [])
 
   const startDesign = async () => {
     if (!pipeline.fileContent) {
@@ -101,8 +95,6 @@ export function SiloPage() {
           placeholder="Describe what you want the controller to achieve..."
         />
       </label>
-
-      <ModelSelect models={models} value={pipeline.model} onChange={pipeline.setModel} />
 
       <button type="button" className={btnLink} onClick={() => setShowAdvanced((v) => !v)}>
         {showAdvanced ? 'Hide' : 'Show'} Advanced Settings

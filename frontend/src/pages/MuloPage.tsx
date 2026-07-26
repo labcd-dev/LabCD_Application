@@ -122,6 +122,13 @@ export function MuloPage() {
   }, [])
 
   useEffect(() => {
+    if (!pipeline.projectId || !pipeline.model) return
+    setRunConfig((prev) =>
+      prev.llm_model === pipeline.model ? prev : { ...prev, llm_model: pipeline.model },
+    )
+  }, [pipeline.projectId, pipeline.model])
+
+  useEffect(() => {
     if (!selectedCase || dataSource !== 'case_study') return
     setRunConfig((prev) => ({
       ...prev,
@@ -233,7 +240,7 @@ export function MuloPage() {
       const config = buildMuloRunConfig({
         ...runConfig,
         case_study_file: dataSource === 'case_study' ? selectedCase : '',
-        llm_model: runConfig.llm_model || pipeline.model,
+        llm_model: pipeline.projectId ? pipeline.model : runConfig.llm_model || pipeline.model,
       })
 
       const job = await muloApi.init({
@@ -420,10 +427,16 @@ export function MuloPage() {
               )}
 
               <ModelSelect
-                models={models}
-                value={runConfig.llm_model}
+                models={pipeline.projectId ? [pipeline.model] : models}
+                value={pipeline.projectId ? pipeline.model : runConfig.llm_model}
                 onChange={(llm_model) => setRunConfig((prev) => ({ ...prev, llm_model }))}
                 label="LLM Model"
+                disabled={Boolean(pipeline.projectId)}
+                hint={
+                  pipeline.projectId
+                    ? 'Locked when the project was created in Control Design Setup.'
+                    : undefined
+                }
               />
 
               <MuloAdvancedSettings
@@ -431,6 +444,7 @@ export function MuloPage() {
                 onChange={setRunConfig}
                 models={models}
                 webSearchModels={webSearchModels}
+                llmModelLocked={Boolean(pipeline.projectId)}
               />
 
               <button

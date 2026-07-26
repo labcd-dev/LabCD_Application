@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from backend_api.db.models import User
 from backend_api.db.session import get_db
-from backend_api.http.dependencies import get_current_user
+from backend_api.http.dependencies import assert_model_allowed, get_current_user
 from backend_api.http.schemas.projects import (
     ProjectCreateRequest,
     ProjectDetail,
@@ -33,6 +33,7 @@ def create_my_project(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> ProjectDetail:
+    assert_model_allowed(user, request.llm_model)
     try:
         project = project_service.create_project(
             db,
@@ -42,6 +43,7 @@ def create_my_project(
             file_name=request.file_name,
             file_type=request.file_type,
             file_content=request.file_content,
+            llm_model=request.llm_model,
             control_objective=request.control_objective,
             status="draft",
         )

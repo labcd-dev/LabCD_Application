@@ -12,6 +12,7 @@ class ProjectCreateRequest(BaseModel):
     file_name: str = ""
     file_type: str = "python"
     file_content: str = ""
+    llm_model: str = "gpt-4o"
     control_objective: Optional[str] = None
 
 
@@ -35,6 +36,7 @@ class ProjectSummary(BaseModel):
     status: str
     file_name: str
     file_type: str
+    llm_model: str
     has_results: bool
     job_id: Optional[str] = None
     created_at: datetime

@@ -8,6 +8,7 @@ interface MuloAdvancedSettingsProps {
   onChange: (value: MuloRunConfig) => void
   models: string[]
   webSearchModels: string[]
+  llmModelLocked?: boolean
 }
 
 export function MuloAdvancedSettings({
@@ -15,6 +16,7 @@ export function MuloAdvancedSettings({
   onChange,
   models,
   webSearchModels,
+  llmModelLocked = false,
 }: MuloAdvancedSettingsProps) {
   const [expanded, setExpanded] = useState(false)
   const [enableWebSearch, setEnableWebSearch] = useState(value.web_search_model !== null)
@@ -35,10 +37,16 @@ export function MuloAdvancedSettings({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
           <div className="flex flex-col gap-3">
             <ModelSelect
-              models={models}
+              models={llmModelLocked ? [value.llm_model] : models}
               value={value.llm_model}
               onChange={(llm_model) => update({ llm_model })}
               label="LLM Model"
+              disabled={llmModelLocked}
+              hint={
+                llmModelLocked
+                  ? 'Locked when the project was created in Control Design Setup.'
+                  : undefined
+              }
             />
 
             <label className={fieldLabel}>

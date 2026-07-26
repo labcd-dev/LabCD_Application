@@ -104,6 +104,7 @@ export function PipelineProvider({ children }: { children: ReactNode }) {
           fileName: project.file_name || project.title || '',
           fileType: project.file_type || 'python',
           fileContent: project.file_content || '',
+          model: project.llm_model || initialState.model,
           pipeline: project.pipeline_type,
           projectId: project.id,
         }),
