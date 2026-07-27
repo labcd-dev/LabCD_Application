@@ -2298,16 +2298,20 @@ def create_system(system_name: str, scenario=None, custom_dynamics_path: Optiona
 
 
 def _detect_matlab_states(
-    oct,
-    matlab_file_path: Optional[str],
-    func_name: str,
-    num_inputs: int = 1,
-    file_content: Optional[str] = None,
+        oct,
+        matlab_file_path: Optional[str],
+        func_name: str,
+        num_inputs: int = 1,
+        file_content: Optional[str] = None,
 ) -> int:
-    """Auto-detect number of states from MATLAB function"""
+    """Auto-detect number of states from MATLAB function
+    Attempts two strategies:
+    1. Pattern matching on xdot = zeros(n, 1) declaration
+    2. Octave execution with test vectors (1-10 states)
+    """
     import shutil
     import tempfile
-
+    import re
     # Setup temporary directory
     temp_dir = tempfile.mkdtemp()
     matlab_filename = f"{func_name}.m"
@@ -2323,7 +2327,13 @@ def _detect_matlab_states(
             raise ValueError(
                 "MATLAB/Octave dynamics require either file_content or a file path."
             )
-
+        # ===== STRATEGY 1: Pattern Matching =====
+        # Try to detect from xdot = zeros(n, 1) pattern
+        pattern = r'xdot\s*=\s*zeros\s*\(\s*(\d+)'
+        match = re.search(pattern, content, re.IGNORECASE)
+        if match:
+            return int(match.group(1))
+        # ===== STRATEGY 2: Octave Execution =====
         with open(temp_matlab_path, 'w') as dst:
             dst.write(content)
 
@@ -2331,23 +2341,30 @@ def _detect_matlab_states(
         oct.addpath(temp_dir)
 
         # Try different state dimensions
+        errors_encountered = []
         for n in range(1, 11):
             try:
                 test_t = 0.0
                 test_x = np.zeros((n, 1))
-                test_u = np.zeros((num_inputs, 1))  # Column vector, scalar-like for num_inputs=1
-
+                test_u = np.zeros((num_inputs, 1))
+                # Call the MATLAB function
                 result = oct.feval(func_name, test_t, test_x, test_u, nout=1)
                 result_array = np.array(result).flatten()
 
                 if len(result_array) == n:
                     return n
-            except:
+            except Exception as e:
+                errors_encountered.append((n, str(e)))
                 continue
-
-        raise ValueError("Could not auto-detect number of states from MATLAB function")
-
+        # ===== FALLBACK =====
+        raise ValueError(
+            f"Could not auto-detect number of states from MATLAB function. "
+            f"Errors encountered during Octave execution."
+        )
     finally:
         # Cleanup
-        oct.rmpath(temp_dir)
+        try:
+            oct.rmpath(temp_dir)
+        except:
+            pass
         shutil.rmtree(temp_dir, ignore_errors=True)
