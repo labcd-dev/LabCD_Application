@@ -1109,6 +1109,20 @@ def display_current_metrics():
     monitor = st.session_state.monitor
     state = monitor.current_state
 
+    # -- Best-controller teaser (NEW) ---------------------------------------
+    best_results = (
+        monitor.current_state.get("scenario_best_results", {})
+        if monitor.current_state else {}
+    )
+    if not best_results and monitor.state_history:
+        best_results = monitor.state_history[-1]["state"].get("scenario_best_results", {})
+
+    if best_results and not monitor.is_running:
+        st.success(
+            "🏆 Design complete! See the **Best Controllers** tab for "
+            "export-ready parameters."
+        )
+
     # -- Live / last-completed status row ------------------------------------
     col1, col2, col3, col4 = st.columns(4)
 
@@ -1447,3 +1461,92 @@ def display_ga_results():
         if st.session_state.ga_results.get('traceback'):
             with st.expander("Show Traceback"):
                 st.code(st.session_state.ga_results['traceback'])
+
+
+def display_best_controller_report():
+    """Display the best controller selected for each scenario and provide an export placeholder."""
+    import json
+
+    st.subheader("🏆 Best Controllers per Scenario")
+
+    monitor = st.session_state.monitor
+    best_results = {}
+
+    # Pull from live current_state or the last state_history snapshot
+    if monitor.current_state:
+        best_results = monitor.current_state.get("scenario_best_results", {})
+    if not best_results and monitor.state_history:
+        best_results = monitor.state_history[-1]["state"].get("scenario_best_results", {})
+
+    if not best_results:
+        st.info("No best-controller data available yet. Run a design to completion to see results.")
+        return
+
+    # Render one card per scenario
+    for scen_level in sorted(
+        best_results.keys(),
+        key=lambda x: int(x) if isinstance(x, str) else x
+    ):
+        best = best_results[scen_level]
+        if best is None:
+            st.warning(f"**Scenario {scen_level}** — No valid controller found.")
+            continue
+
+        controller_type = best.get("controller_type", "N/A")
+        best_params   = best.get("best_params", {}) or {}
+        best_metrics  = best.get("best_metrics", {}) or {}
+        scen_metrics  = best.get("scenario_metrics", {}) or {}
+
+        # Clean gains (drop reasoning / None)
+        gains = {
+            k: v for k, v in best_params.items()
+            if k != "reasoning" and v is not None
+        }
+
+        with st.container():
+            col_left, col_right = st.columns([3, 1])
+
+            with col_left:
+                st.markdown(
+                    f"**Scenario {scen_level}** — Controller: `{controller_type}`"
+                )
+                st.caption(
+                    f"Success Score: **{scen_metrics.get('score', 0):.2%}**  |  "
+                    f"Stable: {'✅ Yes' if scen_metrics.get('stable') else '❌ No'}  |  "
+                    f"Best MSE: {best_metrics.get('mse', float('inf')):.4f}"
+                )
+
+                if gains:
+                    st.write("**Optimal Gains:**")
+                    st.json(gains)
+                else:
+                    st.write("_No gain parameters recorded._")
+
+            with col_right:
+                st.markdown("**Export Placeholder**")
+                export_fmt = st.selectbox(
+                    "Target format",
+                    ["MATLAB (.m)", "Python (.py)", "Simulink (.slx)", "JSON"],
+                    key=f"best_ctrl_fmt_{scen_level}",
+                    label_visibility="collapsed"
+                )
+
+                if st.button("📥 Stage Export", key=f"best_ctrl_btn_{scen_level}"):
+                    payload = {
+                        "scenario_level": scen_level,
+                        "controller_type": controller_type,
+                        "gains": gains,
+                        "performance_metrics": {
+                            k: v for k, v in best_metrics.items()
+                            if k != "reasoning"
+                        },
+                        "target_format": export_fmt,
+                        # TODO: populate system_name, dt, etc. from saved_config
+                    }
+                    # Placeholder: stash for future export backend
+                    st.session_state[f"_export_payload_scen_{scen_level}"] = payload
+                    st.success(f"Scenario {scen_level} staged for {export_fmt} export.")
+                    st.caption("Payload preview (to be wired to code-generation backend):")
+                    st.code(json.dumps(payload, indent=2), language="json")
+
+        st.divider()

@@ -67,6 +67,77 @@ class SharedBuffer:
     #         data = pickle.load(f)
     #     self.__dict__.update(data)
 
+    def finalise_scenario_metrics(self, target_metrics: dict, wall_clock_duration: float) -> None:
+        """Compute and stamp derived DevOps KPIs into current_scenario_metrics.
+
+        Call this once, *after* wall-clock time is known but *before* the
+        metrics dict is copied to the monitor.
+
+        Parameters
+        ----------
+        target_metrics : dict
+            The per-scenario target thresholds, e.g.
+            {'mse': 0.2, 'settling_time': 4.0, 'overshoot': 0}.
+        wall_clock_duration : float
+            Elapsed seconds for this scenario (from scenario_start_time).
+        """
+        if self.current_scenario_metrics is None:
+            return
+
+        m = self.current_scenario_metrics
+
+        # 1. Wall-clock time (overwrite the LLM-accumulated stub with the real value)
+        m['time'] = wall_clock_duration
+
+        # 2. Controller latency — total wall-clock seconds for this design attempt.
+        #    We expose it separately so the UI can break it down by controller type.
+        m['controller_latency_s'] = wall_clock_duration
+
+        # 3. Was the best design stable?
+        best_entry = self.get_best_entries(1)
+        if best_entry:
+            best_metrics = best_entry[0]['metrics']
+            m['stable'] = bool(best_metrics.get('stable', False))
+        else:
+            m['stable'] = False
+
+        # 4. Success score  (each of the 4 KPIs contributes 25 %)
+        #    A KPI passes if the best value is ≤ the target (lower-is-better).
+        #    'stable' is a boolean bonus that can be included or ignored;
+        #    here we treat it as a prerequisite: score = 0 if not stable.
+        score = 0.0
+        if m['stable'] and best_entry:
+            bm = best_entry[0]['metrics']
+            kpi_map = {
+                'mse': ('mse', target_metrics.get('mse', 0.2)),
+                'settling_time': ('settling_time', target_metrics.get('settling_time', 4.0)),
+                'overshoot': ('overshoot', target_metrics.get('overshoot', 0.0)),
+                'ss_error': ('ss_error', target_metrics.get('ss_error', 0.05)),
+            }
+            passing = sum(
+                1 for metric_key, (bm_key, threshold) in kpi_map.items()
+                if bm.get(bm_key, float('inf')) <= threshold
+            )
+            score = passing / len(kpi_map)  # 0.0 – 1.0
+        m['score'] = round(score, 4)
+
+        # 5. Cost per successful design
+        #    If the scenario was NOT successful we still record cost but mark
+        #    cost_per_success as None so the UI can display "—".
+        if m['stable'] and score >= 1.0:
+            m['cost_per_success'] = m['cost']
+        else:
+            m['cost_per_success'] = None
+
+        # 6. api_failures is already accumulated by _update_metrics() in llm_agents.py;
+        #    ensure the key exists even if no failures occurred.
+        m.setdefault('api_failures', 0)
+
+        log_to_file(
+            f"[finalise_scenario_metrics] stable={m['stable']}, score={m['score']:.2f}, "
+            f"api_failures={m['api_failures']}, cost_per_success={m['cost_per_success']}, "
+            f"latency={m['controller_latency_s']:.1f}s"
+        )
 
 def log_to_file(message, also_print=False):
     """Write message to log file and optionally print to console"""

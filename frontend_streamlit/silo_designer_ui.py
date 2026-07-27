@@ -13,7 +13,8 @@ from backend_api.SiloDesigner.app import (DesignMonitor, DummyMonitor, process_o
 from backend_api.SiloDesigner.src.controllers import initialize_state
 from frontend_streamlit.silo_designer_st_utls import (display_logo, create_advanced_settings, build_config_from_session,
                                                       display_time_response, CSS_STYLES, display_llm_responses, display_ga_results,
-                                                      display_gains_plot, display_metrics_plots, display_current_metrics, display_progress_feed)
+                                                      display_gains_plot, display_metrics_plots, display_current_metrics, display_progress_feed,
+                                                      display_best_controller_report)
 
 
 st.set_page_config(
@@ -713,8 +714,8 @@ def display_project_page():
         st.markdown('<p class="status-complete">â¸ï¸ Design process is idle</p>', unsafe_allow_html=True)
 
     # Tabs for different views
-    tabs = st.tabs(["ðŸ“ˆ Progress", "ðŸ“Š Metrics", "ðŸŽšï¸ Gains", "â±ï¸ Time Response",
-                    "ðŸ•µï¸ LLM Agents", "ðŸ§¬ GA Results", "âš™ï¸ Config", "ðŸ“‹ Summary"])
+    tabs = st.tabs(["📈 Progress", "📊 Metrics", "🎚 Gains", "⏱️ Time Response",
+                    "🕵️ LLM Agents", "🧬 GA Results", "⚙️ Config", "📋 Summary", "🏆 Best Controller"])
 
     with tabs[0]:  # Progress
         display_progress_feed()
@@ -740,6 +741,9 @@ def display_project_page():
 
     with tabs[7]:  # Summary
         display_current_metrics()
+
+    with tabs[8]:  # Best Controllers  ← ADD
+        display_best_controller_report()
 
     # Handle start button
     if start_button and not st.session_state.monitor.is_running:

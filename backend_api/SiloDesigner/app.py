@@ -26,6 +26,7 @@ MONITOR_STATE_KEYS = (
     'simulator',
     'system',
     'seed',
+    'scenario_best_results',   # NEW
 )
 MAX_MONITOR_HISTORY = 100
 

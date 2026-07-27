@@ -212,7 +212,9 @@ def initialize_state(
         "input_channel": input_channel,
         "output_channel": output_channel,
         "trim_values": trim_values,
-        "scenario_start_time": None,  # NEW
+        "scenario_start_time": None,
+        "scenario_best_results": {},  # NEW
+        "scenario_attempts": {},  # NEW
     }
 
 
@@ -794,73 +796,114 @@ def judge_termination(state: Dict) -> Dict:
 def evaluate_scenario_completion(state: Dict) -> Dict:
     """Evaluate whether to move to next scenario or try a different controller."""
     _ensure_running(state)
-    # NEW: Compute wall clock time FIRST before any branching
+
+    # ── Compute wall-clock duration and finalise all KPIs ──────────────────
     end_time = time.time()
     if state.get("scenario_start_time") is not None:
         duration = end_time - state["scenario_start_time"]
+
         if state["buffer"].current_scenario_metrics is not None:
-            state["buffer"].current_scenario_metrics["time"] = duration  # This accumulates wall-clock + prior LLM times
-            log_to_file(f"Scenario {state['scenario_level']} duration: {duration:.2f}s")
+            state["buffer"].current_scenario_metrics['controller_type'] = state.get('controller_type')
+
+        state["buffer"].finalise_scenario_metrics(
+            target_metrics=state.get("target_metrics", {}),
+            wall_clock_duration=duration,
+        )
+        m = state["buffer"].current_scenario_metrics or {}
+        best = state["buffer"].get_best_entries(1)
+        best_stable = best[0]["metrics"].get("stable") if best else None
+        print(
+            f"[KPI DEBUG] scen={state['scenario_level']} "
+            f"inner_completed={state.get('inner_loop_completed')} "
+            f"redesign={state.get('redesign_requested')} "
+            f"m.stable={m.get('stable')} m.score={m.get('score')} "
+            f"best_entry.stable={best_stable} "
+            f"history_len={len(state['buffer'].history)}"
+        )
+        log_to_file(f"Scenario {state['scenario_level']} duration: {duration:.2f}s")
     else:
         log_to_file("Warning: scenario_start_time is None, cannot compute duration")
 
-    # NEW: Propagate to monitor if available
+    # ── Push finalised metrics to the monitor ──────────────────────────────
     if 'monitor' in state and state['monitor'] and state["buffer"].current_scenario_metrics is not None:
-        state['monitor'].add_scenario_metrics(state['scenario_level'], state["buffer"].current_scenario_metrics.copy())
+        state['monitor'].add_scenario_metrics(
+            state['scenario_level'],
+            state["buffer"].current_scenario_metrics.copy(),
+        )
 
+    # ═══════════════════════════════════════════════════════════════════════
+    # NEW: Record this controller attempt before we branch
+    # ═══════════════════════════════════════════════════════════════════════
+    attempt_summary = {
+        'controller_type': state.get('controller_type'),
+        'best_params': state['buffer'].best_params,
+        'best_metrics': dict(state['buffer'].best_metrics),
+        'scenario_metrics': dict(state['buffer'].current_scenario_metrics)
+                            if state['buffer'].current_scenario_metrics else {},
+    }
+    scen = state['scenario_level']
+    state.setdefault('scenario_attempts', {})
+    state['scenario_attempts'].setdefault(scen, [])
+    state['scenario_attempts'][scen].append(attempt_summary)
+    # ═══════════════════════════════════════════════════════════════════════
+
+    # ── Branching logic ────────────────────────────────────────────────────
     if state["inner_loop_completed"]:
-        print(f"âœ… Scenario {state['scenario_level']} completed successfully!")
-        save_scenario_history(state)  # This now has the updated time
+        print(f"✅ Scenario {state['scenario_level']} completed successfully!")
+        save_scenario_history(state)
         state["buffer"].latest_juror_feedback = None
-
-        # Reset the range_reconsider_count for all controllers when moving to next scenario
         state["range_reconsider_count"] = {}
 
-        # Store current scenario level before incrementing
         completed_level = state["scenario_level"]
         state["scenario_level"] += 1
 
-        # Store in history with completed level
+        # NEW: select best among all controllers tried for this scenario
+        _select_best_controller_for_scenario(state, completed_level)
+
         state["all_scenario_history"].append({
-            'scenario_level': completed_level,  # Use the completed level
+            'scenario_level': completed_level,
             'controller_type': state["controller_type"],
             'history': state["buffer"].history.copy(),
-            'scenario_metrics': state["buffer"].current_scenario_metrics.copy() if state[
-                "buffer"].current_scenario_metrics else {}
+            'scenario_metrics': state["buffer"].current_scenario_metrics.copy()
+            if state["buffer"].current_scenario_metrics else {},
         })
 
         if 'update_queue' in state and state['update_queue']:
             state['update_queue'].put(f"Scenario {completed_level} completed successfully!")
 
         if state["scenario_level"] > state["max_scenarios"]:
-            print(f"ðŸŽ‰ All scenarios completed successfully!")
+            print("🎉 All scenarios completed successfully!")
             state["should_continue_outer"] = False
         else:
             state["should_continue_outer"] = True
 
     elif state["redesign_requested"]:
-        print(f"ðŸ”„ Redesign requested for Scenario {state['scenario_level']}")
-        save_scenario_history(state)  # This now has the updated time
+        print(f"🔄 Redesign requested for Scenario {state['scenario_level']}")
+        save_scenario_history(state)
         state["buffer"].latest_juror_feedback = None
         state["current_controller_index"] += 1
 
-        # Check if we've tried all controllers
         if state["current_controller_index"] >= len(state["controllers_list"]):
-            print(f"âš ï¸ All controllers tried for Scenario {state['scenario_level']} without success")
-            print("ðŸ Terminating workflow - no suitable controller found for current scenario.")
+            print(f"⚠️ All controllers tried for Scenario {state['scenario_level']} without success")
+            # NEW: pick the best attempt even though none fully succeeded
+            _select_best_controller_for_scenario(state, state['scenario_level'])
+            print("🏁 Terminating workflow - no suitable controller found for current scenario.")
             state["should_continue_outer"] = False
         else:
-            print(f"â­ï¸ Trying next controller: {state['controllers_list'][state['current_controller_index']]}")
+            print(f"⭐️ Trying next controller: {state['controllers_list'][state['current_controller_index']]}")
             state["should_continue_outer"] = True
             state["scenario_level"] = 1
     else:
         print(
-            f"ðŸ”„ Continuing optimization with current controller: {state['controllers_list'][state['current_controller_index']]} for scenario {state['scenario_level']}")
+            f"🔄 Continuing optimization with current controller: "
+            f"{state['controllers_list'][state['current_controller_index']]} "
+            f"for scenario {state['scenario_level']}"
+        )
 
     # Only reset iteration counter and start time when moving to next controller/scenario
     if state.get("inner_loop_completed", False) or state.get("redesign_requested", False):
         state["iteration"] = 0
-        state["scenario_start_time"] = None  # Clear for next scenario
+        state["scenario_start_time"] = None
 
     return state
 
@@ -905,7 +948,9 @@ class OptimizationState(TypedDict):
     input_channel: int
     output_channel: int
     trim_values: Optional[List[float]]
-    scenario_start_time: Optional[float]  # NEW: For wall clock tracking
+    scenario_start_time: Optional[float]
+    scenario_best_results: Dict  # NEW
+    scenario_attempts: Dict  # NEW
 
 
 # Update the needs_controller_redesign function
@@ -962,7 +1007,9 @@ def create_optimization_graph(max_scenarios=3, max_iter=10):
         update_queue: Optional[queue.Queue]
         max_tries: int
         control_objective: str
-        scenario_start_time: Optional[float]  # NEW: For wall clock tracking
+        scenario_start_time: Optional[float]
+        scenario_best_results: Dict  # NEW
+        scenario_attempts: Dict  # NEW
 
     builder = StateGraph(OptimizationState)
     builder.add_node("suggest_controller", suggest_controller)
@@ -1081,3 +1128,42 @@ def run_optimization(
         generate_scenario_report_json(str(most_recent))  # Pass full path
     else:
         print("No scenario JSON files found; skipping report generation.")
+
+
+
+def _select_best_controller_for_scenario(state: Dict, scenario_level: int) -> None:
+    """Select the best controller attempt for a scenario based on success score.
+
+    Priority:
+    1. Highest score (scenario_metrics['score'])
+    2. Stable response preferred
+    3. Lowest MSE among ties
+    """
+    attempts = state.get('scenario_attempts', {}).get(scenario_level, [])
+    if not attempts:
+        state.setdefault('scenario_best_results', {})[scenario_level] = None
+        return
+
+    def _rank(attempt):
+        sm = attempt.get('scenario_metrics', {})
+        score = sm.get('score', 0.0)
+        stable = 1 if sm.get('stable', False) else 0
+        mse = attempt.get('best_metrics', {}).get('mse', float('inf'))
+        return (-score, -stable, mse)
+
+    best = min(attempts, key=_rank)
+
+    state.setdefault('scenario_best_results', {})[scenario_level] = {
+        'scenario_level': scenario_level,
+        'controller_type': best['controller_type'],
+        'best_params': best['best_params'],
+        'best_metrics': best['best_metrics'],
+        'scenario_metrics': best['scenario_metrics'],
+    }
+
+    print(
+        f"🏆 Best controller for Scenario {scenario_level}: {best['controller_type']} "
+        f"(score={best['scenario_metrics'].get('score', 0):.2%}, "
+        f"stable={best['scenario_metrics'].get('stable', False)}, "
+        f"mse={best['best_metrics'].get('mse', float('inf')):.4f})"
+    )
