@@ -30,7 +30,43 @@ def import_css_styling():
 
 
 def is_json(s):
+    if s is None or not isinstance(s, str):
+        return False
     return is_json_mapping(s)
+
+
+def _render_log_details(agent_tag, log_history):
+    if "Equation" in str(agent_tag):
+        st.code(log_history)
+        return
+    if "Found Block Diagram" in str(agent_tag) and isinstance(log_history, str) and (
+        log_history.startswith("https") or log_history.startswith("http")
+    ):
+        st.image(log_history)
+        st.caption(log_history)
+        return
+    # Image recognition can return None / NONE — always show JSON payload.
+    if "Image Recognition" in str(agent_tag):
+        if log_history is None or (isinstance(log_history, str) and not log_history.strip()):
+            st.json({
+                "flag": "FAILED",
+                "message": "Image recognition result was null or empty",
+                "control_architecture": "NONE",
+                "pid_loops": [],
+            })
+            return
+        if isinstance(log_history, dict):
+            st.json(make_serializable(log_history))
+            return
+        if is_json(log_history):
+            st.json(log_history)
+            return
+    if isinstance(log_history, dict):
+        st.json(make_serializable(log_history))
+    elif is_json(log_history):
+        st.json(log_history)
+    else:
+        st.write(log_history)
 
 
 # =============================================================================
@@ -51,15 +87,7 @@ def render_logs(container, logs):
                         st.markdown(f"**{agent_tag}**")
                     with col2:
                         with st.expander("View Details"):
-                            if "Equation" in agent_tag:
-                                st.code(log_history)
-                            elif "Found Block Diagram" in agent_tag and (log_history.startswith("https") or log_history.startswith("http")):
-                                st.image(log_history)
-                                st.caption(log_history)
-                            elif is_json(log_history):
-                                st.json(log_history)
-                            else:
-                                st.write(log_history)
+                            _render_log_details(agent_tag, log_history)
 
                 if i < len(logs) - 1:
                     st.markdown("<hr style='margin:0.5rem 0;'>", unsafe_allow_html=True)
@@ -76,14 +104,7 @@ def render_single_log(container, log_entry):
                 st.markdown(f"**{agent_tag}**")
             with col2:
                 with st.expander("View Details"):
-                    if agent_tag == "🛠️.Equation":
-                        st.code(log_history)
-                    elif agent_tag == "🖼️.Found Block Diagram" and (agent_tag.startswith("https") or agent_tag.startswith("http")):
-                        st.image(log_history)
-                    elif isinstance(log_history, dict):
-                        st.json(log_history)
-                    else:
-                        st.write(log_history)
+                    _render_log_details(agent_tag, log_history)
 
 
 def show_upload_box(options):

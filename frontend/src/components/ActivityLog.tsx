@@ -107,7 +107,8 @@ export function ActivityLog({ logs }: ActivityLogProps) {
 function parseEntries(logs: Array<Record<string, unknown>>): ParsedLogEntry[] {
   return logs.map((log, index) => {
     const agentTag = typeof log.agent_tag === 'string' ? log.agent_tag : 'System'
-    const content = log.log_history ?? log
+    // Prefer log_history even when null so image-recognition None falls through to the parser.
+    const content = 'log_history' in log ? log.log_history : log
     const agentKind = resolveAgentKind(agentTag)
     const parsed = parseLogContent(content, agentKind)
     const summary = logEntrySummary(parsed, agentKind)

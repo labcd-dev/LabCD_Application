@@ -93,12 +93,30 @@ function normalizeContent(content: unknown): string {
   if (typeof content === 'object' && 'log_history' in (content as Record<string, unknown>)) {
     const nested = (content as Record<string, unknown>).log_history
     if (typeof nested === 'string') return nested
+    if (nested == null) return ''
+    try {
+      return JSON.stringify(nested, null, 2)
+    } catch {
+      return String(nested)
+    }
   }
   try {
     return JSON.stringify(content, null, 2)
   } catch {
     return String(content)
   }
+}
+
+function isNoneOrFailedArchitecture(json: Record<string, unknown>): boolean {
+  const architecture =
+    typeof json.control_architecture === 'string' ? json.control_architecture.toUpperCase() : ''
+  const flag = typeof json.flag === 'string' ? json.flag.toUpperCase() : ''
+  return flag === 'FAILED' || architecture === 'NONE' || architecture === 'FAILED'
+}
+
+function isNullishText(text: string): boolean {
+  const trimmed = text.trim().toLowerCase()
+  return trimmed === '' || trimmed === 'none' || trimmed === 'null'
 }
 
 function stripCodeFences(text: string): string {
@@ -232,10 +250,27 @@ export function parseLogContent(content: unknown, agentKind: AgentKind): ParsedL
     return { kind: 'reasoning', sections: parseReasoningSections(text) }
   }
 
+  // Image recognition sometimes yields null/empty/"NONE" — always surface JSON when possible.
+  if (agentKind === 'image_recognition' && isNullishText(text)) {
+    return {
+      kind: 'json',
+      data: {
+        flag: 'FAILED',
+        message: 'Image recognition result was null or empty',
+        control_architecture: 'NONE',
+        pid_loops: [],
+      },
+    }
+  }
+
   const json = tryParseJson(text)
   if (json) {
     if (agentKind === 'system_analysis' || 'system_properties' in json || 'state_variables' in json) {
       return { kind: 'system_analysis', data: asSystemAnalysis(json) }
+    }
+    // Prefer raw JSON for image recognition and NONE/FAILED architectures.
+    if (agentKind === 'image_recognition' || isNoneOrFailedArchitecture(json)) {
+      return { kind: 'json', data: json }
     }
     if (agentKind === 'control_loop' || 'pid_loops' in json || 'control_architecture' in json) {
       return { kind: 'control_loop', data: asControlLoop(json) }
@@ -248,6 +283,9 @@ export function parseLogContent(content: unknown, agentKind: AgentKind): ParsedL
     if (fallbackJson) {
       if (agentKind === 'system_analysis') {
         return { kind: 'system_analysis', data: asSystemAnalysis(fallbackJson) }
+      }
+      if (isNoneOrFailedArchitecture(fallbackJson)) {
+        return { kind: 'json', data: fallbackJson }
       }
       return { kind: 'control_loop', data: asControlLoop(fallbackJson) }
     }
@@ -268,6 +306,14 @@ export function logEntrySummary(parsed: ParsedLogContent, agentKind: AgentKind):
   if (parsed.kind === 'control_loop' && parsed.data.control_architecture) {
     const loopCount = parsed.data.pid_loops?.length ?? 0
     return `${parsed.data.control_architecture}${loopCount ? ` · ${loopCount} loop${loopCount === 1 ? '' : 's'}` : ''}`
+  }
+  if (parsed.kind === 'json') {
+    const flag = typeof parsed.data.flag === 'string' ? parsed.data.flag : null
+    const architecture =
+      typeof parsed.data.control_architecture === 'string' ? parsed.data.control_architecture : null
+    if (flag) return flag
+    if (architecture) return architecture
+    if (agentKind === 'image_recognition') return 'JSON result'
   }
   if (agentKind === 'equation') return 'Standardized equations'
   return null

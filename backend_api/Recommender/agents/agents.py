@@ -90,6 +90,25 @@ class Agents(metaclass=SingletonMeta):
             "total_cost": updated_cost
         }
 
+    @staticmethod
+    def _extract_responses_text(response) -> str:
+        """Pull text from an OpenAI Responses API result without returning None."""
+        output_text = getattr(response, "output_text", None)
+        if isinstance(output_text, str) and output_text.strip():
+            return output_text
+
+        chunks: list[str] = []
+        for item in getattr(response, "output", None) or []:
+            if getattr(item, "type", None) != "message":
+                continue
+            for part in getattr(item, "content", None) or []:
+                text = getattr(part, "text", None)
+                if text is None and isinstance(part, dict):
+                    text = part.get("text")
+                if text:
+                    chunks.append(str(text))
+        return "".join(chunks)
+
     def _call_llm(self, llm, prompt_text, state: dict, system=False, context_messages=None, is_json=False):
         """Helper to invoke LangChain LLMs and return response text along with updated state metrics."""
         messages = [SystemMessage(content=prompt_text) if system else HumanMessage(content=prompt_text)]
@@ -303,10 +322,7 @@ class Agents(metaclass=SingletonMeta):
 
         metrics_update = self._accumulate_state_metrics(state, input_tokens, output_tokens, model)
 
-        response_content = ""
-        for item in response.output:
-            if item.type == "message":
-                response_content += item.content[0].text
+        response_content = self._extract_responses_text(response)
 
         writer({"agent_tag": "🌐.Web Search Result", "log_history": response_content})
         return {"messages": [response_content], "web_search_result": response_content, **metrics_update}
@@ -338,10 +354,15 @@ class Agents(metaclass=SingletonMeta):
 
         metrics_update = self._accumulate_state_metrics(state, input_tokens, output_tokens, model)
 
-        response_content = ""
-        for item in response.output:
-            if item.type == "message":
-                response_content += item.content[0].text
+        response_content = self._extract_responses_text(response)
+        if not response_content.strip():
+            # Keep downstream routing/UI working when the vision call yields no text.
+            response_content = json.dumps({
+                "flag": "FAILED",
+                "message": "Image recognition returned no usable content",
+                "control_architecture": "NONE",
+                "pid_loops": [],
+            })
 
         writer({"agent_tag": "🤖.Image Recognition Result", "log_history": response_content})
         return {"messages": [response_content], "block_diagram_json": response_content, **metrics_update}

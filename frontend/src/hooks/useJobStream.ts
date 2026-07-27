@@ -62,7 +62,10 @@ export function useJobStream({ module, jobId, enabled = true }: UseJobStreamOpti
 
         if (event.type === 'stream') {
           const content = event.content as Record<string, unknown> | undefined
-          if (content?.log_history) {
+          // Keep agent log entries even when log_history is null/empty (e.g. image recognition).
+          if (typeof content?.agent_tag === 'string') {
+            setLogs((prev) => [...prev, content])
+          } else if (content?.log_history) {
             setLogs((prev) => [...prev, content])
           }
           if (typeof content?.progress === 'number') {

@@ -38,6 +38,24 @@ class Agents(metaclass=SingletonMeta):
         self.prompts = {}
         self._load_all_prompts(prompt_dir)
 
+    @staticmethod
+    def _extract_responses_text(response) -> str:
+        """Pull text from an OpenAI Responses API result without returning None."""
+        output_text = getattr(response, "output_text", None)
+        if isinstance(output_text, str) and output_text.strip():
+            return output_text
+
+        chunks: list[str] = []
+        for item in getattr(response, "output", None) or []:
+            if getattr(item, "type", None) != "message":
+                continue
+            for part in getattr(item, "content", None) or []:
+                text = getattr(part, "text", None)
+                if text is None and isinstance(part, dict):
+                    text = part.get("text")
+                if text:
+                    chunks.append(str(text))
+        return "".join(chunks)
 
     def _load_all_prompts(self, directory):
         """Discovers and loads all .yaml files in the prompt directory."""
@@ -202,10 +220,7 @@ class Agents(metaclass=SingletonMeta):
             print("Output Tokens:", output_tokens)
             print("Total Tokens :", total_tokens)
 
-        response_content = ""
-        for item in response.output:
-            if item.type == "message":
-                response_content += item.content[0].text
+        response_content = self._extract_responses_text(response)
         with open("output.txt", "w", encoding="utf-8") as f:
             f.write(response_content)
         # response_content = clean_json(response_content, False)
@@ -247,10 +262,14 @@ class Agents(metaclass=SingletonMeta):
             print("Output Tokens:", output_tokens)
             print("Total Tokens :", total_tokens)
 
-        response_content = ""
-        for item in response.output:
-            if item.type == "message":
-                response_content += item.content[0].text
+        response_content = self._extract_responses_text(response)
+        if not response_content.strip():
+            response_content = json.dumps({
+                "flag": "FAILED",
+                "message": "Image recognition returned no usable content",
+                "control_architecture": "NONE",
+                "pid_loops": [],
+            })
 
         writer({"agent_tag": "🤖.Image Recognition Result", "log_history": response_content})
         return {"messages": [response_content], "block_diagram_json": response_content}
