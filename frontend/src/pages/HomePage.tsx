@@ -231,7 +231,7 @@ export function HomePage() {
               onChange={pipeline.setPipeline}
             />
 
-            {pipeline.pipeline === 'muloDesign' && (
+            {pipeline.pipeline && (
               <label className={`${fieldLabel} mt-4`}>
                 <span>Design Instructions (Optional)</span>
                 <textarea

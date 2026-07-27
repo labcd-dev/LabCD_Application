@@ -25,7 +25,7 @@ import {
 export function SiloPage() {
   const navigate = useNavigate()
   const pipeline = usePipeline()
-  const [objective, setObjective] = useState('')
+  const [objective, setObjective] = useState(pipeline.userPrompt)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
