@@ -235,18 +235,15 @@ def suggest_controller(state: Dict) -> Dict:
         else:
             print(f"âœ“ Using CUSTOM parameter ranges for {controller_type}: {param_ranges}")
 
-    # PRIORITY 2: Try to get from system's schema (only if PRIORITY 1 didn't set valid ranges)
+    # PRIORITY 2: system schema (only when still None)
     if param_ranges is None and hasattr(state["system"], 'get_control_param_schema'):
         try:
             param_ranges = state["system"].get_control_param_schema(controller_type)
-            # Convert schema format to ranges format
             param_ranges = {k: [v["min"], v["max"]] for k, v in param_ranges.items()}
-            print(f"âœ“ Using SYSTEM parameter ranges for {controller_type}: {param_ranges}")
+            print(f"✓ Using SYSTEM parameter ranges for {controller_type}: {param_ranges}")
         except Exception as e:
-            print(f"âš ï¸ Failed to get system parameter ranges: {e}, using defaults")
+            print(f"⚠️ Failed to get system parameter ranges: {e}, using defaults")
             param_ranges = None
-    else:
-        param_ranges = None  # Already set or skipped
 
     # PRIORITY 3: Fall back to hardcoded defaults (only if still None)
     if param_ranges is None:
@@ -341,18 +338,18 @@ def save_scenario_history(state: Dict) -> None:
 
 
 def design_scenario(state: Dict) -> Dict:
-    _ensure_running(state)
+    """Design/select a scenario for the current scenario level."""
     if state["scenario_level"] > state["max_scenarios"]:
-        print("ðŸ Exceeded maximum number of scenarios. Terminating workflow.")
+        print("🏁 Exceeded maximum number of scenarios. Terminating workflow.")
         return {"should_continue_outer": False, "scenario": None}
 
-    print(f"\n=== ðŸŽ­ DESIGNING SCENARIO LEVEL {state['scenario_level']}/{state['max_scenarios']} ===")
+    print(f"\n=== 🎭 DESIGNING SCENARIO LEVEL {state['scenario_level']}/{state['max_scenarios']} ===")
 
     if state.get("custom_scenarios") is not None:
         if state["scenario_level"] <= len(state.get("custom_scenarios", [])):
             scenario_data = state["custom_scenarios"][state["scenario_level"] - 1]
         else:
-            print(f"âš ï¸ No custom scenario defined for level {state['scenario_level']}. Terminating workflow.")
+            print(f"⚠️ No custom scenario defined for level {state['scenario_level']}. Terminating workflow.")
             return {"should_continue_outer": False, "scenario": None}
     else:
         if state["scenario_level"] == 1:
@@ -383,7 +380,7 @@ def design_scenario(state: Dict) -> Dict:
                 "reasoning": "Addition of uncertainty and disturbance"
             }
         else:
-            print(f"âš ï¸ No default scenario defined for level {state['scenario_level']}. Terminating workflow.")
+            print(f"⚠️ No default scenario defined for level {state['scenario_level']}. Terminating workflow.")
             return {"should_continue_outer": False, "scenario": None}
 
     state["simulator"].set_scenario(scenario_data)
@@ -394,19 +391,30 @@ def design_scenario(state: Dict) -> Dict:
         'tokens_in': 0,
         'tokens_out': 0,
         'time': 0.0,
-        'cost': 0.0
+        'cost': 0.0,
+        'api_failures': 0,
+        'stable': False,
+        'score': 0.0,
+        'cost_per_success': None,
+        'controller_latency_s': 0.0,
+        'controller_type': state.get('controller_type'),
     }
-    state["scenario_start_time"] = time.time()  # Make sure this is called
 
-    log_to_file(f"Scenario {state['scenario_level']} started at {datetime.fromtimestamp(state['scenario_start_time'])}")
+    scenario_start_time = time.time()  # local var
+    state["scenario_start_time"] = scenario_start_time  # keep for any in-process readers
 
+    log_to_file(
+        f"Scenario {state['scenario_level']} started at "
+        f"{datetime.fromtimestamp(scenario_start_time)}"
+    )
     log_to_file(f"\n=== SCENARIO LEVEL {state['scenario_level']} ===\n{json.dumps(scenario_data, indent=2)}")
     print(f"Scenario {scenario_data['id']}: IC Range {scenario_data['initial_condition_range']}")
 
     return {
         "scenario": scenario_data,
         "inner_loop_completed": False,
-        "should_continue_outer": True
+        "should_continue_outer": True,
+        "scenario_start_time": scenario_start_time,  # ← CRITICAL: must be returned
     }
 
 

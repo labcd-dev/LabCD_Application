@@ -267,6 +267,9 @@ class LLMBaseAgent:
             # OpenAI models
             "gpt-4o": {"in": 3.0, "out": 10.0},
             "gpt-4o-mini": {"in": 0.15, "out": 0.60},
+            "gpt-5.4-mini": {"in": 0.75, "out": 4.5},
+            "gpt-5.5": {"in": 5.0, "out": 30.0},
+            "gpt-5.4": {"in": 2.5, "out": 15.0},
 
             # Groq Llama variants
             "llama3.1-8b": {"in": 0.05, "out": 0.08},

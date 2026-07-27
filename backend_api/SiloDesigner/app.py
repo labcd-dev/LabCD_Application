@@ -130,6 +130,7 @@ class DesignMonitor:
         self.is_running = False
         self.scenario_metrics_history = []
         self.revision = 0
+        self.last_completed = None  # NEW
 
     def _bump_revision(self) -> None:
         self.revision += 1
@@ -176,13 +177,19 @@ class DesignMonitor:
     def add_scenario_metrics(self, scenario_level: int, metrics: Dict):
         """NEW: Add per-scenario computational metrics to history"""
         timestamp = datetime.now().strftime("%H:%M:%S")
-        self.scenario_metrics_history.append({
+        entry = {
             'scenario_level': scenario_level,
             'timestamp': timestamp,
-            'metrics': metrics  # {'tokens_in': int, 'tokens_out': int, 'time': float (wall-clock + LLM), 'cost': float}
-        })
-        self.add_progress(f"ðŸ“Š Scenario {scenario_level} profiling: {metrics['tokens_in']} in, {metrics['tokens_out']} out, {metrics['time']:.1f}s, ${metrics['cost']:.4f}")
-
+            'metrics': metrics,
+        }
+        self.scenario_metrics_history.append(entry)
+        self.last_completed = entry         # NEW
+        self.add_progress(
+            f"📊 Scenario {scenario_level} profiling: "
+            f"{metrics['tokens_in']} in, {metrics['tokens_out']} out, "
+            f"{metrics['time']:.1f}s, ${metrics['cost']:.4f}"
+        )
+        self._bump_revision()
 
 def process_objective(user_input: str) -> str:
     """Process user objective with LLM to refine it."""
