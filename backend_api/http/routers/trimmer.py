@@ -8,7 +8,11 @@ from backend_api.db.models import User
 from backend_api.db.session import get_db
 from backend_api.http.dependencies import assert_job_access, assert_model_allowed, require_action
 from backend_api.http.schemas.common import JobResponse
-from backend_api.http.schemas.trimmer import TrimmerInputRequest, TrimmerStartRequest
+from backend_api.http.schemas.trimmer import (
+    TrimmerInputRequest,
+    TrimmerPdfRequest,
+    TrimmerStartRequest,
+)
 from backend_api.http.services import project_service
 from backend_api.http.services.events import sse_response
 from backend_api.http.services.job_store import job_store
@@ -43,6 +47,7 @@ def start_trimmer(
         request.trimming_params,
         user_id=user.id,
         project_id=request.project_id,
+        recommender_job_id=request.recommender_job_id,
     )
     job = job_store.get(job_id)
     return JobResponse(job_id=job_id, module=job.module, status=job.status.value)
@@ -110,12 +115,13 @@ def trimmer_time_response(
 @router.post("/{job_id}/pdf")
 def trimmer_pdf(
     job_id: str,
+    request: TrimmerPdfRequest = TrimmerPdfRequest(),
     user: User = Depends(require_action("module:trimmer")),
 ) -> dict:
     try:
         job = job_store.get(job_id)
         assert_job_access(job, user)
-        return generate_trimmer_pdf(job_id)
+        return generate_trimmer_pdf(job_id, recommender_job_id=request.recommender_job_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Job not found") from exc
     except ValueError as exc:

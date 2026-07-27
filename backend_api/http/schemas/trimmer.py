@@ -12,6 +12,11 @@ class TrimmerStartRequest(BaseModel):
     trimming_params: Dict[str, Any] = Field(default_factory=dict)
     states_inputs: List[str] = Field(default_factory=list)
     project_id: Optional[int] = None
+    recommender_job_id: Optional[str] = None
+
+
+class TrimmerPdfRequest(BaseModel):
+    recommender_job_id: Optional[str] = None
 
 
 class TrimmerInputRequest(BaseModel):

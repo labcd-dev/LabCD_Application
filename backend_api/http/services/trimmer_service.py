@@ -167,6 +167,7 @@ def start_trimmer_job(
     trimming_params: Dict[str, Any],
     user_id: int | None = None,
     project_id: int | None = None,
+    recommender_job_id: str | None = None,
 ) -> str:
     logger = _create_logger(file_name)
     initial_state = build_trimmer_initial_state(
@@ -177,18 +178,21 @@ def start_trimmer_job(
         # React API uses the same ui_inputs / HumanInputRequired path as Streamlit.
         ui_mode="streamlit",
     )
+    metadata: Dict[str, Any] = {
+        "file_name": file_name,
+        "file_content": file_content,
+        "model": model,
+        "trimming_params": trimming_params,
+        "graph": build_workflow_graph(model),
+        "initial_state": initial_state,
+        "ui_inputs": {},
+        "logs": [],
+    }
+    if recommender_job_id:
+        metadata["recommender_job_id"] = recommender_job_id
     job = job_store.create(
         "trimmer",
-        metadata={
-            "file_name": file_name,
-            "file_content": file_content,
-            "model": model,
-            "trimming_params": trimming_params,
-            "graph": build_workflow_graph(model),
-            "initial_state": initial_state,
-            "ui_inputs": {},
-            "logs": [],
-        },
+        metadata=metadata,
         user_id=user_id,
     )
     linked_project_id = link_or_create_for_job(
@@ -326,10 +330,99 @@ def generate_trimmer_time_response(job_id: str) -> Dict[str, Any]:
     }
 
 
-def generate_trimmer_pdf(job_id: str) -> Dict[str, Any]:
+def _discover_controller_graphs(file_name: str, results_dir) -> Dict[str, str]:
+    """Find controller architecture PNGs saved by the Recommender graph node."""
+    from pathlib import Path
+
+    graphs: Dict[str, str] = {}
+    results_path = Path(results_dir)
+    if not results_path.is_dir():
+        return graphs
+
+    prefix = f"{file_name}_controller_graph_"
+    for path in results_path.iterdir():
+        if not path.is_file():
+            continue
+        if not path.name.startswith(prefix) or path.suffix.lower() != ".png":
+            continue
+        process = path.stem[len(prefix) :]
+        graphs[f"{process}_controller"] = str(path)
+    return graphs
+
+
+def _resolve_pdf_recommender_context(
+    job: Any,
+    file_name: str,
+    output_dir: str,
+    recommender_job_id: str | None = None,
+) -> Dict[str, Any]:
+    """Load controller graphs / JSON / system ID from Recommender (Streamlit parity)."""
+    import json
+
+    controller_graph: Dict[str, str] = {}
+    controller_json: Dict[str, Any] | None = None
+    system_identification: Any = None
+
+    resolved_id = recommender_job_id or job.metadata.get("recommender_job_id")
+    if resolved_id:
+        try:
+            from backend_api.http.services.recommender_service import get_recommender_state
+
+            state = get_recommender_state(resolved_id)
+            raw_graphs = state.get("controller_graph") or {}
+            if isinstance(raw_graphs, dict):
+                controller_graph = {
+                    str(title): str(path)
+                    for title, path in raw_graphs.items()
+                    if path
+                }
+            raw_json = state.get("controller_json")
+            if isinstance(raw_json, dict):
+                controller_json = raw_json
+            system_identification = state.get("system_identification")
+            if isinstance(system_identification, str):
+                try:
+                    system_identification = json.loads(system_identification)
+                except json.JSONDecodeError:
+                    pass
+        except Exception as exc:
+            logging.getLogger(__name__).warning(
+                "Could not load recommender state for PDF (%s): %s",
+                resolved_id,
+                exc,
+            )
+
+    if not controller_graph:
+        # Prefer the original upload name used by Recommender when saving PNGs.
+        for candidate_name in (
+            job.metadata.get("file_name"),
+            file_name,
+        ):
+            if not candidate_name:
+                continue
+            controller_graph = _discover_controller_graphs(str(candidate_name), output_dir)
+            if controller_graph:
+                break
+            if str(RESULTS_DIR) != output_dir:
+                controller_graph = _discover_controller_graphs(str(candidate_name), RESULTS_DIR)
+                if controller_graph:
+                    break
+
+    return {
+        "controller_graph": controller_graph,
+        "controller_json": controller_json,
+        "system_identification": system_identification,
+    }
+
+
+def generate_trimmer_pdf(
+    job_id: str,
+    recommender_job_id: str | None = None,
+) -> Dict[str, Any]:
     """Generate an academic PDF report for a completed trimmer job."""
     import os
 
+    from backend_api.Trimmer.agenticNodes.agents import Agents
     from backend_api.Trimmer.pdf_generator import generate_pdf_report
 
     job = job_store.get(job_id)
@@ -364,13 +457,36 @@ def generate_trimmer_pdf(job_id: str) -> Dict[str, Any]:
             (result.get("system") or {}).get("name") or file_name
         )
 
+    # Match Streamlit: include Recommender architecture schematics + LLM narratives
+    # so sections 7 (Cascaded Control Architecture) and 8 (Concluding Remarks) appear.
+    rec_ctx = _resolve_pdf_recommender_context(
+        job,
+        file_name,
+        output_dir,
+        recommender_job_id=recommender_job_id,
+    )
+    if recommender_job_id:
+        job.metadata["recommender_job_id"] = recommender_job_id
+
+    narratives: Dict[str, Any] = {}
+    try:
+        narratives_agent = Agents(model_name=job.metadata.get("model") or "gpt-oss-120b")
+        narratives = narratives_agent.generate_narratives(
+            serializable_result,
+            serializable_config,
+            rec_ctx.get("system_identification"),
+            rec_ctx.get("controller_json"),
+        ) or {}
+    except Exception as exc:
+        logging.getLogger(__name__).warning("PDF narrative generation failed: %s", exc)
+
     generate_pdf_report(
         serializable_result,
         serializable_config,
-        {},
+        rec_ctx.get("controller_graph") or {},
         response_graph,
         pdf_path,
-        {},
+        narratives,
     )
 
     artifacts = dict(artifacts)

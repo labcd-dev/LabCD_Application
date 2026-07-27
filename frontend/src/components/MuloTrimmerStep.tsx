@@ -114,6 +114,7 @@ export function MuloTrimmerStep({ onComplete }: MuloTrimmerStepProps) {
         trimming_params: trimmingParams,
         states_inputs: pipeline.statesInputs,
         project_id: pipeline.projectId,
+        recommender_job_id: pipeline.recommenderJobId,
       })
       pipeline.setTrimmerJobId(job.job_id)
       pipeline.setTrimmingParams(trimmingParams)
@@ -195,7 +196,9 @@ export function MuloTrimmerStep({ onComplete }: MuloTrimmerStepProps) {
     setPdfLoading(true)
     setPdfError(null)
     try {
-      const res = await trimmerApi.generatePdf(jobId)
+      const res = await trimmerApi.generatePdf(jobId, {
+        recommender_job_id: pipeline.recommenderJobId,
+      })
       setPdfFilename(res.filename)
       window.open(jobsApi.downloadArtifact(jobId, res.filename), '_blank', 'noopener,noreferrer')
       onComplete()

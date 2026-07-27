@@ -448,6 +448,7 @@ export const trimmerApi = {
     trimming_params?: Record<string, unknown>
     states_inputs?: string[]
     project_id?: number | null
+    recommender_job_id?: string | null
   }) =>
     apiFetch<JobResponse>('/trimmer/start', {
       method: 'POST',
@@ -468,9 +469,10 @@ export const trimmerApi = {
       method: 'POST',
     }),
 
-  generatePdf: (jobId: string) =>
+  generatePdf: (jobId: string, body?: { recommender_job_id?: string | null }) =>
     apiFetch<{ filename: string; message: string }>(`/trimmer/${jobId}/pdf`, {
       method: 'POST',
+      body: JSON.stringify(body ?? {}),
     }),
 }
 
