@@ -170,21 +170,21 @@ def create_advanced_settings(llm_model = None):
     st.subheader("Design Parameters")
     col1, col2 = st.columns(2)
     with col1:
-        max_scenarios = st.slider("Max Scenarios", 1, 5, 2, key="adv_scenarios")
+        max_scenarios = st.slider("Max Scenarios", 1, 5, 1, key="adv_scenarios")  # was 2
         seed = st.number_input("Random Seed", 1, 10000, 42, key="adv_seed")
     with col2:
-        max_iter = st.slider("Max Iterations", 5, 30, 20, key="adv_iter")
-        max_tries = st.slider("Max Tries for Juror", 0, 10, 0, key="adv_tries")
+        max_iter = st.slider("Max Iterations", 5, 30, 10, key="adv_iter")  # was 20
+        max_tries = st.slider("Max Tries for Juror", 0, 10, 1, key="adv_tries")  # was 0
 
     # Target metrics
     st.subheader("Target Performance")
     col1, col2, col3 = st.columns(3)
     with col1:
-        target_mse = st.number_input("Target MSE", 0.01, 1.0, 0.15, format="%.3f", key="adv_mse")
+        target_mse = st.number_input("Target MSE", 0.01, 1.0, 0.25, format="%.3f", key="adv_mse")  # was 0.15
     with col2:
-        target_settling = st.number_input("Settling Time (s)", 0.5, 10.0, 3.5, key="adv_settling")
+        target_settling = st.number_input("Settling Time (s)", 0.5, 10.0, 5.0, key="adv_settling")  # was 3.5
     with col3:
-        target_overshoot = st.number_input("Overshoot (%)", 0.0, 50.0, 0.0, key="adv_overshoot")
+        target_overshoot = st.number_input("Overshoot (%)", 0.0, 50.0, 20.0, key="adv_overshoot")  # was 0.0
 
     # Simulation params
     st.subheader("Simulation Parameters")
@@ -194,7 +194,8 @@ def create_advanced_settings(llm_model = None):
         target = st.number_input("Target Setpoint", -100.0, 100.0, 0.0, format="%.2f", key="adv_target")
         input_channel = st.number_input("Input Channel", 0, 10, 0, step=1, key="adv_input_ch")
     with col2:
-        max_time = st.number_input("Max Simulation Time (s)", 0.1, 100.0, 5.0, format="%.1f", key="adv_max_time")
+        max_time = st.number_input("Max Simulation Time (s)", 0.1, 100.0, 20.0, format="%.1f",
+                                   key="adv_max_time")  # was 5.0
         num_inputs = st.number_input("Number of Inputs", 1, 10, 1, step=1, key="adv_num_inputs")
         output_channel = st.number_input("Output Channel", 0, 10, 0, step=1, key="adv_output_ch")
 
