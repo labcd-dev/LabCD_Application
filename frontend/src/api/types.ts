@@ -134,6 +134,8 @@ export interface AuthUser {
   created_at: string
   profile_survey_completed?: boolean
   feedback_survey_completed?: boolean
+  feedback_survey_completed_silo?: boolean
+  feedback_survey_completed_mulo?: boolean
   tutorial_dont_show_again?: boolean
 }
 
@@ -147,6 +149,7 @@ export interface UserProfileSurveyDetail {
 }
 
 export interface UserFeedbackSurveyDetail {
+  pipeline_type: FeedbackPipelineType
   satisfaction: number
   ease_of_use: number
   product_value: number
@@ -161,13 +164,14 @@ export interface AdminUserDetail {
   user: AuthUser
   allowed_models: string[]
   profile_survey: UserProfileSurveyDetail | null
-  feedback_survey: UserFeedbackSurveyDetail | null
+  feedback_surveys: UserFeedbackSurveyDetail[]
   projects: ProjectSummary[]
   errors: ErrorEvent[]
 }
 
 export type ExperienceLevel = 'None' | 'Beginner' | 'Intermediate' | 'Advanced'
 export type DegreeLevel = "Bachelor's" | "Master's" | 'PhD' | 'Other'
+export type FeedbackPipelineType = 'siloDesign' | 'muloDesign'
 export type MajorField =
   | 'Electrical Engineering'
   | 'Mechanical Engineering'
@@ -194,6 +198,8 @@ export interface SurveyStatus {
   enabled: boolean
   needs_profile_survey: boolean
   feedback_completed: boolean
+  feedback_completed_silo: boolean
+  feedback_completed_mulo: boolean
   show_tutorial: boolean
   videos: TutorialVideo[]
 }
@@ -207,6 +213,7 @@ export interface ProfileSurveyRequest {
 }
 
 export interface FeedbackSurveyRequest {
+  pipeline_type: FeedbackPipelineType
   satisfaction: number
   ease_of_use: number
   product_value: number
@@ -230,6 +237,7 @@ export interface ProfileSurveyResponseRow {
 export interface FeedbackSurveyResponseRow {
   user_id: number
   email: string
+  pipeline_type: FeedbackPipelineType
   satisfaction: number
   ease_of_use: number
   product_value: number

@@ -107,6 +107,7 @@ def _migrate_schema() -> None:
     _migrate_plan_allowed_models()
     _migrate_bug_reports()
     _migrate_project_llm_model()
+    _migrate_feedback_survey_pipeline()
 
 
 def _migrate_bug_reports() -> None:
@@ -162,6 +163,44 @@ def _migrate_project_llm_model() -> None:
             text(
                 "ALTER TABLE projects ADD COLUMN llm_model VARCHAR(100) "
                 "NOT NULL DEFAULT 'gpt-4o'"
+            )
+        )
+
+
+def _migrate_feedback_survey_pipeline() -> None:
+    """Allow one feedback survey per pipeline (SILO and MULO) instead of one per user."""
+    from sqlalchemy import inspect
+
+    inspector = inspect(engine)
+    if "feedback_survey_responses" not in inspector.get_table_names():
+        return
+
+    columns = {col["name"] for col in inspector.get_columns("feedback_survey_responses")}
+    with engine.begin() as conn:
+        if "pipeline_type" not in columns:
+            conn.execute(
+                text(
+                    "ALTER TABLE feedback_survey_responses "
+                    "ADD COLUMN pipeline_type VARCHAR(40) NOT NULL DEFAULT 'siloDesign'"
+                )
+            )
+        conn.execute(
+            text(
+                "ALTER TABLE feedback_survey_responses "
+                "DROP CONSTRAINT IF EXISTS uq_feedback_survey_user"
+            )
+        )
+        conn.execute(
+            text(
+                "ALTER TABLE feedback_survey_responses "
+                "DROP CONSTRAINT IF EXISTS uq_feedback_survey_user_pipeline"
+            )
+        )
+        conn.execute(
+            text(
+                "ALTER TABLE feedback_survey_responses "
+                "ADD CONSTRAINT uq_feedback_survey_user_pipeline "
+                "UNIQUE (user_id, pipeline_type)"
             )
         )
 

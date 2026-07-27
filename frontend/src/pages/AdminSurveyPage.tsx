@@ -337,6 +337,7 @@ export function AdminSurveyPage() {
               <thead>
                 <tr className="border-b border-border text-muted-text">
                   <th className="px-2 py-2 font-medium">User</th>
+                  <th className="px-2 py-2 font-medium">Design</th>
                   <th className="px-2 py-2 font-medium">Sat.</th>
                   <th className="px-2 py-2 font-medium">Ease</th>
                   <th className="px-2 py-2 font-medium">Value</th>
@@ -349,8 +350,14 @@ export function AdminSurveyPage() {
               </thead>
               <tbody>
                 {feedbackRows.map((row) => (
-                  <tr key={`${row.user_id}-${row.created_at}`} className="border-b border-border-subtle">
+                  <tr
+                    key={`${row.user_id}-${row.pipeline_type}-${row.created_at}`}
+                    className="border-b border-border-subtle"
+                  >
                     <td className="px-2 py-2 text-foreground">{row.email}</td>
+                    <td className="px-2 py-2">
+                      {row.pipeline_type === 'muloDesign' ? 'Multi Loop' : 'Single Loop'}
+                    </td>
                     <td className="px-2 py-2">{row.satisfaction}</td>
                     <td className="px-2 py-2">{row.ease_of_use}</td>
                     <td className="px-2 py-2">{row.product_value}</td>

@@ -31,6 +31,14 @@ from backend_api.http.services.profile_service import user_out
 router = APIRouter(tags=["survey"])
 
 
+def _feedback_status_fields(user: User) -> dict:
+    return {
+        "feedback_completed": survey_service.feedback_completed(user),
+        "feedback_completed_silo": survey_service.feedback_completed_silo(user),
+        "feedback_completed_mulo": survey_service.feedback_completed_mulo(user),
+    }
+
+
 @router.get("/survey/status", response_model=SurveyStatusResponse)
 def get_survey_status(
     user: User = Depends(get_current_user),
@@ -41,9 +49,9 @@ def get_survey_status(
     return SurveyStatusResponse(
         enabled=enabled,
         needs_profile_survey=survey_service.needs_profile_survey(db, user),
-        feedback_completed=survey_service.feedback_completed(user),
         show_tutorial=survey_service.should_show_tutorial(user, videos),
         videos=[TutorialVideoOut.model_validate(v) for v in videos],
+        **_feedback_status_fields(user),
     )
 
 
@@ -70,6 +78,7 @@ def submit_feedback_survey(
     return FeedbackSurveyResponseOut(
         user_id=user.id,
         email=user.email,
+        pipeline_type=row.pipeline_type,  # type: ignore[arg-type]
         satisfaction=row.satisfaction,
         ease_of_use=row.ease_of_use,
         product_value=row.product_value,
@@ -93,9 +102,9 @@ def dismiss_tutorial(
     return SurveyStatusResponse(
         enabled=survey_service.is_survey_enabled(db),
         needs_profile_survey=survey_service.needs_profile_survey(db, user),
-        feedback_completed=survey_service.feedback_completed(user),
         show_tutorial=survey_service.should_show_tutorial(user, videos),
         videos=[TutorialVideoOut.model_validate(v) for v in videos],
+        **_feedback_status_fields(user),
     )
 
 
@@ -141,6 +150,7 @@ def list_survey_responses(
             FeedbackSurveyResponseOut(
                 user_id=u.id,
                 email=u.email,
+                pipeline_type=row.pipeline_type,  # type: ignore[arg-type]
                 satisfaction=row.satisfaction,
                 ease_of_use=row.ease_of_use,
                 product_value=row.product_value,

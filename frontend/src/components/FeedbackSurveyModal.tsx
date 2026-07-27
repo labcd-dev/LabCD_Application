@@ -1,7 +1,9 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
+import type { FeedbackPipelineType } from '../api/types'
 import { surveyApi } from '../api/endpoints'
 import { StatusMessage } from './StatusMessage'
 import { btnBase, btnPrimary, btnWide, fieldInput, fieldLabel } from '../lib/classes'
+import { pipelineLabel } from '../lib/projectLabels'
 
 const LIKERT_FIELDS = [
   { key: 'satisfaction', label: 'Satisfaction' },
@@ -16,12 +18,14 @@ type LikertKey = (typeof LIKERT_FIELDS)[number]['key']
 
 interface FeedbackSurveyModalProps {
   open: boolean
+  pipelineType: FeedbackPipelineType
   onSubmitted: () => void | Promise<void>
   onDismiss: () => void
 }
 
 export function FeedbackSurveyModal({
   open,
+  pipelineType,
   onSubmitted,
   onDismiss,
 }: FeedbackSurveyModalProps) {
@@ -30,7 +34,17 @@ export function FeedbackSurveyModal({
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
+  useEffect(() => {
+    if (!open) return
+    setRatings({})
+    setMainProblems('')
+    setError(null)
+    setSaving(false)
+  }, [open, pipelineType])
+
   if (!open) return null
+
+  const designLabel = pipelineLabel(pipelineType)
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()
@@ -44,6 +58,7 @@ export function FeedbackSurveyModal({
     setError(null)
     try {
       await surveyApi.submitFeedback({
+        pipeline_type: pipelineType,
         satisfaction: ratings.satisfaction!,
         ease_of_use: ratings.ease_of_use!,
         product_value: ratings.product_value!,
@@ -75,11 +90,11 @@ export function FeedbackSurveyModal({
         aria-labelledby="feedback-survey-title"
       >
         <h2 id="feedback-survey-title" className="m-0 text-xl font-semibold text-foreground">
-          How was your experience?
+          How was your {designLabel} experience?
         </h2>
         <p className="mt-2 text-sm text-muted-text">
           Rate each item from 1 (low) to 5 (high). You can skip for now; we will ask again after
-          your next successful design run.
+          your next successful {designLabel} design.
         </p>
 
         <form className="mt-5" onSubmit={(e) => void handleSubmit(e)}>

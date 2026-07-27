@@ -15,10 +15,11 @@ def get_user_detail(db: Session, user_id: int) -> dict | None:
     if user is None:
         return None
 
-    feedback = (
+    feedback_rows = (
         db.query(FeedbackSurveyResponse)
         .filter(FeedbackSurveyResponse.user_id == user_id)
-        .first()
+        .order_by(FeedbackSurveyResponse.created_at.asc())
+        .all()
     )
     projects = project_service.list_all_projects(db, user_id=user_id)
     errors = error_tracking_service.list_errors(db, user_id=user_id, limit=200)
@@ -34,24 +35,26 @@ def get_user_detail(db: Session, user_id: int) -> dict | None:
             "completed_at": user.profile_survey_completed_at,
         }
 
-    feedback_survey = None
-    if feedback is not None:
-        feedback_survey = {
-            "satisfaction": feedback.satisfaction,
-            "ease_of_use": feedback.ease_of_use,
-            "product_value": feedback.product_value,
-            "confidence": feedback.confidence,
-            "reuse_intention": feedback.reuse_intention,
-            "willingness_to_pay": feedback.willingness_to_pay,
-            "main_problems": feedback.main_problems,
-            "created_at": feedback.created_at,
+    feedback_surveys = [
+        {
+            "pipeline_type": row.pipeline_type,
+            "satisfaction": row.satisfaction,
+            "ease_of_use": row.ease_of_use,
+            "product_value": row.product_value,
+            "confidence": row.confidence,
+            "reuse_intention": row.reuse_intention,
+            "willingness_to_pay": row.willingness_to_pay,
+            "main_problems": row.main_problems,
+            "created_at": row.created_at,
         }
+        for row in feedback_rows
+    ]
 
     return {
         "user": user_out(user),
         "allowed_models": user.model_ids(),
         "profile_survey": profile_survey,
-        "feedback_survey": feedback_survey,
+        "feedback_surveys": feedback_surveys,
         "projects": [
             project_service.project_to_summary(project, include_owner=False)
             for project in projects

@@ -72,7 +72,9 @@ export function MuloLiveRunPanel({
       setDesignerState(state)
       setPhase('complete')
       onAwaitingContinueChange?.(Boolean(!state.is_complete))
-      void onDesignSuccess?.()
+      if (state.is_complete) {
+        void onDesignSuccess?.()
+      }
       onTerminal?.()
     },
     [onDesignSuccess, onTerminal, onAwaitingContinueChange],

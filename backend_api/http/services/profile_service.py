@@ -25,6 +25,9 @@ VALID_THEMES = {"light", "dark", "system"}
 
 def user_out(user: User) -> UserOut:
     theme = user.theme if user.theme in VALID_THEMES else "system"
+    pipelines = {row.pipeline_type for row in (user.feedback_surveys or [])}
+    silo_done = "siloDesign" in pipelines
+    mulo_done = "muloDesign" in pipelines
     return UserOut(
         id=user.id,
         email=user.email,
@@ -38,7 +41,9 @@ def user_out(user: User) -> UserOut:
         actions=user.action_codes(),
         created_at=user.created_at,
         profile_survey_completed=user.profile_survey_completed_at is not None,
-        feedback_survey_completed=user.feedback_survey_completed_at is not None,
+        feedback_survey_completed=silo_done and mulo_done,
+        feedback_survey_completed_silo=silo_done,
+        feedback_survey_completed_mulo=mulo_done,
         tutorial_dont_show_again=bool(user.tutorial_dont_show_again),
     )
 

@@ -124,12 +124,11 @@ class User(Base):
         cascade="all, delete-orphan",
         lazy="noload",
     )
-    feedback_survey: Mapped[FeedbackSurveyResponse | None] = relationship(
+    feedback_surveys: Mapped[list[FeedbackSurveyResponse]] = relationship(
         "FeedbackSurveyResponse",
         back_populates="user",
-        uselist=False,
         cascade="all, delete-orphan",
-        lazy="noload",
+        lazy="selectin",
     )
     bug_reports: Mapped[list["BugReport"]] = relationship(
         "BugReport",
@@ -248,14 +247,25 @@ class Project(Base):
 
 
 class FeedbackSurveyResponse(Base):
-    """One-time post-use feedback survey answers for a user."""
+    """Post-use feedback survey answers — one per user per pipeline (SILO / MULO)."""
 
     __tablename__ = "feedback_survey_responses"
-    __table_args__ = (UniqueConstraint("user_id", name="uq_feedback_survey_user"),)
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "pipeline_type",
+            name="uq_feedback_survey_user_pipeline",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    pipeline_type: Mapped[str] = mapped_column(
+        String(40),
         nullable=False,
         index=True,
     )
@@ -272,7 +282,7 @@ class FeedbackSurveyResponse(Base):
         nullable=False,
     )
 
-    user: Mapped[User] = relationship("User", back_populates="feedback_survey")
+    user: Mapped[User] = relationship("User", back_populates="feedback_surveys")
 
 
 class TutorialVideo(Base):

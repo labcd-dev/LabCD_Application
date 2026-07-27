@@ -60,6 +60,7 @@ PROFILE_SURVEY_CSV_FIELDS = [
 FEEDBACK_SURVEY_CSV_FIELDS = [
     "user_id",
     "email",
+    "pipeline_type",
     "satisfaction",
     "ease_of_use",
     "product_value",
@@ -150,6 +151,7 @@ def _feedback_survey_csv_row(
     return {
         "user_id": user.id,
         "email": user.email,
+        "pipeline_type": response.pipeline_type,
         "satisfaction": response.satisfaction,
         "ease_of_use": response.ease_of_use,
         "product_value": response.product_value,

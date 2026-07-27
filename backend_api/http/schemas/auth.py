@@ -84,6 +84,8 @@ class UserOut(BaseModel):
     created_at: datetime
     profile_survey_completed: bool = False
     feedback_survey_completed: bool = False
+    feedback_survey_completed_silo: bool = False
+    feedback_survey_completed_mulo: bool = False
     tutorial_dont_show_again: bool = False
 
     model_config = {"from_attributes": True}
@@ -125,6 +127,7 @@ class UserProfileSurveyOut(BaseModel):
 
 
 class UserFeedbackSurveyOut(BaseModel):
+    pipeline_type: str
     satisfaction: int
     ease_of_use: int
     product_value: int
@@ -139,7 +142,7 @@ class AdminUserDetailOut(BaseModel):
     user: UserOut
     allowed_models: list[str]
     profile_survey: UserProfileSurveyOut | None = None
-    feedback_survey: UserFeedbackSurveyOut | None = None
+    feedback_surveys: list[UserFeedbackSurveyOut] = []
     projects: list["ProjectSummary"]
     errors: list["ErrorEventOut"]
 

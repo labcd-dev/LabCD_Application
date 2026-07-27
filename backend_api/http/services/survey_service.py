@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from backend_api.db.models import FeedbackSurveyResponse, TutorialVideo, User
 from backend_api.http.config import API_PREFIX, UPLOADS_DIR
 from backend_api.http.schemas.survey import (
+    FeedbackPipelineType,
     FeedbackSurveyRequest,
     ProfileSurveyRequest,
     SurveySettings,
@@ -27,6 +28,8 @@ ALLOWED_VIDEO_TYPES = {
     "video/quicktime": ".mov",
 }
 MAX_VIDEO_BYTES = 100 * 1024 * 1024
+
+FEEDBACK_PIPELINES: tuple[FeedbackPipelineType, ...] = ("siloDesign", "muloDesign")
 
 
 def is_survey_enabled(db: Session) -> bool:
@@ -54,8 +57,26 @@ def needs_profile_survey(db: Session, user: User) -> bool:
     return user.profile_survey_completed_at is None
 
 
+def feedback_pipelines_completed(user: User) -> set[str]:
+    return {row.pipeline_type for row in (user.feedback_surveys or [])}
+
+
+def feedback_completed_silo(user: User) -> bool:
+    return "siloDesign" in feedback_pipelines_completed(user)
+
+
+def feedback_completed_mulo(user: User) -> bool:
+    return "muloDesign" in feedback_pipelines_completed(user)
+
+
 def feedback_completed(user: User) -> bool:
-    return user.feedback_survey_completed_at is not None
+    """True when both SILO and MULO feedback surveys are submitted."""
+    completed = feedback_pipelines_completed(user)
+    return all(pipeline in completed for pipeline in FEEDBACK_PIPELINES)
+
+
+def feedback_completed_for(user: User, pipeline_type: str) -> bool:
+    return pipeline_type in feedback_pipelines_completed(user)
 
 
 def list_videos(db: Session) -> list[TutorialVideo]:
@@ -87,20 +108,23 @@ def submit_profile(db: Session, user: User, request: ProfileSurveyRequest) -> Us
 
 
 def submit_feedback(db: Session, user: User, request: FeedbackSurveyRequest) -> FeedbackSurveyResponse:
-    if user.feedback_survey_completed_at is not None:
-        raise ValueError("Feedback survey already submitted")
-
+    pipeline_type = request.pipeline_type
     existing = (
         db.query(FeedbackSurveyResponse)
-        .filter(FeedbackSurveyResponse.user_id == user.id)
+        .filter(
+            FeedbackSurveyResponse.user_id == user.id,
+            FeedbackSurveyResponse.pipeline_type == pipeline_type,
+        )
         .first()
     )
     if existing is not None:
-        raise ValueError("Feedback survey already submitted")
+        label = "Single Loop" if pipeline_type == "siloDesign" else "Multi Loop"
+        raise ValueError(f"{label} feedback survey already submitted")
 
     now = datetime.now(timezone.utc)
     row = FeedbackSurveyResponse(
         user_id=user.id,
+        pipeline_type=pipeline_type,
         satisfaction=request.satisfaction,
         ease_of_use=request.ease_of_use,
         product_value=request.product_value,
@@ -115,6 +139,7 @@ def submit_feedback(db: Session, user: User, request: FeedbackSurveyRequest) -> 
     db.add(user)
     db.commit()
     db.refresh(row)
+    db.refresh(user)
     return row
 
 

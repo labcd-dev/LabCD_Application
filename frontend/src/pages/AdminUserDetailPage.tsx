@@ -66,7 +66,7 @@ export function AdminUserDetailPage() {
     )
   }
 
-  const { user, profile_survey, feedback_survey, projects, errors, allowed_models } = detail
+  const { user, profile_survey, feedback_surveys, projects, errors, allowed_models } = detail
 
   return (
     <div className="admin-fade-in space-y-6">
@@ -169,8 +169,13 @@ export function AdminUserDetailPage() {
             value={user.profile_survey_completed ? 'Completed' : 'Not completed'}
           />
           <DetailRow
-            label="Feedback survey"
-            value={user.feedback_survey_completed ? 'Completed' : 'Not completed'}
+            label="Feedback surveys"
+            value={
+              [
+                user.feedback_survey_completed_silo ? 'Single Loop ✓' : 'Single Loop —',
+                user.feedback_survey_completed_mulo ? 'Multi Loop ✓' : 'Multi Loop —',
+              ].join(' · ')
+            }
           />
           <DetailRow
             label="Tutorial"
@@ -199,32 +204,41 @@ export function AdminUserDetailPage() {
       </div>
 
       <div className={cardPanel}>
-        <h2 className="m-0 mb-4 text-lg font-semibold text-foreground">Feedback survey</h2>
-        {!feedback_survey ? (
+        <h2 className="m-0 mb-4 text-lg font-semibold text-foreground">Feedback surveys</h2>
+        {feedback_surveys.length === 0 ? (
           <p className="m-0 text-sm text-muted-text">This user has not submitted feedback yet.</p>
         ) : (
-          <dl className="space-y-3">
-            <DetailRow label="Satisfaction" value={`${feedback_survey.satisfaction} / 5`} />
-            <DetailRow label="Ease of use" value={`${feedback_survey.ease_of_use} / 5`} />
-            <DetailRow label="Product value" value={`${feedback_survey.product_value} / 5`} />
-            <DetailRow label="Confidence" value={`${feedback_survey.confidence} / 5`} />
-            <DetailRow label="Reuse intention" value={`${feedback_survey.reuse_intention} / 5`} />
-            <DetailRow
-              label="Willingness to pay"
-              value={`${feedback_survey.willingness_to_pay} / 5`}
-            />
-            <DetailRow
-              label="Main problems"
-              value={
-                feedback_survey.main_problems.trim() ? (
-                  <span className="whitespace-pre-wrap">{feedback_survey.main_problems}</span>
-                ) : (
-                  '—'
-                )
-              }
-            />
-            <DetailRow label="Submitted" value={formatWhen(feedback_survey.created_at)} />
-          </dl>
+          <div className="space-y-6">
+            {feedback_surveys.map((feedback_survey) => (
+              <div key={`${feedback_survey.pipeline_type}-${feedback_survey.created_at}`}>
+                <h3 className="m-0 mb-3 text-base font-semibold text-foreground">
+                  {pipelineLabel(feedback_survey.pipeline_type)}
+                </h3>
+                <dl className="space-y-3">
+                  <DetailRow label="Satisfaction" value={`${feedback_survey.satisfaction} / 5`} />
+                  <DetailRow label="Ease of use" value={`${feedback_survey.ease_of_use} / 5`} />
+                  <DetailRow label="Product value" value={`${feedback_survey.product_value} / 5`} />
+                  <DetailRow label="Confidence" value={`${feedback_survey.confidence} / 5`} />
+                  <DetailRow label="Reuse intention" value={`${feedback_survey.reuse_intention} / 5`} />
+                  <DetailRow
+                    label="Willingness to pay"
+                    value={`${feedback_survey.willingness_to_pay} / 5`}
+                  />
+                  <DetailRow
+                    label="Main problems"
+                    value={
+                      feedback_survey.main_problems.trim() ? (
+                        <span className="whitespace-pre-wrap">{feedback_survey.main_problems}</span>
+                      ) : (
+                        '—'
+                      )
+                    }
+                  />
+                  <DetailRow label="Submitted" value={formatWhen(feedback_survey.created_at)} />
+                </dl>
+              </div>
+            ))}
+          </div>
         )}
       </div>
 

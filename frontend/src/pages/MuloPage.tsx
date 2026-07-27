@@ -122,7 +122,7 @@ export function MuloPage() {
 
   const handleComingSoonDismiss = () => {
     setComingSoonOpen(false)
-    void promptAfterDesignSuccess()
+    void promptAfterDesignSuccess('muloDesign')
   }
 
   return (

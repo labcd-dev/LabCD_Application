@@ -20,6 +20,7 @@ MajorField = Literal[
     "Other",
 ]
 TutorialDismissAction = Literal["remind_later", "dont_show_again"]
+FeedbackPipelineType = Literal["siloDesign", "muloDesign"]
 
 
 class SurveySettings(BaseModel):
@@ -49,6 +50,8 @@ class SurveyStatusResponse(BaseModel):
     enabled: bool
     needs_profile_survey: bool
     feedback_completed: bool
+    feedback_completed_silo: bool = False
+    feedback_completed_mulo: bool = False
     show_tutorial: bool
     videos: list[TutorialVideoOut]
 
@@ -62,6 +65,7 @@ class ProfileSurveyRequest(BaseModel):
 
 
 class FeedbackSurveyRequest(BaseModel):
+    pipeline_type: FeedbackPipelineType
     satisfaction: int = Field(ge=1, le=5)
     ease_of_use: int = Field(ge=1, le=5)
     product_value: int = Field(ge=1, le=5)
@@ -89,6 +93,7 @@ class ProfileSurveyResponseOut(BaseModel):
 class FeedbackSurveyResponseOut(BaseModel):
     user_id: int
     email: str
+    pipeline_type: FeedbackPipelineType
     satisfaction: int
     ease_of_use: int
     product_value: int

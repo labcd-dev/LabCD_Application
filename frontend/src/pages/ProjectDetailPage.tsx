@@ -134,7 +134,10 @@ export function ProjectDetailPage() {
     const prev = prevStatusRef.current
     prevStatusRef.current = project.status
     if (prev === 'running' && project.status === 'completed') {
-      void promptAfterDesignSuccess()
+      if (project.pipeline_type === 'siloDesign') {
+        void promptAfterDesignSuccess('siloDesign')
+      }
+      // Multi-loop prompts from MuloLiveRunPanel only when all cascades finish.
     }
   }, [project, promptAfterDesignSuccess])
 
@@ -296,7 +299,7 @@ export function ProjectDetailPage() {
             <SiloLiveRunPanel
               jobId={liveJobId}
               onTerminal={handleRunTerminal}
-              onDesignSuccess={promptAfterDesignSuccess}
+              onDesignSuccess={() => void promptAfterDesignSuccess('siloDesign')}
             />
           )}
           {showMuloLive && liveJobId && (
@@ -304,7 +307,7 @@ export function ProjectDetailPage() {
               jobId={liveJobId}
               onTerminal={handleRunTerminal}
               onAwaitingContinueChange={handleAwaitingContinue}
-              onDesignSuccess={promptAfterDesignSuccess}
+              onDesignSuccess={() => void promptAfterDesignSuccess('muloDesign')}
             />
           )}
         </div>
