@@ -168,6 +168,9 @@ def start_silo_job(
         custom_dynamics_path=config.get("custom_dynamics_path"),
         file_type=config.get("file_type", "Python (.py)"),
     )
+    # Uploaded dynamics are always Python after conversion; never persist as matlab for silo runs.
+    if runtime_config.get("file_content"):
+        runtime_config["file_type"] = "Python (.py)"
     file_name = config.get("file_name")
     if isinstance(file_name, str) and file_name.strip():
         runtime_config["file_name"] = file_name.strip()
@@ -186,7 +189,7 @@ def start_silo_job(
         pipeline_type="siloDesign",
         job_id=job.id,
         file_name=_file_name_from_config(config),
-        file_type=_file_type_label(str(config.get("file_type", "python"))),
+        file_type="python" if runtime_config.get("file_content") else _file_type_label(str(config.get("file_type", "python"))),
         file_content=str(config.get("file_content") or ""),
         control_objective=control_objective or None,
         title=control_objective or None,

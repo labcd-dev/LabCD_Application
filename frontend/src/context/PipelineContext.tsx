@@ -74,7 +74,14 @@ export function PipelineProvider({ children }: { children: ReactNode }) {
       setUserPrompt: (userPrompt) => setState((prev) => ({ ...prev, userPrompt })),
       setProjectId: (projectId) => setState((prev) => ({ ...prev, projectId })),
       setRegularizeResult: (fileContent, changeApplied, humanIntervention) =>
-        setState((prev) => ({ ...prev, fileContent, changeApplied, humanIntervention })),
+        setState((prev) => ({
+          ...prev,
+          fileContent,
+          // Regularizer always outputs Python (MATLAB is converted).
+          fileType: 'python',
+          changeApplied,
+          humanIntervention,
+        })),
       setRecommenderJobId: (recommenderJobId) =>
         setState((prev) => ({ ...prev, recommenderJobId })),
       setTrimmerJobId: (trimmerJobId) => setState((prev) => ({ ...prev, trimmerJobId })),

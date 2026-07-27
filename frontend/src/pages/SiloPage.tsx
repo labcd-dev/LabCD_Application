@@ -50,7 +50,8 @@ export function SiloPage() {
         llm_model: pipeline.model,
         file_content: pipeline.fileContent,
         file_name: pipeline.fileName,
-        file_type: pipeline.fileType === 'matlab' ? 'MATLAB/Octave (.m)' : 'Python (.py)',
+        // Uploaded files are always run as Python after regularization.
+        file_type: 'Python (.py)',
       })
 
       const job = await siloApi.start({

@@ -408,7 +408,8 @@ def run_ga_optimization(config, ga_results_container):
             trim_values=config.get('trim_values'),
             min_ctrl=config.get('min_ctrl', -10.0),
             max_ctrl=config.get('max_ctrl', 10.0),
-            seed=config['seed']
+            seed=config['seed'],
+            file_content=config.get('file_content'),
         )
 
         # Run optimization

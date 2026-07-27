@@ -89,6 +89,10 @@ def build_design_config(
     """Build the Silo Designer runtime config from collected UI values."""
     selected_base_config = base_config or deepcopy(DEFAULT_DESIGN_CONFIG)
 
+    # Uploaded dynamics are always executed as Python (MATLAB is converted upstream).
+    if file_content:
+        file_type = "Python (.py)"
+
     config = {
         **selected_base_config,
         "run_id": 1,

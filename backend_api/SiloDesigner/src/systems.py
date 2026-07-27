@@ -2251,6 +2251,10 @@ def create_system(system_name: str, scenario=None, custom_dynamics_path: Optiona
                   file_content: Optional[str] = None):
     """Factory function to create appropriate system"""
     if system_name == "custom" and (custom_dynamics_path or file_content is not None):
+        # When file_content is provided the regularizer has already converted MATLAB to Python.
+        # Always treat inline content as Python regardless of the original file_type label.
+        if file_content:
+            return CustomDynamicalSystem(custom_dynamics_path, scenario, num_inputs, file_content)
         if file_type == "MATLAB/Octave (.m)":
             if not OCTAVE_AVAILABLE:
                 raise ImportError(

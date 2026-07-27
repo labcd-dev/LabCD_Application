@@ -17,6 +17,8 @@ def fix_code(code, model="meta/llama-4-maverick-17b-128e-instruct", file_type="p
     if file_type == "matlab":
         code = matlab_to_numpy(code)
         change_applied = True
+        # After conversion the content is Python; treat it as such for all subsequent steps.
+        file_type = "python"
 
     results = {"status": "FAIL"}
     fixed_code = code

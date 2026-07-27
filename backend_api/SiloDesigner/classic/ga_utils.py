@@ -40,7 +40,8 @@ class GAOptimizer:
             trim_values: Optional[List[float]] = None,
             min_ctrl: float = -10.0,
             max_ctrl: float = 10.0,
-            seed: int = 42
+            seed: int = 42,
+            file_content: Optional[str] = None,
     ):
         self.system_name = system_name
         self.controller_type = controller_type
@@ -57,6 +58,7 @@ class GAOptimizer:
 
         # System configuration
         self.custom_dynamics_path = custom_dynamics_path
+        self.file_content = file_content
         self.file_type = file_type
         self.matlab_func_name = matlab_func_name
         self.num_states_input = num_states
@@ -101,7 +103,8 @@ class GAOptimizer:
             file_type=self.file_type,
             matlab_func_name=self.matlab_func_name,
             num_states=self.num_states_input,
-            num_inputs=self.num_inputs
+            num_inputs=self.num_inputs,
+            file_content=self.file_content,
         )
 
         # Configure system parameters
@@ -119,27 +122,30 @@ class GAOptimizer:
 
     def _setup_simulator(self) -> SimulationRunner:
         """Setup the simulation runner"""
-        if self.system_name == "custom" and self.custom_dynamics_path:
-            if self.file_type == "MATLAB/Octave (.m)":
+        if self.system_name == "custom" and (self.custom_dynamics_path or self.file_content):
+            # Uploaded content is always Python after regularization — never use Octave.
+            if self.file_content or self.file_type != "MATLAB/Octave (.m)":
+                def custom_factory(scenario=None):
+                    return CustomDynamicalSystem(
+                        self.custom_dynamics_path,
+                        scenario,
+                        self.num_inputs,
+                        file_content=self.file_content,
+                    )
+
+                simulator = SimulationRunner(custom_factory)
+            else:
                 def octave_factory(scenario=None):
                     return OctaveSISOSystem(
                         self.custom_dynamics_path,
                         self.matlab_func_name,
                         self.num_states,
                         scenario,
-                        self.num_inputs
+                        self.num_inputs,
+                        file_content=self.file_content,
                     )
 
                 simulator = SimulationRunner(octave_factory)
-            else:
-                def custom_factory(scenario=None):
-                    return CustomDynamicalSystem(
-                        self.custom_dynamics_path,
-                        scenario,
-                        self.num_inputs
-                    )
-
-                simulator = SimulationRunner(custom_factory)
         elif self.system_name == "inverted_pendulum":
             simulator = SimulationRunner(InvertedPendulum)
         else:

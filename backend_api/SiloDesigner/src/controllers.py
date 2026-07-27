@@ -82,10 +82,17 @@ def initialize_state(
             raise ValueError(f"trim_values length ({len(trim_values)}) must match num_inputs ({num_inputs})")
         system.trim_values = np.array(trim_values)
 
-    # Create simulator with appropriate system class
+    # Create simulator with appropriate system class.
+    # Uploaded content is always Python after regularization — never route it through Octave.
     if system_name == "custom" and (custom_dynamics_path or file_content is not None):
-        if file_type == "MATLAB/Octave (.m)":
-            # Local factory function to capture num_inputs and other params
+        if file_content or file_type != "MATLAB/Octave (.m)":
+            def custom_factory(scenario=None):
+                return CustomDynamicalSystem(
+                    custom_dynamics_path, scenario, num_inputs, file_content=file_content
+                )
+
+            simulator = SimulationRunner(custom_factory)
+        else:
             def octave_factory(scenario=None):
                 return OctaveSISOSystem(
                     custom_dynamics_path,
@@ -93,17 +100,10 @@ def initialize_state(
                     num_states if num_states else system.num_states,
                     scenario,
                     num_inputs,
-                    file_content=file_content  # <--- ADD THIS
+                    file_content=file_content,
                 )
 
             simulator = SimulationRunner(octave_factory)
-        else:  # Python file
-            # Local factory function to capture num_inputs
-            def custom_factory(scenario=None):
-                # <--- ADD file_content=file_content BELOW
-                return CustomDynamicalSystem(custom_dynamics_path, scenario, num_inputs, file_content=file_content)
-
-            simulator = SimulationRunner(custom_factory)
     elif system_name == "inverted_pendulum":
         simulator = SimulationRunner(InvertedPendulum)
     elif system_name == "dc_motor":

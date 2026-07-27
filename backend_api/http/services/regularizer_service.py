@@ -16,7 +16,8 @@ def run_regularize(file_content: str, file_name: str, file_type: str, model: str
         "change_applied": change_applied,
         "human_intervention": human_intervention,
         "file_name": file_name,
-        "file_type": file_type,
+        # Output is always Python after regularization (MATLAB is converted during fix_code).
+        "file_type": "python",
     }
 
 
