@@ -79,7 +79,7 @@ if st.session_state.get("page", "home") == "home" and st.session_state.global_st
                 # --- NEW: User Prompt Input ---
                 user_prompt = st.text_area(
                     "📝 Design Instructions (Optional)",
-                    placeholder="e.g., Prioritize PID tuning algorithms, explore cascaded loops, or define MIMO architectures..."
+                    placeholder="e.g., Minimize settling time, explore cascaded loops, or define MIMO architectures..."
                 )
 
                 st.markdown('<div id="blue_btn"></div>', unsafe_allow_html=True)

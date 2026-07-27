@@ -11,8 +11,6 @@ import {
   btnPrimary,
   btnBase,
   btnWide,
-  fieldInput,
-  fieldLabel,
   pageIntro,
   pageSection,
 } from '../lib/classes'
@@ -25,7 +23,6 @@ import {
 export function SiloPage() {
   const navigate = useNavigate()
   const pipeline = usePipeline()
-  const [objective, setObjective] = useState(pipeline.userPrompt)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
@@ -56,7 +53,7 @@ export function SiloPage() {
 
       const job = await siloApi.start({
         config,
-        control_objective: objective,
+        control_objective: pipeline.userPrompt,
         project_id: pipeline.projectId,
       })
       pipeline.setSiloJobId(job.job_id)
@@ -74,8 +71,8 @@ export function SiloPage() {
         <div>
           <h2 className="mt-0 text-xl text-foreground sm:text-2xl">Single Loop Control Designer</h2>
           <p className={pageIntro}>
-            Describe your control objective and start the SiloDesigner pipeline. Live progress
-            opens on the project page.
+            Uses the Design Instructions from Studio as the control objective. Start the
+            SiloDesigner pipeline; live progress opens on the project page.
           </p>
         </div>
         <button type="button" className={`${btnBase} max-sm:w-full`} onClick={() => navigate('/studio')}>
@@ -85,17 +82,6 @@ export function SiloPage() {
       </div>
 
       {error && <StatusMessage type="error" message={error} />}
-
-      <label className={fieldLabel}>
-        <span>Control Objective</span>
-        <textarea
-          className={fieldInput}
-          value={objective}
-          onChange={(e) => setObjective(e.target.value)}
-          rows={4}
-          placeholder="Describe what you want the controller to achieve..."
-        />
-      </label>
 
       <button type="button" className={btnLink} onClick={() => setShowAdvanced((v) => !v)}>
         {showAdvanced ? 'Hide' : 'Show'} Advanced Settings
