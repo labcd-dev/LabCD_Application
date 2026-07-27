@@ -170,21 +170,21 @@ def create_advanced_settings(llm_model = None):
     st.subheader("Design Parameters")
     col1, col2 = st.columns(2)
     with col1:
-        max_scenarios = st.slider("Max Scenarios", 1, 5, 2, key="adv_scenarios")
+        max_scenarios = st.slider("Max Scenarios", 1, 5, 1, key="adv_scenarios")  # was 2
         seed = st.number_input("Random Seed", 1, 10000, 42, key="adv_seed")
     with col2:
-        max_iter = st.slider("Max Iterations", 5, 30, 20, key="adv_iter")
-        max_tries = st.slider("Max Tries for Juror", 0, 10, 0, key="adv_tries")
+        max_iter = st.slider("Max Iterations", 5, 30, 10, key="adv_iter")  # was 20
+        max_tries = st.slider("Max Tries for Juror", 0, 10, 1, key="adv_tries")  # was 0
 
     # Target metrics
     st.subheader("Target Performance")
     col1, col2, col3 = st.columns(3)
     with col1:
-        target_mse = st.number_input("Target MSE", 0.01, 1.0, 0.15, format="%.3f", key="adv_mse")
+        target_mse = st.number_input("Target MSE", 0.01, 1.0, 0.25, format="%.3f", key="adv_mse")  # was 0.15
     with col2:
-        target_settling = st.number_input("Settling Time (s)", 0.5, 10.0, 3.5, key="adv_settling")
+        target_settling = st.number_input("Settling Time (s)", 0.5, 10.0, 5.0, key="adv_settling")  # was 3.5
     with col3:
-        target_overshoot = st.number_input("Overshoot (%)", 0.0, 50.0, 0.0, key="adv_overshoot")
+        target_overshoot = st.number_input("Overshoot (%)", 0.0, 50.0, 20.0, key="adv_overshoot")  # was 0.0
 
     # Simulation params
     st.subheader("Simulation Parameters")
@@ -194,7 +194,8 @@ def create_advanced_settings(llm_model = None):
         target = st.number_input("Target Setpoint", -100.0, 100.0, 0.0, format="%.2f", key="adv_target")
         input_channel = st.number_input("Input Channel", 0, 10, 0, step=1, key="adv_input_ch")
     with col2:
-        max_time = st.number_input("Max Simulation Time (s)", 0.1, 100.0, 5.0, format="%.1f", key="adv_max_time")
+        max_time = st.number_input("Max Simulation Time (s)", 0.1, 100.0, 20.0, format="%.1f",
+                                   key="adv_max_time")  # was 5.0
         num_inputs = st.number_input("Number of Inputs", 1, 10, 1, step=1, key="adv_num_inputs")
         output_channel = st.number_input("Output Channel", 0, 10, 0, step=1, key="adv_output_ch")
 
@@ -1101,95 +1102,184 @@ def display_llm_responses():
 
 def display_current_metrics():
     """Display current design metrics"""
-    if st.session_state.monitor.current_state:
-        state = st.session_state.monitor.current_state
 
-        col1, col2, col3, col4 = st.columns(4)
+    if not st.session_state.monitor.current_state:
+        st.info("No active design session. Start a run to see metrics.")
+        return
 
+    monitor = st.session_state.monitor
+    state = monitor.current_state
+
+    # -- Best-controller teaser (NEW) ---------------------------------------
+    best_results = (
+        monitor.current_state.get("scenario_best_results", {})
+        if monitor.current_state else {}
+    )
+    if not best_results and monitor.state_history:
+        best_results = monitor.state_history[-1]["state"].get("scenario_best_results", {})
+
+    if best_results and not monitor.is_running:
+        st.success(
+            "🏆 Design complete! See the **Best Controllers** tab for "
+            "export-ready parameters."
+        )
+
+    # -- Live / last-completed status row ------------------------------------
+    col1, col2, col3, col4 = st.columns(4)
+
+    last = getattr(monitor, "last_completed", None)
+    if last and not monitor.is_running:
+        # Design finished — show the scenario that just completed
         with col1:
-            st.metric("Iteration", state.get('iteration', 0))
-
+            st.metric("Last Scenario", last["scenario_level"])
         with col2:
-            st.metric("Scenario Level", state.get('scenario_level', 0))
-
+            st.metric("Status", "Completed")
         with col3:
-            # Fixed: Better handling of controller type
-            controller_type = state.get('controller_type', None)
+            ctrl = last["metrics"].get("controller_type") or state.get("controller_type") or "—"
+            st.metric("Controller", ctrl)
+        with col4:
+            mse = (state.get("results") or {}).get("metrics", {}).get("mse", float("inf"))
+            st.metric("Final MSE", f"{mse:.4f}" if mse != float("inf") else "∞")
+    else:
+        # Still running — show live counters
+        with col1:
+            st.metric("Iteration", state.get("iteration", 0))
+        with col2:
+            st.metric("Scenario Level", state.get("scenario_level", 0))
+        with col3:
+            controller_type = state.get("controller_type")
             if controller_type:
                 current_controller = controller_type
             else:
-                controller_idx = state.get('current_controller_index', 0)
-                controllers = state.get('controllers_list', [])
-                current_controller = controllers[controller_idx] if controllers and controller_idx < len(
-                    controllers) else 'Unknown'
+                idx = state.get("current_controller_index", 0)
+                controllers = state.get("controllers_list", [])
+                current_controller = (
+                    controllers[idx] if controllers and idx < len(controllers) else "Unknown"
+                )
             st.metric("Current Controller", current_controller)
-
         with col4:
-            if state.get('results') and state['results'].get('metrics'):
-                mse = state['results']['metrics'].get('mse', float('inf'))
-                if mse != float('inf'):
-                    st.metric("Current MSE", f"{mse:.4f}")
-                else:
-                    st.metric("Current MSE", "∞")
+            if state.get("results") and state["results"].get("metrics"):
+                mse = state["results"]["metrics"].get("mse", float("inf"))
+                st.metric("Current MSE", f"{mse:.4f}" if mse != float("inf") else "∞")
 
-        # NEW: Simulation parameters display (unchanged)
-        st.divider()
-        st.subheader("Simulation Configuration")
+    # -- Simulation Configuration ------------------------------------
+    st.divider()
+    st.subheader("Simulation Configuration")
 
-        # FIXED: Get min_ctrl and max_ctrl from saved_config if not in state
-        saved_config = st.session_state.get('saved_config', {})
-        min_ctrl = state.get('min_ctrl', saved_config.get('min_ctrl', -10.0))
-        max_ctrl = state.get('max_ctrl', saved_config.get('max_ctrl', 10.0))
+    saved_config = st.session_state.get('saved_config', {})
+    min_ctrl = state.get('min_ctrl', saved_config.get('min_ctrl', -10.0))
+    max_ctrl = state.get('max_ctrl', saved_config.get('max_ctrl', 10.0))
 
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Sample Time (dt)", f"{state.get('dt', 0.01):.3f} s")
-            st.metric("Target Setpoint", f"{state.get('target', 0.0):.2f}")
-            st.metric("Min Control", f"{min_ctrl:.2f}")  # FIXED
-        with col2:
-            st.metric("Max Time", f"{state.get('max_time', 5.0):.1f} s")
-            st.metric("Input Channel", state.get('input_channel', 0))
-            st.metric("Max Control", f"{max_ctrl:.2f}")  # FIXED
-        with col3:
-            st.metric("Number of Inputs", state.get('num_inputs', 1))
-            st.metric("Output Channel", state.get('output_channel', 0))
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Sample Time (dt)", f"{state.get('dt', 0.01):.3f} s")
+        st.metric("Target Setpoint", f"{state.get('target', 0.0):.2f}")
+        st.metric("Min Control", f"{min_ctrl:.2f}")
+    with col2:
+        st.metric("Max Time", f"{state.get('max_time', 5.0):.1f} s")
+        st.metric("Input Channel", state.get('input_channel', 0))
+        st.metric("Max Control", f"{max_ctrl:.2f}")
+    with col3:
+        st.metric("Number of Inputs", state.get('num_inputs', 1))
+        st.metric("Output Channel", state.get('output_channel', 0))
 
-        # NEW: Computational Profiling Section
-        st.divider()
-        st.subheader("🖥️ Computational Profiling")
-        monitor = st.session_state.monitor
-        if monitor.scenario_metrics_history:
-            # Cumulative totals
-            total_tokens_in = sum(m['metrics']['tokens_in'] for m in monitor.scenario_metrics_history)
-            total_tokens_out = sum(m['metrics']['tokens_out'] for m in monitor.scenario_metrics_history)
-            total_time = sum(m['metrics']['time'] for m in monitor.scenario_metrics_history)
-            total_cost = sum(m['metrics']['cost'] for m in monitor.scenario_metrics_history)
+    # -- Computational Profiling ------------------------------------
+    st.divider()
+    st.subheader("🖥️ Computational Profiling")
 
-            col_cum1, col_cum2, col_cum3, col_cum4 = st.columns(4)
-            with col_cum1:
-                st.metric("Total Tokens In", total_tokens_in)
-            with col_cum2:
-                st.metric("Total Tokens Out", total_tokens_out)
-            with col_cum3:
-                st.metric("Total Time", f"{total_time:.1f}s")
-            with col_cum4:
-                st.metric("Total Cost", f"${total_cost:.4f}")
+    monitor = st.session_state.monitor
+    history = monitor.scenario_metrics_history  # list[{scenario_level, timestamp, metrics}]
 
-            # Per-scenario table
-            st.subheader("Per-Scenario Breakdown")
-            scenario_data = []
-            for entry in monitor.scenario_metrics_history:
-                m = entry['metrics']
-                scenario_data.append({
-                    'Level': entry['scenario_level'],
-                    'Tokens In': m['tokens_in'],
-                    'Tokens Out': m['tokens_out'],
-                    'Time (s)': f"{m['time']:.1f}",
-                    'Cost ($)': f"${m['cost']:.4f}"
-                })
-            st.table(scenario_data)
+    if not history:
+        st.info("No profiling data yet. Run a scenario to see metrics.")
+        return
+
+    # --- Cumulative totals (session level) --------------------------------
+    total_tokens_in = sum(e['metrics']['tokens_in'] for e in history)
+    total_tokens_out = sum(e['metrics']['tokens_out'] for e in history)
+    total_time = sum(e['metrics']['time'] for e in history)
+    total_cost = sum(e['metrics']['cost'] for e in history)
+    # NEW aggregates
+    total_api_fails = sum(e['metrics'].get('api_failures', 0) for e in history)
+    total_latency = sum(e['metrics'].get('controller_latency_s', 0) for e in history)
+    n_successful = sum(1 for e in history if e['metrics'].get('stable', False))
+    n_total = len(history)
+    # Cost only for successful designs (None entries are unsuccessful)
+    successful_costs = [
+        e['metrics'].get('cost_per_success')
+        for e in history
+        if e['metrics'].get('cost_per_success') is not None
+    ]
+    avg_cost_per_success = sum(successful_costs) / len(successful_costs) if successful_costs else None
+
+    # Session-level KPI banner
+    col_s1, col_s2, col_s3, col_s4 = st.columns(4)
+    with col_s1:
+        st.metric("Scenarios Completed", f"{n_successful} / {n_total}")
+    with col_s2:
+        session_score = (
+            sum(e['metrics'].get('score', 0.0) for e in history) / n_total
+            if n_total else 0.0
+        )
+        st.metric("Avg Success Score", f"{session_score * 100:.0f}%")
+    with col_s3:
+        st.metric("Total API Failures", total_api_fails)
+    with col_s4:
+        if avg_cost_per_success is not None:
+            st.metric("Avg Cost / Success", f"${avg_cost_per_success:.4f}")
         else:
-            st.info("No profiling data yet. Run a scenario to see metrics.")
+            st.metric("Avg Cost / Success", "—")
+
+    col_c1, col_c2, col_c3, col_c4 = st.columns(4)
+    with col_c1:
+        st.metric("Total Tokens In", total_tokens_in)
+    with col_c2:
+        st.metric("Total Tokens Out", total_tokens_out)
+    with col_c3:
+        st.metric("Total Wall-Clock Time", f"{total_time:.1f}s")
+    with col_c4:
+        st.metric("Total Cost", f"${total_cost:.4f}")
+
+    # --- Per-scenario DevOps KPI table ------------------------------------
+    st.subheader("📊 Per-Scenario DevOps KPIs")
+
+    kpi_rows = []
+    for entry in history:
+        m = entry['metrics']
+        stable = m.get('stable', False)
+        score = m.get('score', 0.0)
+        cps = m.get('cost_per_success')
+        latency = m.get('controller_latency_s', m.get('time', 0.0))
+        ctrl_type = m.get('controller_type', '—')
+        api_fails = m.get('api_failures', 0)
+
+        kpi_rows.append({
+            'Level': entry['scenario_level'],
+            'Controller': ctrl_type if ctrl_type else '—',
+            'Stable': '✅ Yes' if stable else '❌ No',
+            'Score': f"{score * 100:.0f}%",
+            'Latency (s)': f"{latency:.1f}",
+            'API Fails': api_fails,
+            '$/Success': f"${cps:.4f}" if cps is not None else '—',
+        })
+
+    st.table(kpi_rows)
+
+    # --- Per-scenario token / cost table (kept for backward-compat) -------
+    st.subheader("🔢 Per-Scenario Token & Cost Breakdown")
+
+    token_rows = []
+    for entry in history:
+        m = entry['metrics']
+        token_rows.append({
+            'Level': entry['scenario_level'],
+            'Tokens In': m['tokens_in'],
+            'Tokens Out': m['tokens_out'],
+            'Time (s)': f"{m['time']:.1f}",
+            'Cost ($)': f"${m['cost']:.4f}",
+        })
+
+    st.table(token_rows)
 
 
 def display_gains_plot():
@@ -1372,3 +1462,92 @@ def display_ga_results():
         if st.session_state.ga_results.get('traceback'):
             with st.expander("Show Traceback"):
                 st.code(st.session_state.ga_results['traceback'])
+
+
+def display_best_controller_report():
+    """Display the best controller selected for each scenario and provide an export placeholder."""
+    import json
+
+    st.subheader("🏆 Best Controllers per Scenario")
+
+    monitor = st.session_state.monitor
+    best_results = {}
+
+    # Pull from live current_state or the last state_history snapshot
+    if monitor.current_state:
+        best_results = monitor.current_state.get("scenario_best_results", {})
+    if not best_results and monitor.state_history:
+        best_results = monitor.state_history[-1]["state"].get("scenario_best_results", {})
+
+    if not best_results:
+        st.info("No best-controller data available yet. Run a design to completion to see results.")
+        return
+
+    # Render one card per scenario
+    for scen_level in sorted(
+        best_results.keys(),
+        key=lambda x: int(x) if isinstance(x, str) else x
+    ):
+        best = best_results[scen_level]
+        if best is None:
+            st.warning(f"**Scenario {scen_level}** — No valid controller found.")
+            continue
+
+        controller_type = best.get("controller_type", "N/A")
+        best_params   = best.get("best_params", {}) or {}
+        best_metrics  = best.get("best_metrics", {}) or {}
+        scen_metrics  = best.get("scenario_metrics", {}) or {}
+
+        # Clean gains (drop reasoning / None)
+        gains = {
+            k: v for k, v in best_params.items()
+            if k != "reasoning" and v is not None
+        }
+
+        with st.container():
+            col_left, col_right = st.columns([3, 1])
+
+            with col_left:
+                st.markdown(
+                    f"**Scenario {scen_level}** — Controller: `{controller_type}`"
+                )
+                st.caption(
+                    f"Success Score: **{scen_metrics.get('score', 0):.2%}**  |  "
+                    f"Stable: {'✅ Yes' if scen_metrics.get('stable') else '❌ No'}  |  "
+                    f"Best MSE: {best_metrics.get('mse', float('inf')):.4f}"
+                )
+
+                if gains:
+                    st.write("**Optimal Gains:**")
+                    st.json(gains)
+                else:
+                    st.write("_No gain parameters recorded._")
+
+            with col_right:
+                st.markdown("**Export Placeholder**")
+                export_fmt = st.selectbox(
+                    "Target format",
+                    ["MATLAB (.m)", "Python (.py)", "Simulink (.slx)", "JSON"],
+                    key=f"best_ctrl_fmt_{scen_level}",
+                    label_visibility="collapsed"
+                )
+
+                if st.button("📥 Stage Export", key=f"best_ctrl_btn_{scen_level}"):
+                    payload = {
+                        "scenario_level": scen_level,
+                        "controller_type": controller_type,
+                        "gains": gains,
+                        "performance_metrics": {
+                            k: v for k, v in best_metrics.items()
+                            if k != "reasoning"
+                        },
+                        "target_format": export_fmt,
+                        # TODO: populate system_name, dt, etc. from saved_config
+                    }
+                    # Placeholder: stash for future export backend
+                    st.session_state[f"_export_payload_scen_{scen_level}"] = payload
+                    st.success(f"Scenario {scen_level} staged for {export_fmt} export.")
+                    st.caption("Payload preview (to be wired to code-generation backend):")
+                    st.code(json.dumps(payload, indent=2), language="json")
+
+        st.divider()
