@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
 from datetime import datetime
 from typing import Any
 
 from sqlalchemy.orm import Session
 
 from backend_api.common.csv_utils import rows_to_csv
-from backend_api.db.models import User
+from backend_api.db.models import ErrorEvent, FeedbackSurveyResponse, Project, User
 from backend_api.http.services import (
     error_tracking_service,
     monitoring_service,
@@ -17,6 +18,71 @@ from backend_api.http.services import (
     survey_service,
 )
 from backend_api.http.services.profile_service import user_out
+
+USER_CSV_FIELDS = [
+    "id",
+    "email",
+    "display_name",
+    "is_admin",
+    "is_active",
+    "plan_id",
+    "plan_name",
+    "modules",
+    "created_at",
+]
+
+PROJECT_CSV_FIELDS = [
+    "id",
+    "user_id",
+    "owner_email",
+    "title",
+    "pipeline_type",
+    "status",
+    "file_name",
+    "file_type",
+    "has_results",
+    "job_id",
+    "created_at",
+    "updated_at",
+]
+
+PROFILE_SURVEY_CSV_FIELDS = [
+    "user_id",
+    "email",
+    "university",
+    "degree",
+    "major",
+    "matlab_experience",
+    "control_design_experience",
+    "completed_at",
+]
+
+FEEDBACK_SURVEY_CSV_FIELDS = [
+    "user_id",
+    "email",
+    "satisfaction",
+    "ease_of_use",
+    "product_value",
+    "confidence",
+    "reuse_intention",
+    "willingness_to_pay",
+    "main_problems",
+    "created_at",
+]
+
+ERROR_CSV_FIELDS = [
+    "id",
+    "created_at",
+    "source",
+    "message",
+    "stack_trace",
+    "path",
+    "method",
+    "status_code",
+    "user_id",
+    "user_agent",
+    "page_url",
+]
 
 
 def _iso(value: datetime | None) -> str:
@@ -31,34 +97,74 @@ def _join(values: list[str] | None) -> str:
     return ";".join(values)
 
 
+def _user_csv_row(user: User) -> dict[str, Any]:
+    out = user_out(user)
+    return {
+        "id": out.id,
+        "email": out.email,
+        "display_name": out.display_name or "",
+        "is_admin": out.is_admin,
+        "is_active": out.is_active,
+        "plan_id": out.plan_id if out.plan_id is not None else "",
+        "plan_name": out.plan_name or "",
+        "modules": _join(out.actions),
+        "created_at": _iso(out.created_at),
+    }
+
+
+def _project_csv_row(project: Project) -> dict[str, Any]:
+    data = project_service.project_to_summary(project, include_owner=True)
+    return {
+        "id": data["id"],
+        "user_id": data["user_id"],
+        "owner_email": data["owner_email"] or "",
+        "title": data["title"],
+        "pipeline_type": data["pipeline_type"],
+        "status": data["status"],
+        "file_name": data["file_name"],
+        "file_type": data["file_type"],
+        "has_results": data["has_results"],
+        "job_id": data["job_id"] or "",
+        "created_at": _iso(data["created_at"]),
+        "updated_at": _iso(data["updated_at"]),
+    }
+
+
+def _profile_survey_csv_row(user: User) -> dict[str, Any]:
+    return {
+        "user_id": user.id,
+        "email": user.email,
+        "university": user.university or "",
+        "degree": user.degree or "",
+        "major": user.major or "",
+        "matlab_experience": user.matlab_experience or "",
+        "control_design_experience": user.control_design_experience or "",
+        "completed_at": _iso(user.profile_survey_completed_at),
+    }
+
+
+def _feedback_survey_csv_row(
+    response: FeedbackSurveyResponse,
+    user: User,
+) -> dict[str, Any]:
+    return {
+        "user_id": user.id,
+        "email": user.email,
+        "satisfaction": response.satisfaction,
+        "ease_of_use": response.ease_of_use,
+        "product_value": response.product_value,
+        "confidence": response.confidence,
+        "reuse_intention": response.reuse_intention,
+        "willingness_to_pay": response.willingness_to_pay,
+        "main_problems": response.main_problems or "",
+        "created_at": _iso(response.created_at),
+    }
+
+
 def export_users_csv(db: Session) -> str:
     users = db.query(User).order_by(User.email).all()
-    fieldnames = [
-        "id",
-        "email",
-        "is_admin",
-        "is_active",
-        "plan_id",
-        "plan_name",
-        "modules",
-        "created_at",
-    ]
-    rows = []
-    for user in users:
-        out = user_out(user)
-        rows.append(
-            {
-                "id": out.id,
-                "email": out.email,
-                "is_admin": out.is_admin,
-                "is_active": out.is_active,
-                "plan_id": out.plan_id if out.plan_id is not None else "",
-                "plan_name": out.plan_name or "",
-                "modules": _join(out.actions),
-                "created_at": _iso(out.created_at),
-            }
-        )
-    return rows_to_csv(rows, fieldnames)
+    rows = [_user_csv_row(user) for user in users]
+    return rows_to_csv(rows, USER_CSV_FIELDS)
 
 
 def export_plans_csv(db: Session) -> str:
@@ -105,40 +211,8 @@ def export_projects_csv(
         user_id=user_id,
         pipeline_type=pipeline_type,
     )
-    fieldnames = [
-        "id",
-        "user_id",
-        "owner_email",
-        "title",
-        "pipeline_type",
-        "status",
-        "file_name",
-        "file_type",
-        "has_results",
-        "job_id",
-        "created_at",
-        "updated_at",
-    ]
-    rows = []
-    for project in projects:
-        data = project_service.project_to_summary(project, include_owner=True)
-        rows.append(
-            {
-                "id": data["id"],
-                "user_id": data["user_id"],
-                "owner_email": data["owner_email"] or "",
-                "title": data["title"],
-                "pipeline_type": data["pipeline_type"],
-                "status": data["status"],
-                "file_name": data["file_name"],
-                "file_type": data["file_type"],
-                "has_results": data["has_results"],
-                "job_id": data["job_id"] or "",
-                "created_at": _iso(data["created_at"]),
-                "updated_at": _iso(data["updated_at"]),
-            }
-        )
-    return rows_to_csv(rows, fieldnames)
+    rows = [_project_csv_row(project) for project in projects]
+    return rows_to_csv(rows, PROJECT_CSV_FIELDS)
 
 
 def _scenario_metrics_history(results: Any) -> list[dict[str, Any]]:
@@ -417,76 +491,115 @@ def _overview_summary_csv(db: Session) -> str:
     return rows_to_csv(rows, ("metric", "value"))
 
 
+def _errors_csv(events: list[ErrorEvent]) -> str:
+    rows = [error_tracking_service._event_row(event) for event in events]
+    return rows_to_csv(rows, ERROR_CSV_FIELDS)
+
+
+def _user_block_header(user: User) -> str:
+    name = (user.display_name or "").strip() or "(no name)"
+    return f"# ===== user: {user.id} | {name} | {user.email} =====\n"
+
+
+def _user_data_block(
+    user: User,
+    *,
+    projects: list[Project],
+    feedback: list[FeedbackSurveyResponse],
+    errors: list[ErrorEvent],
+) -> str:
+    """One user plus nested related data sections."""
+    parts = [
+        _user_block_header(user),
+        _csv_section("user", rows_to_csv([_user_csv_row(user)], USER_CSV_FIELDS)),
+        _csv_section(
+            "projects",
+            rows_to_csv([_project_csv_row(p) for p in projects], PROJECT_CSV_FIELDS),
+        ),
+    ]
+
+    if user.profile_survey_completed_at is not None:
+        parts.append(
+            _csv_section(
+                "profile_survey",
+                rows_to_csv([_profile_survey_csv_row(user)], PROFILE_SURVEY_CSV_FIELDS),
+            )
+        )
+    else:
+        parts.append(_csv_section("profile_survey", ""))
+
+    if feedback:
+        parts.append(
+            _csv_section(
+                "feedback_survey",
+                rows_to_csv(
+                    [_feedback_survey_csv_row(row, user) for row in feedback],
+                    FEEDBACK_SURVEY_CSV_FIELDS,
+                ),
+            )
+        )
+    else:
+        parts.append(_csv_section("feedback_survey", ""))
+
+    parts.append(_csv_section("errors", _errors_csv(errors)))
+    return "".join(parts)
+
+
 def export_overview_csv(db: Session) -> str:
-    """Combine all admin module exports into one multi-section CSV file."""
+    """Export studio data grouped by user.
+
+    Layout:
+    - global sections: summary, plans, monitoring, unassigned_errors
+    - then for each user: user info + projects, surveys, errors
+    """
+    users = db.query(User).order_by(User.email).all()
+    projects_by_user: dict[int, list[Project]] = defaultdict(list)
+    for project in project_service.list_all_projects(db):
+        projects_by_user[project.user_id].append(project)
+
+    feedback_by_user: dict[int, list[FeedbackSurveyResponse]] = defaultdict(list)
+    for response, user in survey_service.list_feedback_responses(db):
+        feedback_by_user[user.id].append(response)
+
+    errors_by_user: dict[int, list[ErrorEvent]] = defaultdict(list)
+    unassigned_errors: list[ErrorEvent] = []
+    for event in error_tracking_service.list_errors(db, limit=1000):
+        if event.user_id is None:
+            unassigned_errors.append(event)
+        else:
+            errors_by_user[event.user_id].append(event)
+
     sections = [
         _csv_section("summary", _overview_summary_csv(db)),
-        _csv_section("users", export_users_csv(db)),
         _csv_section("plans", export_plans_csv(db)),
-        _csv_section("projects", export_projects_csv(db)),
         _csv_section("monitoring", export_monitoring_csv()),
-        _csv_section("profile_survey", export_profile_survey_csv(db)),
-        _csv_section("feedback_survey", export_feedback_survey_csv(db)),
-        _csv_section("errors", error_tracking_service.export_csv(db)),
+        _csv_section("unassigned_errors", _errors_csv(unassigned_errors)),
     ]
+
+    for user in users:
+        sections.append(
+            _user_data_block(
+                user,
+                projects=projects_by_user.get(user.id, []),
+                feedback=feedback_by_user.get(user.id, []),
+                errors=errors_by_user.get(user.id, []),
+            )
+        )
+
     return "\n".join(sections)
 
 
 def export_profile_survey_csv(db: Session) -> str:
-    fieldnames = [
-        "user_id",
-        "email",
-        "university",
-        "degree",
-        "major",
-        "matlab_experience",
-        "control_design_experience",
-        "completed_at",
+    rows = [
+        _profile_survey_csv_row(user)
+        for user in survey_service.list_profile_responses(db)
     ]
-    rows = []
-    for user in survey_service.list_profile_responses(db):
-        rows.append(
-            {
-                "user_id": user.id,
-                "email": user.email,
-                "university": user.university or "",
-                "degree": user.degree or "",
-                "major": user.major or "",
-                "matlab_experience": user.matlab_experience or "",
-                "control_design_experience": user.control_design_experience or "",
-                "completed_at": _iso(user.profile_survey_completed_at),
-            }
-        )
-    return rows_to_csv(rows, fieldnames)
+    return rows_to_csv(rows, PROFILE_SURVEY_CSV_FIELDS)
 
 
 def export_feedback_survey_csv(db: Session) -> str:
-    fieldnames = [
-        "user_id",
-        "email",
-        "satisfaction",
-        "ease_of_use",
-        "product_value",
-        "confidence",
-        "reuse_intention",
-        "willingness_to_pay",
-        "main_problems",
-        "created_at",
+    rows = [
+        _feedback_survey_csv_row(response, user)
+        for response, user in survey_service.list_feedback_responses(db)
     ]
-    rows = []
-    for response, user in survey_service.list_feedback_responses(db):
-        rows.append(
-            {
-                "user_id": user.id,
-                "email": user.email,
-                "satisfaction": response.satisfaction,
-                "ease_of_use": response.ease_of_use,
-                "product_value": response.product_value,
-                "confidence": response.confidence,
-                "reuse_intention": response.reuse_intention,
-                "willingness_to_pay": response.willingness_to_pay,
-                "main_problems": response.main_problems or "",
-                "created_at": _iso(response.created_at),
-            }
-        )
-    return rows_to_csv(rows, fieldnames)
+    return rows_to_csv(rows, FEEDBACK_SURVEY_CSV_FIELDS)
