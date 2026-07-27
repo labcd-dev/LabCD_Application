@@ -41,12 +41,13 @@ export function MuloRecommenderStep({ onComplete }: MuloRecommenderStepProps) {
 
   const jobId = pipeline.recommenderJobId
   const stream = useJobStream({ module: 'recommender', jobId, enabled: step === 'running' })
+  const autoStartRequested = useRef(false)
 
   useEffect(() => {
     healthApi.models().then((res) => setRagModels(res.rag_models)).catch(() => {})
   }, [])
 
-  const startRecommender = async (recommenderStep = 'initial_run') => {
+  const startRecommender = useCallback(async (recommenderStep = 'initial_run') => {
     if (!pipeline.fileContent || !pipeline.fileName) {
       setError('Upload and process a file on the New Project page first.')
       return
@@ -67,10 +68,32 @@ export function MuloRecommenderStep({ onComplete }: MuloRecommenderStepProps) {
       setStep('running')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start recommender')
+      autoStartRequested.current = false
     } finally {
       setLoading(false)
     }
-  }
+  }, [
+    pipeline.fileContent,
+    pipeline.fileName,
+    pipeline.model,
+    pipeline.userPrompt,
+    pipeline.setRecommenderJobId,
+  ])
+
+  useEffect(() => {
+    if (step !== 'idle') return
+    if (pipeline.recommenderJobId) return
+    if (!pipeline.fileContent || !pipeline.fileName) return
+    if (autoStartRequested.current) return
+    autoStartRequested.current = true
+    void startRecommender()
+  }, [
+    step,
+    pipeline.recommenderJobId,
+    pipeline.fileContent,
+    pipeline.fileName,
+    startRecommender,
+  ])
 
   const loadState = useCallback(async () => {
     if (!jobId) return
@@ -161,6 +184,7 @@ export function MuloRecommenderStep({ onComplete }: MuloRecommenderStepProps) {
     setRagError('')
     setError(null)
     pendingRagAssessment.current = false
+    autoStartRequested.current = false
     setActiveTab('process')
     setStep('idle')
   }
@@ -334,19 +358,7 @@ export function MuloRecommenderStep({ onComplete }: MuloRecommenderStepProps) {
       {error && <StatusMessage type="error" message={error} />}
 
       {step === 'idle' && (
-        <>
-          <p className="text-muted-text leading-relaxed">
-            Analyze uploaded dynamics and recommend controller architecture.
-          </p>
-          <button
-            type="button"
-            className={btnPrimary}
-            disabled={loading || !pipeline.fileContent}
-            onClick={() => void startRecommender()}
-          >
-            Start Recommender
-          </button>
-        </>
+        <p className="text-muted-text leading-relaxed">Starting recommender…</p>
       )}
 
       {(step === 'running' || step === 'review' || step === 'comparison') && (
