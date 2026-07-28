@@ -2,9 +2,10 @@ import { useMemo, useState } from 'react'
 import { FileText } from 'lucide-react'
 import { adminApi, projectsApi } from '../api/endpoints'
 import type { ProjectPipelineType } from '../api/types'
-import { ComputationalProfilingPanel } from './ComputationalProfilingPanel'
+import { BestControllersPanel } from './BestControllersPanel'
 import { DesignIterationReport } from './DesignIterationReport'
 import { DesignMonitorDashboard } from './DesignMonitorDashboard'
+import { SiloSummaryPanel } from './SiloSummaryPanel'
 import { CodePreview } from './CodePreview'
 import { JsonViewer } from './JsonViewer'
 import { PlotlyChart } from './PlotlyChart'
@@ -89,8 +90,21 @@ function SiloResults({ monitorState }: { monitorState: Record<string, unknown> }
       id: 'summary',
       label: 'Summary',
       content: (
-        <ComputationalProfilingPanel
+        <SiloSummaryPanel
           scenarioMetricsHistory={monitorState.scenario_metrics_history}
+          currentState={currentState}
+          stateHistory={stateHistory}
+          isRunning={false}
+        />
+      ),
+    },
+    {
+      id: 'best',
+      label: 'Best Controllers',
+      content: (
+        <BestControllersPanel
+          currentState={currentState}
+          stateHistory={stateHistory}
         />
       ),
     },

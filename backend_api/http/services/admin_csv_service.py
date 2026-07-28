@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections import defaultdict
 from datetime import datetime
 from typing import Any
@@ -83,6 +84,65 @@ ERROR_CSV_FIELDS = [
     "user_id",
     "user_agent",
     "page_url",
+]
+
+
+SESSION_SUMMARY_CSV_FIELDS = [
+    "project_id",
+    "user_id",
+    "owner_email",
+    "title",
+    "pipeline_type",
+    "status",
+    "scenarios_completed",
+    "scenarios_total",
+    "avg_success_score",
+    "total_api_failures",
+    "avg_cost_per_success",
+    "total_tokens_in",
+    "total_tokens_out",
+    "total_wall_clock_s",
+    "total_cost",
+    "created_at",
+    "updated_at",
+]
+
+SCENARIO_SUMMARY_CSV_FIELDS = [
+    "project_id",
+    "user_id",
+    "owner_email",
+    "title",
+    "pipeline_type",
+    "status",
+    "scenario_level",
+    "timestamp",
+    "controller_type",
+    "stable",
+    "score",
+    "controller_latency_s",
+    "api_failures",
+    "cost_per_success",
+    "tokens_in",
+    "tokens_out",
+    "time_s",
+    "cost",
+]
+
+BEST_CONTROLLER_CSV_FIELDS = [
+    "project_id",
+    "user_id",
+    "owner_email",
+    "title",
+    "pipeline_type",
+    "status",
+    "scenario_level",
+    "controller_type",
+    "stable",
+    "score",
+    "mse",
+    "gains_json",
+    "created_at",
+    "updated_at",
 ]
 
 
@@ -229,6 +289,31 @@ def _scenario_metrics_history(results: Any) -> list[dict[str, Any]]:
     return [entry for entry in history if isinstance(entry, dict)]
 
 
+def _scenario_best_results(results: Any) -> dict[str, Any]:
+    if not isinstance(results, dict):
+        return {}
+    monitor_state = results.get("monitor_state")
+    if not isinstance(monitor_state, dict):
+        return {}
+
+    current_state = monitor_state.get("current_state")
+    if isinstance(current_state, dict):
+        best = current_state.get("scenario_best_results")
+        if isinstance(best, dict) and best:
+            return best
+
+    state_history = monitor_state.get("state_history")
+    if isinstance(state_history, list) and state_history:
+        last = state_history[-1]
+        if isinstance(last, dict):
+            state = last.get("state")
+            if isinstance(state, dict):
+                best = state.get("scenario_best_results")
+                if isinstance(best, dict) and best:
+                    return best
+    return {}
+
+
 def _metrics_dict(entry: dict[str, Any]) -> dict[str, Any]:
     metrics = entry.get("metrics")
     return metrics if isinstance(metrics, dict) else {}
@@ -238,6 +323,20 @@ def _num(value: Any, default: float = 0.0) -> float:
     if isinstance(value, (int, float)) and not isinstance(value, bool):
         return float(value)
     return default
+
+
+def _project_identity_fields(project: Project) -> dict[str, Any]:
+    data = project_service.project_to_summary(project, include_owner=True)
+    return {
+        "project_id": data["id"],
+        "user_id": data["user_id"],
+        "owner_email": data["owner_email"] or "",
+        "title": data["title"],
+        "pipeline_type": data["pipeline_type"],
+        "status": data["status"],
+        "created_at": _iso(data["created_at"]),
+        "updated_at": _iso(data["updated_at"]),
+    }
 
 
 def _session_profiling_aggregates(history: list[dict[str, Any]]) -> dict[str, Any]:
@@ -285,17 +384,170 @@ def _session_profiling_aggregates(history: list[dict[str, Any]]) -> dict[str, An
     }
 
 
+def _session_summary_row(project: Project, history: list[dict[str, Any]]) -> dict[str, Any]:
+    identity = _project_identity_fields(project)
+    aggregates = _session_profiling_aggregates(history)
+    return {
+        "project_id": identity["project_id"],
+        "user_id": identity["user_id"],
+        "owner_email": identity["owner_email"],
+        "title": identity["title"],
+        "pipeline_type": identity["pipeline_type"],
+        "status": identity["status"],
+        **aggregates,
+        "created_at": identity["created_at"],
+        "updated_at": identity["updated_at"],
+    }
+
+
+def _scenario_summary_rows(
+    project: Project,
+    history: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    identity = _project_identity_fields(project)
+    rows: list[dict[str, Any]] = []
+    for entry in history:
+        metrics = _metrics_dict(entry)
+        cps = metrics.get("cost_per_success")
+        latency = metrics.get("controller_latency_s", metrics.get("time", 0))
+        rows.append(
+            {
+                "project_id": identity["project_id"],
+                "user_id": identity["user_id"],
+                "owner_email": identity["owner_email"],
+                "title": identity["title"],
+                "pipeline_type": identity["pipeline_type"],
+                "status": identity["status"],
+                "scenario_level": entry.get("scenario_level", ""),
+                "timestamp": entry.get("timestamp", ""),
+                "controller_type": metrics.get("controller_type") or "",
+                "stable": bool(metrics.get("stable", False)),
+                "score": round(_num(metrics.get("score")), 4),
+                "controller_latency_s": round(_num(latency), 3),
+                "api_failures": int(_num(metrics.get("api_failures"))),
+                "cost_per_success": (
+                    round(float(cps), 6)
+                    if isinstance(cps, (int, float)) and not isinstance(cps, bool)
+                    else ""
+                ),
+                "tokens_in": int(_num(metrics.get("tokens_in"))),
+                "tokens_out": int(_num(metrics.get("tokens_out"))),
+                "time_s": round(_num(metrics.get("time")), 3),
+                "cost": round(_num(metrics.get("cost")), 6),
+            }
+        )
+    return rows
+
+
+def _best_controller_rows(project: Project) -> list[dict[str, Any]]:
+    best_results = _scenario_best_results(project.results)
+    if not best_results:
+        return []
+
+    identity = _project_identity_fields(project)
+    rows: list[dict[str, Any]] = []
+    for key in sorted(
+        best_results.keys(),
+        key=lambda value: int(value) if str(value).isdigit() else str(value),
+    ):
+        best = best_results.get(key)
+        if not isinstance(best, dict):
+            rows.append(
+                {
+                    "project_id": identity["project_id"],
+                    "user_id": identity["user_id"],
+                    "owner_email": identity["owner_email"],
+                    "title": identity["title"],
+                    "pipeline_type": identity["pipeline_type"],
+                    "status": identity["status"],
+                    "scenario_level": key,
+                    "controller_type": "",
+                    "stable": False,
+                    "score": "",
+                    "mse": "",
+                    "gains_json": "",
+                    "created_at": identity["created_at"],
+                    "updated_at": identity["updated_at"],
+                }
+            )
+            continue
+
+        best_params = best.get("best_params")
+        gains = {}
+        if isinstance(best_params, dict):
+            gains = {
+                k: v
+                for k, v in best_params.items()
+                if k != "reasoning" and v is not None
+            }
+        scen_metrics = best.get("scenario_metrics")
+        scen_metrics = scen_metrics if isinstance(scen_metrics, dict) else {}
+        best_metrics = best.get("best_metrics")
+        best_metrics = best_metrics if isinstance(best_metrics, dict) else {}
+        mse = best_metrics.get("mse")
+        score = scen_metrics.get("score")
+        rows.append(
+            {
+                "project_id": identity["project_id"],
+                "user_id": identity["user_id"],
+                "owner_email": identity["owner_email"],
+                "title": identity["title"],
+                "pipeline_type": identity["pipeline_type"],
+                "status": identity["status"],
+                "scenario_level": best.get("scenario_level", key),
+                "controller_type": best.get("controller_type") or "",
+                "stable": bool(scen_metrics.get("stable", False)),
+                "score": (
+                    round(float(score), 4)
+                    if isinstance(score, (int, float)) and not isinstance(score, bool)
+                    else ""
+                ),
+                "mse": (
+                    round(float(mse), 6)
+                    if isinstance(mse, (int, float)) and not isinstance(mse, bool)
+                    else ""
+                ),
+                "gains_json": json.dumps(gains, separators=(",", ":")) if gains else "",
+                "created_at": identity["created_at"],
+                "updated_at": identity["updated_at"],
+            }
+        )
+    return rows
+
+
+def _collect_project_summary_rows(
+    projects: list[Project],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    session_rows: list[dict[str, Any]] = []
+    scenario_rows: list[dict[str, Any]] = []
+    best_rows: list[dict[str, Any]] = []
+
+    for project in projects:
+        if project.pipeline_type != "siloDesign":
+            continue
+
+        history = _scenario_metrics_history(project.results)
+        if history:
+            session_rows.append(_session_summary_row(project, history))
+            scenario_rows.extend(_scenario_summary_rows(project, history))
+
+        best_rows.extend(_best_controller_rows(project))
+
+    return session_rows, scenario_rows, best_rows
+
+
 def export_project_profiling_csv(
     db: Session,
     *,
     user_id: int | None = None,
     pipeline_type: str | None = None,
 ) -> str:
-    """Export SILO computational profiling as a two-section CSV.
+    """Export SILO computational profiling as a multi-section CSV.
 
     Sections:
     - session_summary: one row per project with session-level aggregates
     - per_scenario: one row per scenario with DevOps + token/cost fields
+    - best_controllers: best controller selected per scenario (when available)
     """
     effective_pipeline = pipeline_type if pipeline_type else "siloDesign"
     projects = project_service.list_all_projects(
@@ -303,109 +555,42 @@ def export_project_profiling_csv(
         user_id=user_id,
         pipeline_type=effective_pipeline,
     )
-
-    session_fieldnames = [
-        "project_id",
-        "user_id",
-        "owner_email",
-        "title",
-        "pipeline_type",
-        "status",
-        "scenarios_completed",
-        "scenarios_total",
-        "avg_success_score",
-        "total_api_failures",
-        "avg_cost_per_success",
-        "total_tokens_in",
-        "total_tokens_out",
-        "total_wall_clock_s",
-        "total_cost",
-        "created_at",
-        "updated_at",
-    ]
-    scenario_fieldnames = [
-        "project_id",
-        "user_id",
-        "owner_email",
-        "title",
-        "pipeline_type",
-        "status",
-        "scenario_level",
-        "timestamp",
-        "controller_type",
-        "stable",
-        "score",
-        "controller_latency_s",
-        "api_failures",
-        "cost_per_success",
-        "tokens_in",
-        "tokens_out",
-        "time_s",
-        "cost",
-    ]
-
-    session_rows: list[dict[str, Any]] = []
-    scenario_rows: list[dict[str, Any]] = []
-
-    for project in projects:
-        if project.pipeline_type != "siloDesign":
-            continue
-        history = _scenario_metrics_history(project.results)
-        if not history:
-            continue
-
-        data = project_service.project_to_summary(project, include_owner=True)
-        aggregates = _session_profiling_aggregates(history)
-        session_rows.append(
-            {
-                "project_id": data["id"],
-                "user_id": data["user_id"],
-                "owner_email": data["owner_email"] or "",
-                "title": data["title"],
-                "pipeline_type": data["pipeline_type"],
-                "status": data["status"],
-                **aggregates,
-                "created_at": _iso(data["created_at"]),
-                "updated_at": _iso(data["updated_at"]),
-            }
-        )
-
-        for entry in history:
-            metrics = _metrics_dict(entry)
-            cps = metrics.get("cost_per_success")
-            latency = metrics.get("controller_latency_s", metrics.get("time", 0))
-            scenario_rows.append(
-                {
-                    "project_id": data["id"],
-                    "user_id": data["user_id"],
-                    "owner_email": data["owner_email"] or "",
-                    "title": data["title"],
-                    "pipeline_type": data["pipeline_type"],
-                    "status": data["status"],
-                    "scenario_level": entry.get("scenario_level", ""),
-                    "timestamp": entry.get("timestamp", ""),
-                    "controller_type": metrics.get("controller_type") or "",
-                    "stable": bool(metrics.get("stable", False)),
-                    "score": round(_num(metrics.get("score")), 4),
-                    "controller_latency_s": round(_num(latency), 3),
-                    "api_failures": int(_num(metrics.get("api_failures"))),
-                    "cost_per_success": (
-                        round(float(cps), 6)
-                        if isinstance(cps, (int, float)) and not isinstance(cps, bool)
-                        else ""
-                    ),
-                    "tokens_in": int(_num(metrics.get("tokens_in"))),
-                    "tokens_out": int(_num(metrics.get("tokens_out"))),
-                    "time_s": round(_num(metrics.get("time")), 3),
-                    "cost": round(_num(metrics.get("cost")), 6),
-                }
-            )
+    session_rows, scenario_rows, best_rows = _collect_project_summary_rows(projects)
 
     sections = [
-        _csv_section("session_summary", rows_to_csv(session_rows, session_fieldnames)),
-        _csv_section("per_scenario", rows_to_csv(scenario_rows, scenario_fieldnames)),
+        _csv_section(
+            "session_summary",
+            rows_to_csv(session_rows, SESSION_SUMMARY_CSV_FIELDS),
+        ),
+        _csv_section(
+            "per_scenario",
+            rows_to_csv(scenario_rows, SCENARIO_SUMMARY_CSV_FIELDS),
+        ),
+        _csv_section(
+            "best_controllers",
+            rows_to_csv(best_rows, BEST_CONTROLLER_CSV_FIELDS),
+        ),
     ]
     return "\n".join(sections)
+
+
+def _project_summary_sections(projects: list[Project]) -> list[str]:
+    """Summary tab sections for download-all CSV, scoped to the given projects."""
+    session_rows, scenario_rows, best_rows = _collect_project_summary_rows(projects)
+    return [
+        _csv_section(
+            "project_summary",
+            rows_to_csv(session_rows, SESSION_SUMMARY_CSV_FIELDS),
+        ),
+        _csv_section(
+            "project_summary_scenarios",
+            rows_to_csv(scenario_rows, SCENARIO_SUMMARY_CSV_FIELDS),
+        ),
+        _csv_section(
+            "project_best_controllers",
+            rows_to_csv(best_rows, BEST_CONTROLLER_CSV_FIELDS),
+        ),
+    ]
 
 
 def export_monitoring_csv() -> str:
@@ -518,6 +703,7 @@ def _user_data_block(
             "projects",
             rows_to_csv([_project_csv_row(p) for p in projects], PROJECT_CSV_FIELDS),
         ),
+        *_project_summary_sections(projects),
     ]
 
     if user.profile_survey_completed_at is not None:
@@ -552,7 +738,8 @@ def export_overview_csv(db: Session) -> str:
 
     Layout:
     - global sections: summary, plans, monitoring, unassigned_errors
-    - then for each user: user info + projects, surveys, errors
+    - then for each user: user info + projects, SILO project summary tabs,
+      surveys, errors
     """
     users = db.query(User).order_by(User.email).all()
     projects_by_user: dict[int, list[Project]] = defaultdict(list)

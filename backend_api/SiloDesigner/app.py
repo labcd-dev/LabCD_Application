@@ -21,12 +21,17 @@ MONITOR_STATE_KEYS = (
     'dt',
     'max_time',
     'target',
+    'num_inputs',
+    'input_channel',
+    'output_channel',
+    'min_ctrl',
+    'max_ctrl',
     'current_params',
     'results',
     'simulator',
     'system',
     'seed',
-    'scenario_best_results',   # NEW
+    'scenario_best_results',
 )
 MAX_MONITOR_HISTORY = 100
 
@@ -230,7 +235,10 @@ def get_serializable_monitor_state(monitor):
                 'timestamp': entry['timestamp'],
                 'metrics': to_serializable(entry['metrics'])
             } for entry in monitor.scenario_metrics_history
-        ]
+        ],
+        'last_completed': to_serializable(monitor.last_completed)
+        if getattr(monitor, 'last_completed', None) is not None
+        else None,
     }
 
 

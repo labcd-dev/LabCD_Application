@@ -212,6 +212,8 @@ def initialize_state(
         "input_channel": input_channel,
         "output_channel": output_channel,
         "trim_values": trim_values,
+        "min_ctrl": min_ctrl,
+        "max_ctrl": max_ctrl,
         "scenario_start_time": None,
         "scenario_best_results": {},  # NEW
         "scenario_attempts": {},  # NEW

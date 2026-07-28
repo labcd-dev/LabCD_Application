@@ -76,17 +76,17 @@ export function createDefaultFsfRanges(numStates: number): Record<string, [numbe
 
 export const DEFAULT_SILO_ADVANCED_CONFIG: SiloAdvancedConfig = {
   controllers: ['PID', 'FSF'],
-  max_scenarios: 2,
-  max_iter: 20,
+  max_scenarios: 1,
+  max_iter: 10,
   seed: 42,
-  max_tries: 0,
+  max_tries: 1,
   target_metrics: {
-    mse: 0.15,
-    settling_time: 3.5,
-    overshoot: 0.0,
+    mse: 0.25,
+    settling_time: 5.0,
+    overshoot: 20.0,
   },
   dt: 0.01,
-  max_time: 5.0,
+  max_time: 20.0,
   target: 0.0,
   num_inputs: 1,
   input_channel: 0,
@@ -101,7 +101,7 @@ export const DEFAULT_SILO_ADVANCED_CONFIG: SiloAdvancedConfig = {
   pidKdRange: [0, 100],
   customizeFsfRanges: false,
   fsfRanges: createDefaultFsfRanges(4),
-  scenarios: [createDefaultScenario(1), createDefaultScenario(2)],
+  scenarios: [createDefaultScenario(1)],
   enable_ga: false,
   ga_config: {
     num_generations: 100,
