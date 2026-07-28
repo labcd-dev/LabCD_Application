@@ -38,6 +38,7 @@ export function useJobStream({ module, jobId, enabled = true }: UseJobStreamOpti
   const [isDone, setIsDone] = useState(false)
   const [isCancelled, setIsCancelled] = useState(false)
   const [logs, setLogs] = useState<Array<Record<string, unknown>>>([])
+  const [summary, setSummary] = useState<Record<string, unknown> | null>(null)
 
   useEffect(() => {
     if (!jobId || !enabled) return
@@ -51,10 +52,27 @@ export function useJobStream({ module, jobId, enabled = true }: UseJobStreamOpti
     setIsCancelled(false)
     setIsRunning(true)
     setLogs([])
+    setSummary(null)
+
+    const captureSummary = (event: StreamEvent) => {
+      if (event.summary && typeof event.summary === 'object' && !Array.isArray(event.summary)) {
+        setSummary(event.summary)
+        return
+      }
+      const metadataSummary = event.metadata?.summary
+      if (
+        metadataSummary &&
+        typeof metadataSummary === 'object' &&
+        !Array.isArray(metadataSummary)
+      ) {
+        setSummary(metadataSummary as Record<string, unknown>)
+      }
+    }
 
     const unsubscribe = subscribeJobStream(streamUrl(module, jobId), {
       onEvent: (event) => {
         setEvents((prev) => [...prev, event])
+        captureSummary(event)
 
         if (event.type === 'human_input' && event.content) {
           setHumanInput(event.content as Record<string, unknown>)
@@ -93,6 +111,7 @@ export function useJobStream({ module, jobId, enabled = true }: UseJobStreamOpti
         setIsRunning(false)
         setIsDone(true)
         setProgress(1)
+        captureSummary(event)
         if (event.status === 'failed') {
           setError(event.error ?? 'Job failed')
         } else if (event.status === 'cancelled') {
@@ -109,6 +128,14 @@ export function useJobStream({ module, jobId, enabled = true }: UseJobStreamOpti
 
         try {
           const status = await jobsApi.status(jobId)
+          const statusSummary = status.metadata?.summary
+          if (
+            statusSummary &&
+            typeof statusSummary === 'object' &&
+            !Array.isArray(statusSummary)
+          ) {
+            setSummary(statusSummary as Record<string, unknown>)
+          }
           if (status.status === 'completed') {
             setIsRunning(false)
             setIsDone(true)
@@ -152,6 +179,7 @@ export function useJobStream({ module, jobId, enabled = true }: UseJobStreamOpti
     isDone,
     isCancelled,
     error,
+    summary,
     humanInput,
     clearHumanInput: () => setHumanInput(null),
   }

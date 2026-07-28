@@ -7,6 +7,11 @@ import { ModelSelect } from './ModelSelect'
 import { ProgressBar } from './ProgressBar'
 import { StatusMessage } from './StatusMessage'
 import { Tabs } from './Tabs'
+import {
+  parseWorkflowSummary,
+  WorkflowSummaryPanel,
+  type WorkflowSummary,
+} from './WorkflowSummaryPanel'
 import { usePipeline } from '../context/PipelineContext'
 import { useJobStream } from '../hooks/useJobStream'
 import { btnBase, btnPrimary, cardPanel, mutedText } from '../lib/classes'
@@ -36,6 +41,7 @@ export function MuloRecommenderStep({ onComplete }: MuloRecommenderStepProps) {
   const [loading, setLoading] = useState(false)
   const [ragError, setRagError] = useState('')
   const [chosenController, setChosenController] = useState<string | null>(null)
+  const [summary, setSummary] = useState<WorkflowSummary | null>(null)
   /** Only assess RAG completion after a RAG enhancement run (not the initial recommender). */
   const pendingRagAssessment = useRef(false)
 
@@ -45,6 +51,21 @@ export function MuloRecommenderStep({ onComplete }: MuloRecommenderStepProps) {
 
   useEffect(() => {
     healthApi.models().then((res) => setRagModels(res.rag_models)).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    const fromStream = parseWorkflowSummary(stream.summary)
+    if (fromStream) setSummary(fromStream)
+  }, [stream.summary])
+
+  const loadSummary = useCallback(async (id: string) => {
+    try {
+      const status = await jobsApi.status(id)
+      const parsed = parseWorkflowSummary(status.metadata?.summary)
+      if (parsed) setSummary(parsed)
+    } catch {
+      // Summary is optional; keep UI usable without it.
+    }
   }, [])
 
   const startRecommender = useCallback(async (recommenderStep = 'initial_run') => {
@@ -104,13 +125,20 @@ export function MuloRecommenderStep({ onComplete }: MuloRecommenderStepProps) {
   useEffect(() => {
     if (jobId && (step === 'review' || step === 'comparison') && !state) {
       void loadState()
+      void loadSummary(jobId)
     }
-  }, [jobId, step, state, loadState])
+  }, [jobId, step, state, loadState, loadSummary])
 
   useEffect(() => {
     if (stream.isDone && step === 'running') {
       void loadState().then(async () => {
         if (!jobId) return
+        void loadSummary(jobId)
+        if (stream.error) {
+          setError(stream.error)
+          setStep('review')
+          return
+        }
         if (pendingRagAssessment.current) {
           pendingRagAssessment.current = false
           const ragStatus = await recommenderApi.ragStatus(jobId)
@@ -122,7 +150,7 @@ export function MuloRecommenderStep({ onComplete }: MuloRecommenderStepProps) {
         setStep('review')
       })
     }
-  }, [stream.isDone, step, jobId, loadState])
+  }, [stream.isDone, step, jobId, loadState, loadSummary, stream.error])
 
   const startRag = async () => {
     if (!jobId) return
@@ -183,6 +211,7 @@ export function MuloRecommenderStep({ onComplete }: MuloRecommenderStepProps) {
     setRagFlags([])
     setRagError('')
     setError(null)
+    setSummary(null)
     pendingRagAssessment.current = false
     autoStartRequested.current = false
     setActiveTab('process')
@@ -350,6 +379,15 @@ export function MuloRecommenderStep({ onComplete }: MuloRecommenderStepProps) {
         </>
       ),
     },
+    ...(step === 'review' || step === 'comparison'
+      ? [
+          {
+            id: 'summary',
+            label: 'Summary',
+            content: <WorkflowSummaryPanel summary={summary} variant="recommender" />,
+          },
+        ]
+      : []),
   ]
 
   return (

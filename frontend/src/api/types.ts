@@ -115,6 +115,7 @@ export interface StreamEvent {
   job_id?: string
   status?: string
   error?: string
+  summary?: Record<string, unknown>
   metadata?: Record<string, unknown>
 }
 

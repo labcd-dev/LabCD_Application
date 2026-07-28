@@ -8,6 +8,11 @@ import { ProgressBar } from './ProgressBar'
 import { StatusMessage } from './StatusMessage'
 import { Tabs } from './Tabs'
 import { TrimmerEquilibriumResults } from './TrimmerEquilibriumResults'
+import {
+  parseWorkflowSummary,
+  WorkflowSummaryPanel,
+  type WorkflowSummary,
+} from './WorkflowSummaryPanel'
 import { usePipeline } from '../context/PipelineContext'
 import { useJobStream } from '../hooks/useJobStream'
 import { btnBase, btnPrimary, fieldInput, fieldLabel } from '../lib/classes'
@@ -64,9 +69,15 @@ export function MuloTrimmerStep({ onComplete }: MuloTrimmerStepProps) {
   const [pdfLoading, setPdfLoading] = useState(false)
   const [pdfError, setPdfError] = useState<string | null>(null)
   const [pdfFilename, setPdfFilename] = useState<string | null>(null)
+  const [summary, setSummary] = useState<WorkflowSummary | null>(null)
 
   const jobId = pipeline.trimmerJobId
   const stream = useJobStream({ module: 'trimmer', jobId, enabled: step === 'running' })
+
+  useEffect(() => {
+    const fromStream = parseWorkflowSummary(stream.summary)
+    if (fromStream) setSummary(fromStream)
+  }, [stream.summary])
 
   useEffect(() => {
     const preselected = pipeline.handoff?.trimming_params ?? []
@@ -81,7 +92,10 @@ export function MuloTrimmerStep({ onComplete }: MuloTrimmerStepProps) {
     // Only auto-load when artifacts were never fetched (null), not when empty.
     if (pipeline.trimmerJobId && step === 'results' && artifacts === null) {
       let cancelled = false
-      void fetchTrimmerArtifacts(pipeline.trimmerJobId).then((res) => {
+      void Promise.all([
+        fetchTrimmerArtifacts(pipeline.trimmerJobId),
+        jobsApi.status(pipeline.trimmerJobId).catch(() => null),
+      ]).then(([res, status]) => {
         if (cancelled) return
         setArtifacts(res as unknown as Record<string, unknown>)
         if (res.time_response_file) {
@@ -90,6 +104,8 @@ export function MuloTrimmerStep({ onComplete }: MuloTrimmerStepProps) {
         if (res.pdf_file) {
           setPdfFilename(res.pdf_file.split(/[/\\]/).pop() ?? res.pdf_file)
         }
+        const parsed = parseWorkflowSummary(status?.metadata?.summary)
+        if (parsed) setSummary(parsed)
       })
       return () => {
         cancelled = true
@@ -128,16 +144,20 @@ export function MuloTrimmerStep({ onComplete }: MuloTrimmerStepProps) {
 
   useEffect(() => {
     if (stream.isDone && jobId && step === 'running') {
-      if (stream.error) {
-        setError(stream.error)
-        return
-      }
       let cancelled = false
-      void fetchTrimmerArtifacts(jobId).then((res) => {
+      void Promise.all([
+        fetchTrimmerArtifacts(jobId),
+        jobsApi.status(jobId).catch(() => null),
+      ]).then(([res, status]) => {
         if (cancelled) return
         setArtifacts(res as unknown as Record<string, unknown>)
         if (res.time_response_file) {
           setPlotFilename(res.time_response_file)
+        }
+        const parsed = parseWorkflowSummary(status?.metadata?.summary)
+        if (parsed) setSummary(parsed)
+        if (stream.error) {
+          setError(stream.error)
         }
         setStep('results')
       })
@@ -173,6 +193,7 @@ export function MuloTrimmerStep({ onComplete }: MuloTrimmerStepProps) {
     setPlotFilename(null)
     setPdfError(null)
     setPdfFilename(null)
+    setSummary(null)
     setActiveTab('process')
     setStep('operating')
   }
@@ -235,7 +256,10 @@ export function MuloTrimmerStep({ onComplete }: MuloTrimmerStepProps) {
           )}
           {step === 'results' && artifacts && (
             <>
-              <StatusMessage type="success" message="Trimmer completed." />
+              <StatusMessage
+                type={error ? 'warning' : 'success'}
+                message={error ? `Trimmer finished with issues: ${error}` : 'Trimmer completed.'}
+              />
               {hasEquilibriumResult(artifacts) ? (
                 <TrimmerEquilibriumResults result={artifacts.result} />
               ) : (
@@ -271,6 +295,12 @@ export function MuloTrimmerStep({ onComplete }: MuloTrimmerStepProps) {
                 )}
               </div>
             </>
+          )}
+          {step === 'results' && !artifacts && (
+            <StatusMessage
+              type="warning"
+              message={error || 'Trimmer finished but artifacts are unavailable.'}
+            />
           )}
         </>
       ),
@@ -313,6 +343,15 @@ export function MuloTrimmerStep({ onComplete }: MuloTrimmerStepProps) {
       label: 'Activity Log',
       content: <ActivityLog logs={stream.logs} />,
     },
+    ...(step === 'results'
+      ? [
+          {
+            id: 'summary',
+            label: 'Summary',
+            content: <WorkflowSummaryPanel summary={summary} variant="trimmer" />,
+          },
+        ]
+      : []),
   ]
 
   return (

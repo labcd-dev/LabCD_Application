@@ -12,6 +12,10 @@ import { PlotlyChart } from './PlotlyChart'
 import { StatusMessage } from './StatusMessage'
 import { Tabs } from './Tabs'
 import { TrimmerEquilibriumResults } from './TrimmerEquilibriumResults'
+import {
+  parseWorkflowSummary,
+  WorkflowSummaryPanel,
+} from './WorkflowSummaryPanel'
 import type { LlmResponseEntry } from '../lib/llmResponseParser'
 import type { StateHistoryEntry } from '../lib/monitorStateParser'
 import type { MuloPlotData } from '../lib/muloDesignConfig'
@@ -235,6 +239,7 @@ function MuloTrimmerProjectResults({
   projectId?: number
   artifactScope: 'user' | 'admin'
 }) {
+  const [activeTab, setActiveTab] = useState('results')
   const trimmer = asRecord(results.trimmer)
   const trimmerResult = trimmer?.result
   const pdfFile = typeof results.pdf_file === 'string' ? results.pdf_file : null
@@ -245,24 +250,48 @@ function MuloTrimmerProjectResults({
         ? adminApi.downloadProjectArtifact(projectId, pdfName)
         : projectsApi.downloadArtifact(projectId, pdfName)
       : null
+  const error = typeof results.error === 'string' ? results.error : null
+  const recommenderSummary = parseWorkflowSummary(results.recommender_summary)
+  const trimmerSummary = parseWorkflowSummary(results.trimmer_summary)
 
-  return (
-    <div className="space-y-4">
-      {pdfUrl ? (
-        <div className="flex flex-wrap gap-2">
-          <a href={pdfUrl} target="_blank" rel="noopener noreferrer" className={btnBase}>
-            <FileText className="size-4" aria-hidden />
-            Download PDF
-          </a>
+  const tabs = [
+    {
+      id: 'results',
+      label: 'Final Result',
+      content: (
+        <div className="space-y-4">
+          {error ? <StatusMessage type="error" message={error} /> : null}
+          {pdfUrl ? (
+            <div className="flex flex-wrap gap-2">
+              <a href={pdfUrl} target="_blank" rel="noopener noreferrer" className={btnBase}>
+                <FileText className="size-4" aria-hidden />
+                Download PDF
+              </a>
+            </div>
+          ) : null}
+          {trimmerResult ? (
+            <TrimmerEquilibriumResults result={trimmerResult} />
+          ) : (
+            <p className={mutedText}>No trimmer equilibrium data was saved for this project.</p>
+          )}
         </div>
-      ) : null}
-      {trimmerResult ? (
-        <TrimmerEquilibriumResults result={trimmerResult} />
-      ) : (
-        <p className={mutedText}>No trimmer equilibrium data was saved for this project.</p>
-      )}
-    </div>
-  )
+      ),
+    },
+    {
+      id: 'recommender-summary',
+      label: 'Recommender Summary',
+      content: (
+        <WorkflowSummaryPanel summary={recommenderSummary} variant="recommender" />
+      ),
+    },
+    {
+      id: 'trimmer-summary',
+      label: 'Trimmer Summary',
+      content: <WorkflowSummaryPanel summary={trimmerSummary} variant="trimmer" />,
+    },
+  ]
+
+  return <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
 }
 
 export function ProjectResultsView({
@@ -273,6 +302,16 @@ export function ProjectResultsView({
 }: ProjectResultsViewProps) {
   if (!results) {
     return <p className={mutedText}>No results saved yet.</p>
+  }
+
+  if (pipelineType === 'muloDesign' && asRecord(results.trimmer)) {
+    return (
+      <MuloTrimmerProjectResults
+        results={results}
+        projectId={projectId}
+        artifactScope={artifactScope}
+      />
+    )
   }
 
   const error = typeof results.error === 'string' ? results.error : null
@@ -288,15 +327,6 @@ export function ProjectResultsView({
   }
 
   if (pipelineType === 'muloDesign') {
-    if (asRecord(results.trimmer)) {
-      return (
-        <MuloTrimmerProjectResults
-          results={results}
-          projectId={projectId}
-          artifactScope={artifactScope}
-        />
-      )
-    }
     return <MuloResults results={results} />
   }
 

@@ -73,12 +73,14 @@ export function subscribeJobStream(
       const payload = { ...data, type: eventType }
 
       if (eventType === 'done') {
+        handlers.onEvent?.(payload)
         handlers.onDone?.(payload)
         finish()
         return
       }
 
       if (eventType === 'error') {
+        handlers.onEvent?.(payload)
         handlers.onError?.(new Error(String(data.content ?? data.error ?? 'Stream error')))
         finish()
         return

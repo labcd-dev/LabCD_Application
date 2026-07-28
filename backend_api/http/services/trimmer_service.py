@@ -15,7 +15,12 @@ from backend_api.http.services.job_store import JobStatus, job_store
 from backend_api.http.services.project_service import link_or_create_for_job, sync_project_from_job
 
 
-def _trimmer_project_results(artifacts: Dict[str, Any]) -> Dict[str, Any]:
+def _trimmer_project_results(
+    artifacts: Dict[str, Any],
+    *,
+    trimmer_summary: Dict[str, Any] | None = None,
+    recommender_summary: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
     """Build the persisted project.results payload from trimmer artifacts."""
     config = artifacts.get("config") or {}
     safe_config = {
@@ -32,7 +37,57 @@ def _trimmer_project_results(artifacts: Dict[str, Any]) -> Dict[str, Any]:
         payload["pdf_file"] = artifacts["pdf_file"]
     if artifacts.get("time_response_file"):
         payload["time_response_file"] = artifacts["time_response_file"]
+    if trimmer_summary:
+        payload["trimmer_summary"] = make_serializable(trimmer_summary)
+    if recommender_summary:
+        payload["recommender_summary"] = make_serializable(recommender_summary)
     return make_serializable(payload)
+
+
+def _resolve_recommender_summary(job: Any) -> Dict[str, Any] | None:
+    cached = job.metadata.get("recommender_summary")
+    if isinstance(cached, dict):
+        return cached
+
+    recommender_job_id = job.metadata.get("recommender_job_id")
+    if not recommender_job_id:
+        return None
+    try:
+        recommender_job = job_store.get(recommender_job_id)
+    except KeyError:
+        return None
+    summary = recommender_job.metadata.get("summary")
+    return summary if isinstance(summary, dict) else None
+
+
+def _snapshot_recommender_summary(recommender_job_id: str | None) -> Dict[str, Any] | None:
+    if not recommender_job_id:
+        return None
+    try:
+        recommender_job = job_store.get(recommender_job_id)
+    except KeyError:
+        return None
+    summary = recommender_job.metadata.get("summary")
+    return make_serializable(summary) if isinstance(summary, dict) else None
+
+
+def _project_results_with_summaries(
+    job: Any,
+    artifacts: Dict[str, Any],
+    *,
+    error: str | None = None,
+) -> Dict[str, Any]:
+    trimmer_summary = job.metadata.get("summary")
+    if not isinstance(trimmer_summary, dict):
+        trimmer_summary = None
+    payload = _trimmer_project_results(
+        artifacts,
+        trimmer_summary=trimmer_summary,
+        recommender_summary=_resolve_recommender_summary(job),
+    )
+    if error:
+        payload["error"] = error
+    return payload
 
 
 def _create_logger(job_id: str) -> logging.Logger:
@@ -109,6 +164,11 @@ def _trimmer_worker(job_id: str) -> None:
                 job_id=job_id,
                 status="failed",
                 error=summary["error"],
+                results=_project_results_with_summaries(
+                    job,
+                    job.metadata.get("artifacts") or {},
+                    error=summary["error"],
+                ),
             )
             return
 
@@ -125,7 +185,7 @@ def _trimmer_worker(job_id: str) -> None:
             project_id=job.metadata.get("project_id"),
             job_id=job_id,
             status="completed",
-            results=_trimmer_project_results(artifacts),
+            results=_project_results_with_summaries(job, artifacts),
         )
         job.event_queue.put({"type": "done", "summary": job.metadata["summary"]})
     except HumanInputRequired as exc:
@@ -141,6 +201,11 @@ def _trimmer_worker(job_id: str) -> None:
             job_id=job_id,
             status="failed",
             error=str(exc),
+            results=_project_results_with_summaries(
+                job,
+                job.metadata.get("artifacts") or {},
+                error=str(exc),
+            ),
         )
 
 
@@ -190,6 +255,9 @@ def start_trimmer_job(
     }
     if recommender_job_id:
         metadata["recommender_job_id"] = recommender_job_id
+        recommender_summary = _snapshot_recommender_summary(recommender_job_id)
+        if recommender_summary is not None:
+            metadata["recommender_summary"] = recommender_summary
     job = job_store.create(
         "trimmer",
         metadata=metadata,
@@ -498,7 +566,7 @@ def generate_trimmer_pdf(
         project_id=job.metadata.get("project_id"),
         job_id=job_id,
         status="completed",
-        results=_trimmer_project_results(artifacts),
+        results=_project_results_with_summaries(job, artifacts),
     )
 
     return {

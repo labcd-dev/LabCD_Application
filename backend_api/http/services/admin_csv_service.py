@@ -38,11 +38,46 @@ PROJECT_CSV_FIELDS = [
     "owner_email",
     "title",
     "pipeline_type",
+    "pipeline_label",
     "status",
     "file_name",
     "file_type",
     "has_results",
     "job_id",
+    "created_at",
+    "updated_at",
+]
+
+# Project row used in "Download all Data" — identity + inline summary metrics.
+OVERVIEW_PROJECT_CSV_FIELDS = [
+    *PROJECT_CSV_FIELDS[:-2],
+    # Single Loop summary (siloDesign)
+    "silo_scenarios_completed",
+    "silo_scenarios_total",
+    "silo_avg_success_score",
+    "silo_total_api_failures",
+    "silo_avg_cost_per_success",
+    "silo_total_tokens_in",
+    "silo_total_tokens_out",
+    "silo_total_wall_clock_s",
+    "silo_total_cost",
+    # Multi Loop — Recommender summary
+    "mulo_recommender_success",
+    "mulo_recommender_flag",
+    "mulo_recommender_best_score",
+    "mulo_recommender_cost",
+    "mulo_recommender_input_tokens",
+    "mulo_recommender_output_tokens",
+    "mulo_recommender_total_tokens",
+    "mulo_recommender_error",
+    # Multi Loop — Trimmer summary
+    "mulo_trimmer_success",
+    "mulo_trimmer_flag",
+    "mulo_trimmer_cost",
+    "mulo_trimmer_input_tokens",
+    "mulo_trimmer_output_tokens",
+    "mulo_trimmer_total_tokens",
+    "mulo_trimmer_error",
     "created_at",
     "updated_at",
 ]
@@ -93,6 +128,7 @@ SESSION_SUMMARY_CSV_FIELDS = [
     "owner_email",
     "title",
     "pipeline_type",
+    "pipeline_label",
     "status",
     "scenarios_completed",
     "scenarios_total",
@@ -113,6 +149,7 @@ SCENARIO_SUMMARY_CSV_FIELDS = [
     "owner_email",
     "title",
     "pipeline_type",
+    "pipeline_label",
     "status",
     "scenario_level",
     "timestamp",
@@ -134,6 +171,7 @@ BEST_CONTROLLER_CSV_FIELDS = [
     "owner_email",
     "title",
     "pipeline_type",
+    "pipeline_label",
     "status",
     "scenario_level",
     "controller_type",
@@ -144,6 +182,18 @@ BEST_CONTROLLER_CSV_FIELDS = [
     "created_at",
     "updated_at",
 ]
+
+
+def _pipeline_label(pipeline_type: str) -> str:
+    if pipeline_type == "siloDesign":
+        return "Single Loop"
+    if pipeline_type == "muloDesign":
+        return "Multi Loop"
+    return pipeline_type or ""
+
+
+def _blank_overview_summary_fields() -> dict[str, Any]:
+    return {key: "" for key in OVERVIEW_PROJECT_CSV_FIELDS if key not in PROJECT_CSV_FIELDS}
 
 
 def _iso(value: datetime | None) -> str:
@@ -181,6 +231,7 @@ def _project_csv_row(project: Project) -> dict[str, Any]:
         "owner_email": data["owner_email"] or "",
         "title": data["title"],
         "pipeline_type": data["pipeline_type"],
+        "pipeline_label": _pipeline_label(str(data["pipeline_type"])),
         "status": data["status"],
         "file_name": data["file_name"],
         "file_type": data["file_type"],
@@ -189,6 +240,86 @@ def _project_csv_row(project: Project) -> dict[str, Any]:
         "created_at": _iso(data["created_at"]),
         "updated_at": _iso(data["updated_at"]),
     }
+
+
+def _workflow_summary_fields(summary: dict[str, Any] | None, *, prefix: str) -> dict[str, Any]:
+    if not summary:
+        keys = [
+            f"{prefix}_success",
+            f"{prefix}_flag",
+            f"{prefix}_cost",
+            f"{prefix}_input_tokens",
+            f"{prefix}_output_tokens",
+            f"{prefix}_total_tokens",
+            f"{prefix}_error",
+        ]
+        if prefix.endswith("recommender"):
+            keys.insert(2, f"{prefix}_best_score")
+        return {key: "" for key in keys}
+
+    tokens = summary.get("token_usage")
+    tokens = tokens if isinstance(tokens, dict) else {}
+    best_score = summary.get("best_score")
+    price = summary.get("price")
+    fields: dict[str, Any] = {
+        f"{prefix}_success": bool(summary.get("success", False)),
+        f"{prefix}_flag": summary.get("flag") or "",
+        f"{prefix}_cost": (
+            round(float(price), 6)
+            if isinstance(price, (int, float)) and not isinstance(price, bool)
+            else ""
+        ),
+        f"{prefix}_input_tokens": int(_num(tokens.get("input_tokens"))),
+        f"{prefix}_output_tokens": int(_num(tokens.get("output_tokens"))),
+        f"{prefix}_total_tokens": int(_num(tokens.get("total_tokens"))),
+        f"{prefix}_error": summary.get("error") or "",
+    }
+    if prefix.endswith("recommender"):
+        fields[f"{prefix}_best_score"] = (
+            round(float(best_score), 4)
+            if isinstance(best_score, (int, float)) and not isinstance(best_score, bool)
+            else ""
+        )
+    return fields
+
+
+def _overview_project_csv_row(project: Project) -> dict[str, Any]:
+    """Project identity plus inline single/multi-loop summary metrics."""
+    row = {**_blank_overview_summary_fields(), **_project_csv_row(project)}
+
+    if project.pipeline_type == "siloDesign":
+        history = _scenario_metrics_history(project.results)
+        if history:
+            aggregates = _session_profiling_aggregates(history)
+            row.update(
+                {
+                    "silo_scenarios_completed": aggregates["scenarios_completed"],
+                    "silo_scenarios_total": aggregates["scenarios_total"],
+                    "silo_avg_success_score": aggregates["avg_success_score"],
+                    "silo_total_api_failures": aggregates["total_api_failures"],
+                    "silo_avg_cost_per_success": aggregates["avg_cost_per_success"],
+                    "silo_total_tokens_in": aggregates["total_tokens_in"],
+                    "silo_total_tokens_out": aggregates["total_tokens_out"],
+                    "silo_total_wall_clock_s": aggregates["total_wall_clock_s"],
+                    "silo_total_cost": aggregates["total_cost"],
+                }
+            )
+        return row
+
+    if project.pipeline_type == "muloDesign":
+        row.update(
+            _workflow_summary_fields(
+                _workflow_summary_dict(project.results, "recommender_summary"),
+                prefix="mulo_recommender",
+            )
+        )
+        row.update(
+            _workflow_summary_fields(
+                _workflow_summary_dict(project.results, "trimmer_summary"),
+                prefix="mulo_trimmer",
+            )
+        )
+    return row
 
 
 def _profile_survey_csv_row(user: User) -> dict[str, Any]:
@@ -327,12 +458,14 @@ def _num(value: Any, default: float = 0.0) -> float:
 
 def _project_identity_fields(project: Project) -> dict[str, Any]:
     data = project_service.project_to_summary(project, include_owner=True)
+    pipeline_type = str(data["pipeline_type"])
     return {
         "project_id": data["id"],
         "user_id": data["user_id"],
         "owner_email": data["owner_email"] or "",
         "title": data["title"],
-        "pipeline_type": data["pipeline_type"],
+        "pipeline_type": pipeline_type,
+        "pipeline_label": _pipeline_label(pipeline_type),
         "status": data["status"],
         "created_at": _iso(data["created_at"]),
         "updated_at": _iso(data["updated_at"]),
@@ -393,6 +526,7 @@ def _session_summary_row(project: Project, history: list[dict[str, Any]]) -> dic
         "owner_email": identity["owner_email"],
         "title": identity["title"],
         "pipeline_type": identity["pipeline_type"],
+        "pipeline_label": identity["pipeline_label"],
         "status": identity["status"],
         **aggregates,
         "created_at": identity["created_at"],
@@ -417,6 +551,7 @@ def _scenario_summary_rows(
                 "owner_email": identity["owner_email"],
                 "title": identity["title"],
                 "pipeline_type": identity["pipeline_type"],
+                "pipeline_label": identity["pipeline_label"],
                 "status": identity["status"],
                 "scenario_level": entry.get("scenario_level", ""),
                 "timestamp": entry.get("timestamp", ""),
@@ -459,6 +594,7 @@ def _best_controller_rows(project: Project) -> list[dict[str, Any]]:
                     "owner_email": identity["owner_email"],
                     "title": identity["title"],
                     "pipeline_type": identity["pipeline_type"],
+                    "pipeline_label": identity["pipeline_label"],
                     "status": identity["status"],
                     "scenario_level": key,
                     "controller_type": "",
@@ -493,6 +629,7 @@ def _best_controller_rows(project: Project) -> list[dict[str, Any]]:
                 "owner_email": identity["owner_email"],
                 "title": identity["title"],
                 "pipeline_type": identity["pipeline_type"],
+                "pipeline_label": identity["pipeline_label"],
                 "status": identity["status"],
                 "scenario_level": best.get("scenario_level", key),
                 "controller_type": best.get("controller_type") or "",
@@ -536,6 +673,13 @@ def _collect_project_summary_rows(
     return session_rows, scenario_rows, best_rows
 
 
+def _workflow_summary_dict(results: Any, key: str) -> dict[str, Any] | None:
+    if not isinstance(results, dict):
+        return None
+    summary = results.get(key)
+    return summary if isinstance(summary, dict) else None
+
+
 def export_project_profiling_csv(
     db: Session,
     *,
@@ -574,20 +718,19 @@ def export_project_profiling_csv(
     return "\n".join(sections)
 
 
-def _project_summary_sections(projects: list[Project]) -> list[str]:
-    """Summary tab sections for download-all CSV, scoped to the given projects."""
-    session_rows, scenario_rows, best_rows = _collect_project_summary_rows(projects)
+def _project_detail_sections(projects: list[Project]) -> list[str]:
+    """Per-scenario / best-controller detail tabs (single-loop only).
+
+    Session-level summary metrics live on the projects row in download-all CSV.
+    """
+    _, scenario_rows, best_rows = _collect_project_summary_rows(projects)
     return [
         _csv_section(
-            "project_summary",
-            rows_to_csv(session_rows, SESSION_SUMMARY_CSV_FIELDS),
-        ),
-        _csv_section(
-            "project_summary_scenarios",
+            "single_loop_scenarios",
             rows_to_csv(scenario_rows, SCENARIO_SUMMARY_CSV_FIELDS),
         ),
         _csv_section(
-            "project_best_controllers",
+            "single_loop_best_controllers",
             rows_to_csv(best_rows, BEST_CONTROLLER_CSV_FIELDS),
         ),
     ]
@@ -664,6 +807,8 @@ def _overview_summary_csv(db: Session) -> str:
     admin_count = sum(1 for user in users if user.is_admin)
     active_plans = sum(1 for plan in plans if plan.is_active)
     max_modules = max((len(plan.action_codes()) for plan in plans), default=0)
+    single_loop = sum(1 for project in projects if project.pipeline_type == "siloDesign")
+    multi_loop = sum(1 for project in projects if project.pipeline_type == "muloDesign")
     rows = [
         {"metric": "total_users", "value": len(users)},
         {"metric": "active_users", "value": active_users},
@@ -671,6 +816,8 @@ def _overview_summary_csv(db: Session) -> str:
         {"metric": "active_plans", "value": active_plans},
         {"metric": "total_plans", "value": len(plans)},
         {"metric": "total_projects", "value": len(projects)},
+        {"metric": "single_loop_projects", "value": single_loop},
+        {"metric": "multi_loop_projects", "value": multi_loop},
         {"metric": "default_plan_id", "value": default_plan.id if default_plan else ""},
         {"metric": "default_plan_name", "value": default_plan.name if default_plan else ""},
         {"metric": "max_modules_on_plan", "value": max_modules},
@@ -701,9 +848,15 @@ def _user_data_block(
         _csv_section("user", rows_to_csv([_user_csv_row(user)], USER_CSV_FIELDS)),
         _csv_section(
             "projects",
-            rows_to_csv([_project_csv_row(p) for p in projects], PROJECT_CSV_FIELDS),
+            rows_to_csv(
+                [
+                    _overview_project_csv_row(p)
+                    for p in sorted(projects, key=lambda item: item.id)
+                ],
+                OVERVIEW_PROJECT_CSV_FIELDS,
+            ),
         ),
-        *_project_summary_sections(projects),
+        *_project_detail_sections(projects),
     ]
 
     if user.profile_survey_completed_at is not None:
@@ -738,8 +891,8 @@ def export_overview_csv(db: Session) -> str:
 
     Layout:
     - global sections: summary, plans, monitoring, unassigned_errors
-    - then for each user: user info + projects, SILO project summary tabs,
-      surveys, errors
+    - then for each user: user info + projects (with inline summary metrics),
+      single-loop scenario/best-controller detail tabs, surveys, errors
     """
     users = db.query(User).order_by(User.email).all()
     projects_by_user: dict[int, list[Project]] = defaultdict(list)
