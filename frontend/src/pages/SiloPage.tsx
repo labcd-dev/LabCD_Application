@@ -83,6 +83,14 @@ export function SiloPage() {
 
       {error && <StatusMessage type="error" message={error} />}
 
+      <div className="my-5 flex justify-center">
+        <img
+          src="/silo-agent-loop.png"
+          alt="Single-loop agent refinement and evaluation flow: Actor, Critic, Terminator, and Juror"
+          className="h-auto w-full max-w-3xl object-contain"
+        />
+      </div>
+
       <button type="button" className={btnLink} onClick={() => setShowAdvanced((v) => !v)}>
         {showAdvanced ? 'Hide' : 'Show'} Advanced Settings
       </button>
