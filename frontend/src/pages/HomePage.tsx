@@ -236,7 +236,7 @@ export function HomePage() {
                 <span>Design Instructions (Optional)</span>
                 <textarea
                   className={`${fieldInput} min-h-24`}
-                  placeholder="e.g., Prioritize PID tuning algorithms, explore cascaded loops, or define MIMO architectures..."
+                  placeholder="e.g., Minimize settling time, explore cascaded loops, or define MIMO architectures..."
                   value={pipeline.userPrompt}
                   onChange={(e) => pipeline.setUserPrompt(e.target.value)}
                 />
