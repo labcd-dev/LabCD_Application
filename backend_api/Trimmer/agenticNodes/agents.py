@@ -84,8 +84,8 @@ class Agents(metaclass=SingletonMeta):
     }
 
     def __init__(self, model_name="gpt-oss-120b"):
-        self.llm_nvidia = ChatNVIDIA(model="nvidia/llama-3.3-nemotron-super-49b-v1", temperature=0,
-                                     max_completion_tokens=8000)
+        # self.llm_nvidia = ChatNVIDIA(model="nvidia/llama-3.3-nemotron-super-49b-v1", temperature=0,
+        #                              max_completion_tokens=8000)
         if model_name == "gpt-oss-120b":
             self.llm_think = ChatGroq(model="openai/gpt-oss-120b", temperature=0.1)
         elif model_name.startswith("gpt-"):

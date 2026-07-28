@@ -89,6 +89,47 @@ def process_to_running(file_content_exist = False):
         st.error("Error reading file. Please ensure it's a valid text file.")
 
 
+def render_summary_tab(summary):
+    """Renders the workflow summary matching the metric dashboard style for the Trimmer."""
+    if not summary:
+        st.info("Summary not available yet. Please run the workflow.")
+        return
+
+    # 1. Status Banner
+    if summary.get("success"):
+        st.success("🏆 Trimming complete! See the Final Result tab for your data.")
+    else:
+        st.error(f"❌ Workflow encountered an error or instability: {summary.get('error', 'Unknown Error')}")
+
+    # 2. Top Metrics Row
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        status_text = "Completed" if summary.get("success") else "Failed/Interrupted"
+        st.metric("Status", status_text)
+    with col2:
+        # For Trimmer, 'flag' often contains stability classification or error tags
+        flag = summary.get("flag", "N/A").replace("_", " ").title()
+        st.metric("Exit Flag / Stability", flag)
+    with col3:
+        price = summary.get("price", 0.0)
+        st.metric("Total Cost", f"${price:.4f}")
+
+    st.divider()
+
+    # 3. Secondary Configuration Metrics
+    st.subheader("LLM Agent Execution Metrics")
+
+    tokens = summary.get("token_usage", {})
+
+    row1_col1, row1_col2, row1_col3 = st.columns(3)
+    with row1_col1:
+        st.metric("Input Tokens", tokens.get("input_tokens", 0))
+    with row1_col2:
+        st.metric("Output Tokens", tokens.get("output_tokens", 0))
+    with row1_col3:
+        st.metric("Total Tokens", tokens.get("total_tokens", 0))
+
+
 def run_app():
     # =============================================================================
     # ðŸŽ¨ THEME-AWARE CSS
@@ -252,12 +293,18 @@ def run_app():
             st.session_state.trim_thread_running = False # Reset thread flag to start again
             st.rerun()
 
-    # Phase 3: Review Results
+    # Phase 3: Review
     elif st.session_state.trimmer_step == "review":
-        st.subheader("âœ… Trimmer Workflow Complete")
+        st.subheader("✅ Trimmer Workflow Complete")
         artifacts = st.session_state.artifacts
 
-        trim_tab1, trim_tab2, trim_tab3 = st.tabs(["ðŸ“Š Final Result", "âš™ï¸ Time Response", "ðŸ“‹ Log History"])
+        # Add a fourth tab for the Summary
+        trim_tab1, trim_tab2, trim_tab3, trim_tab4 = st.tabs(
+            ["📊 Final Result", "⚙️ Time Response", "📋 Log History", "📝 Summary"])
+
+        # Render the summary
+        with trim_tab4:
+            render_summary_tab(st.session_state.get("trimmer_summary", {}))
 
         with trim_tab3:
             render_logs(st.container(), st.session_state.trimmer_logs)
@@ -333,6 +380,9 @@ def run_app():
                 st.session_state.trimmer_step = "human_input"
             elif msg["type"] == "done":
                 st.session_state.trim_thread_running = False
+                # Save the summary payload to session state
+                st.session_state.trimmer_summary = msg.get("summary", {})
+
                 # Fast I/O and processing executed synchronously on the main thread after completion
                 try:
                     output_dir = os.path.join(base_dir, "results")
@@ -352,7 +402,19 @@ def run_app():
             elif msg["type"] == "error":
                 st.session_state.trim_thread_running = False
                 print(msg)
-                trim_status.error(f"Trimmer Error: {msg['content']}")
+
+                # Save the summary payload
+                st.session_state.trimmer_summary = msg.get("summary", {})
+
+                # Provide a fallback artifacts dictionary so the review tab doesn't crash
+                st.session_state.artifacts = {
+                    "result": {"error": msg.get("content", "Unknown Error")},
+                    "config": {},
+                    "output_dir": ""
+                }
+
+                # Force the UI into the review step
+                st.session_state.trimmer_step = "review"
             st.rerun()
 
         # 5. Continuous UI Update Loop

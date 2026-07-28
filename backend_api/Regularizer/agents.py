@@ -26,7 +26,7 @@ class SingletonMeta(type):
 class Agents(metaclass=SingletonMeta):
     def __init__(self, model_name="gpt-oss-120b", prompt_dir="backend_api/Regularizer/templates"):
         self.main_model = self._choose_model(model_name)
-        self.gpt_oss = ChatNVIDIA(model="openai/gpt-oss-120b", temperature=0, max_completion_tokens=16000)
+        # self.gpt_oss = ChatNVIDIA(model="openai/gpt-oss-120b", temperature=0, max_completion_tokens=16000)
 
         self.prompts = {}
         self._load_all_prompts(prompt_dir)
