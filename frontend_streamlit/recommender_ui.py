@@ -367,7 +367,10 @@ def run_app():
                     st.session_state.recommender_step = rag_status["next_step"]
             elif msg["type"] == "error":
                 st.session_state.rec_thread_running = False
-                rec_status.error(f"Recommender Error: {msg['content']}")
+                # Save the summary and force the UI into the review step
+                st.session_state.recommender_summary = msg.get("summary", {})
+                st.session_state.recommender_step = "review"
+                st.rerun()
             st.rerun()
 
         # 5. Continuous UI Update Loop

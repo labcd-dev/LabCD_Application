@@ -402,7 +402,19 @@ def run_app():
             elif msg["type"] == "error":
                 st.session_state.trim_thread_running = False
                 print(msg)
-                trim_status.error(f"Trimmer Error: {msg['content']}")
+
+                # Save the summary payload
+                st.session_state.trimmer_summary = msg.get("summary", {})
+
+                # Provide a fallback artifacts dictionary so the review tab doesn't crash
+                st.session_state.artifacts = {
+                    "result": {"error": msg.get("content", "Unknown Error")},
+                    "config": {},
+                    "output_dir": ""
+                }
+
+                # Force the UI into the review step
+                st.session_state.trimmer_step = "review"
             st.rerun()
 
         # 5. Continuous UI Update Loop
