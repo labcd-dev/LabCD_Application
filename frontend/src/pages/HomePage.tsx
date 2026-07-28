@@ -53,7 +53,7 @@ export function HomePage() {
   }, [])
 
   useEffect(() => {
-    healthApi.models().then((res) => setModels(res.llm_models)).catch(() => {})
+    healthApi.models().then((res) => setModels(res.llm_models)).catch(() => { })
   }, [])
 
   const handleFileSelect = async (file: File) => {
@@ -204,7 +204,7 @@ export function HomePage() {
       {stage === 'upload' && (
         <div className="setup-stage setup-animate-in">
           <div className={`${cardPanel} setup-panel`}>
-            <div className="grid grid-cols-[2fr_1fr] gap-4 max-md:grid-cols-1">
+            <div className="grid grid-cols-1 gap-4 max-md:grid-cols-1">
               <FileUpload onFileSelect={handleFileSelect} disabled={loading} />
               <ModelSelect
                 models={models}
@@ -219,18 +219,6 @@ export function HomePage() {
               />
             </div>
 
-            {pipeline.fileContent && (
-              <StatusMessage
-                type="success"
-                message={`File loaded: ${pipeline.fileName} (${pipeline.fileType})`}
-              />
-            )}
-
-            <PipelineSelector
-              value={pipeline.pipeline}
-              onChange={pipeline.setPipeline}
-            />
-
             {pipeline.pipeline && (
               <label className={`${fieldLabel} mt-4`}>
                 <span>Design Instructions (Optional)</span>
@@ -242,6 +230,18 @@ export function HomePage() {
                 />
               </label>
             )}
+
+            {pipeline.fileContent && (
+              <StatusMessage
+                type="success"
+                message={`File loaded: ${pipeline.fileName} (${pipeline.fileType})`}
+              />
+            )}
+
+            <PipelineSelector
+              value={pipeline.pipeline}
+              onChange={pipeline.setPipeline}
+            />
 
             {pipeline.pipeline && pipeline.fileContent && (
               <button
