@@ -37,10 +37,10 @@ class Agents(metaclass=SingletonMeta):
     }
 
     def __init__(self, model_name="gpt-oss-120b", prompt_dir="backend_api/Recommender/agents/templates"):
-        self.llm_nvidia = ChatNVIDIA(model="nvidia/llama-3.3-nemotron-super-49b-v1", temperature=0,
-                                     max_completion_tokens=16000)
+        # self.llm_nvidia = ChatNVIDIA(model="nvidia/llama-3.3-nemotron-super-49b-v1", temperature=0,
+        #                              max_completion_tokens=16000)
         self.openai = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        self.llm_groq = ChatGroq(model="openai/gpt-oss-120b", temperature=0, max_completion_tokens=16000)
+        # self.llm_groq = ChatGroq(model="openai/gpt-oss-120b", temperature=0, max_completion_tokens=16000)
 
         if model_name == "gpt-oss-120b":
             self.llm_think = ChatNVIDIA(model="openai/gpt-oss-120b", temperature=0, max_completion_tokens=16000)
