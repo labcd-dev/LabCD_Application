@@ -205,6 +205,12 @@ export function HomePage() {
         <div className="setup-stage setup-animate-in">
           <div className={`${cardPanel} setup-panel`}>
             <div className="grid grid-cols-1 gap-4 max-md:grid-cols-1">
+              {pipeline.fileContent && (
+                <StatusMessage
+                  type="success"
+                  message={`File loaded: ${pipeline.fileName} (${pipeline.fileType})`}
+                />
+              )}
               <FileUpload onFileSelect={handleFileSelect} disabled={loading} />
               <ModelSelect
                 models={models}
@@ -229,13 +235,6 @@ export function HomePage() {
                   onChange={(e) => pipeline.setUserPrompt(e.target.value)}
                 />
               </label>
-            )}
-
-            {pipeline.fileContent && (
-              <StatusMessage
-                type="success"
-                message={`File loaded: ${pipeline.fileName} (${pipeline.fileType})`}
-              />
             )}
 
             <PipelineSelector
