@@ -91,6 +91,50 @@ def start_trimmer(choice = ""):
     st.rerun()
 
 
+def render_summary_tab(summary):
+    """Renders the workflow summary matching the metric dashboard style."""
+    if not summary:
+        st.info("Summary not available yet. Please run the workflow.")
+        return
+
+    # 1. Status Banner
+    if summary.get("success"):
+        st.success("🏆 Design complete! See the Final Result tab for your controller design.")
+    else:
+        st.error(f"❌ Workflow encountered an error: {summary.get('error', 'Unknown Error')}")
+
+    # 2. Top Metrics Row
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        status_text = "Completed" if summary.get("success") else "Failed"
+        st.metric("Status", status_text)
+    with col2:
+        # Format the flag to look clean (e.g., "llm_failure" -> "Llm Failure")
+        flag = summary.get("flag", "N/A").replace("_", " ").title()
+        st.metric("Exit Flag", flag)
+    with col3:
+        best_score = summary.get("best_score")
+        st.metric("Best Score", f"{int(best_score)}/10" if isinstance(best_score, (int, float)) else "N/A")
+    with col4:
+        price = summary.get("price", 0.0)
+        st.metric("Total Cost", f"${price:.4f}")
+
+    st.divider()
+
+    # 3. Secondary Configuration Metrics
+    st.subheader("LLM Agent Execution Metrics")
+
+    tokens = summary.get("token_usage", {})
+
+    row1_col1, row1_col2, row1_col3 = st.columns(3)
+    with row1_col1:
+        st.metric("Input Tokens", tokens.get("input_tokens", 0))
+    with row1_col2:
+        st.metric("Output Tokens", tokens.get("output_tokens", 0))
+    with row1_col3:
+        st.metric("Total Tokens", tokens.get("total_tokens", 0))
+
+
 def run_app():
     # =============================================================================
     # ðŸŽ¨ THEME-AWARE CSS
@@ -174,8 +218,15 @@ def run_app():
 
     # Phase 2: Review Initial Output
     elif st.session_state.recommender_step == "review":
-        st.subheader("âœ… Recommender Initial Processing Complete")
-        rec_tab1, rec_tab2, rec_tab3 = st.tabs(["ðŸ“Š Final Result", "ðŸ“‹ Activity Log", "ðŸ“œ Json Result"])
+        st.subheader("✅ Recommender Initial Processing Complete")
+        # Add a fourth tab for the Summary
+        rec_tab1, rec_tab2, rec_tab3, rec_tab4 = st.tabs(
+            ["📊 Final Result", "📋 Activity Log", "📜 Json Result", "📝 Summary"])
+
+        # Render the summary
+        with rec_tab4:
+            render_summary_tab(st.session_state.get("recommender_summary", {}))
+
         with rec_tab3:
             with st.expander("ðŸ” View Raw JSON Output"):
                 st.json(make_serializable(st.session_state.recommender_logs[-2]["log_history"]))
@@ -234,8 +285,15 @@ def run_app():
         controller_graph = state_snapshot["controller_graph"]
         controller_json = state_snapshot["controller_json"]
 
-        st.subheader("ðŸ”¬ Comparison: Initial vs. RAG Enhanced")
-        rec_tab1, rec_tab2, rec_tab3 = st.tabs(["ðŸ“Š Final Result", "ðŸ“‹ Activity Log", "ðŸ“œ Json Result"])
+        st.subheader("🔬 Comparison: Initial vs. RAG Enhanced")
+        # Add a fourth tab for the Summary
+        rec_tab1, rec_tab2, rec_tab3, rec_tab4 = st.tabs(
+            ["📊 Final Result", "📋 Activity Log", "📜 Json Result", "📝 Summary"])
+
+        # Render the summary
+        with rec_tab4:
+            render_summary_tab(st.session_state.get("recommender_summary", {}))
+
         with rec_tab1:
             col1, col2 = st.columns(2)
             colLeft = True
@@ -299,6 +357,8 @@ def run_app():
                         st.session_state.rec_status_text = content["text"]
             elif msg["type"] == "done":
                 st.session_state.rec_thread_running = False
+                # Save the summary payload to session state
+                st.session_state.recommender_summary = msg.get("summary", {})
                 if msg["step"] == "initial_run":
                     st.session_state.recommender_step = "review"
                 else:
