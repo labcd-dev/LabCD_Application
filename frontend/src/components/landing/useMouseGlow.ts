@@ -17,6 +17,13 @@ export function useMouseGlow() {
     let dotY = mouseY
     let frame = 0
 
+    const placeAt = (el: HTMLElement, x: number, y: number) => {
+      el.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%)`
+    }
+
+    placeAt(mouseGlow, glowX, glowY)
+    placeAt(mouseDot, dotX, dotY)
+
     const onMove = (event: MouseEvent) => {
       mouseX = event.clientX
       mouseY = event.clientY
@@ -27,8 +34,8 @@ export function useMouseGlow() {
       glowY += (mouseY - glowY) * 0.08
       dotX += (mouseX - dotX) * 0.28
       dotY += (mouseY - dotY) * 0.28
-      mouseGlow.style.transform = `translate(${glowX}px, ${glowY}px) translate(-50%, -50%)`
-      mouseDot.style.transform = `translate(${dotX}px, ${dotY}px) translate(-50%, -50%)`
+      placeAt(mouseGlow, glowX, glowY)
+      placeAt(mouseDot, dotX, dotY)
       frame = requestAnimationFrame(animate)
     }
 

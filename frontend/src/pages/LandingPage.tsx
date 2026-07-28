@@ -85,12 +85,12 @@ export function LandingPage() {
     <div className="landing-root bg-white text-white" style={style}>
       <div
         id="mouse-glow"
-        className="pointer-events-none fixed left-0 top-0 z-[60] hidden h-72 w-72 -translate-x-1/2 -translate-y-1/2 rounded-full blur-3xl mix-blend-screen md:block"
+        className="pointer-events-none fixed left-0 top-0 z-[60] hidden h-72 w-72 rounded-full blur-3xl mix-blend-screen md:block"
         style={{ backgroundColor: 'color-mix(in srgb, var(--brand-primary) 10%, transparent)' }}
       />
       <div
         id="mouse-dot"
-        className="pointer-events-none fixed left-0 top-0 z-[61] hidden h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full shadow-[0_0_18px_rgba(34,211,238,0.55)] md:block"
+        className="pointer-events-none fixed left-0 top-0 z-[61] hidden h-2 w-2 rounded-full shadow-[0_0_18px_rgba(34,211,238,0.55)] md:block"
         style={{ backgroundColor: 'color-mix(in srgb, var(--brand-primary) 70%, transparent)' }}
       />
 
