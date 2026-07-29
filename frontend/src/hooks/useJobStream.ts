@@ -43,7 +43,17 @@ export function useJobStream({ module, jobId, enabled = true }: UseJobStreamOpti
   const [summary, setSummary] = useState<Record<string, unknown> | null>(null)
 
   useEffect(() => {
-    if (!jobId || !enabled) return
+    // Always clear terminal flags when the stream is off. Otherwise a prior
+    // isDone=true sticks while enabled=false, and the next enable (e.g. RAG
+    // after review) looks immediately complete — matching Streamlit's fresh
+    // poll loop which never carries a sticky "done" across runs.
+    if (!jobId || !enabled) {
+      setIsDone(false)
+      setIsRunning(false)
+      setIsCancelled(false)
+      setNeedsPollFallback(false)
+      return
+    }
 
     setEvents([])
     setLatestMonitor(null)

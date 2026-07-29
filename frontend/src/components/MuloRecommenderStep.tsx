@@ -44,6 +44,8 @@ export function MuloRecommenderStep({ onComplete }: MuloRecommenderStepProps) {
   const [summary, setSummary] = useState<WorkflowSummary | null>(null)
   /** Only assess RAG completion after a RAG enhancement run (not the initial recommender). */
   const pendingRagAssessment = useRef(false)
+  /** Track isDone edge so re-entering step=running never treats a sticky done as a new finish. */
+  const wasStreamDone = useRef(false)
 
   const jobId = pipeline.recommenderJobId
   const stream = useJobStream({ module: 'recommender', jobId, enabled: step === 'running' })
@@ -130,26 +132,28 @@ export function MuloRecommenderStep({ onComplete }: MuloRecommenderStepProps) {
   }, [jobId, step, state, loadState, loadSummary])
 
   useEffect(() => {
-    if (stream.isDone && step === 'running') {
-      void loadState().then(async () => {
-        if (!jobId) return
-        void loadSummary(jobId)
-        if (stream.error) {
-          setError(stream.error)
-          setStep('review')
-          return
-        }
-        if (pendingRagAssessment.current) {
-          pendingRagAssessment.current = false
-          const ragStatus = await recommenderApi.ragStatus(jobId)
-          setRagError(ragStatus.error_message || '')
-          setStep(ragStatus.next_step === 'comparison' ? 'comparison' : 'review')
-          return
-        }
-        setRagError('')
+    const justFinished = stream.isDone && !wasStreamDone.current
+    wasStreamDone.current = stream.isDone
+    if (!justFinished || step !== 'running') return
+
+    void loadState().then(async () => {
+      if (!jobId) return
+      void loadSummary(jobId)
+      if (stream.error) {
+        setError(stream.error)
         setStep('review')
-      })
-    }
+        return
+      }
+      if (pendingRagAssessment.current) {
+        pendingRagAssessment.current = false
+        const ragStatus = await recommenderApi.ragStatus(jobId)
+        setRagError(ragStatus.error_message || '')
+        setStep(ragStatus.next_step === 'comparison' ? 'comparison' : 'review')
+        return
+      }
+      setRagError('')
+      setStep('review')
+    })
   }, [stream.isDone, step, jobId, loadState, loadSummary, stream.error])
 
   const startRag = async () => {
@@ -213,6 +217,7 @@ export function MuloRecommenderStep({ onComplete }: MuloRecommenderStepProps) {
     setError(null)
     setSummary(null)
     pendingRagAssessment.current = false
+    wasStreamDone.current = false
     autoStartRequested.current = false
     setActiveTab('process')
     setStep('idle')
@@ -242,6 +247,11 @@ export function MuloRecommenderStep({ onComplete }: MuloRecommenderStepProps) {
   }, [controllerGraph, jobId])
 
   const resultImageClass = 'max-w-full border border-border rounded-lg my-4'
+  const comparisonImageClass = 'max-w-full rounded-lg'
+  const comparisonOptionClass =
+    'm-0 w-full cursor-pointer rounded-xl border-2 bg-transparent p-2 text-left transition-[border-color,box-shadow,background-color] duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary'
+  const comparisonOptionIdleClass = `${comparisonOptionClass} border-border hover:border-primary/50`
+  const comparisonOptionSelectedClass = `${comparisonOptionClass} border-primary bg-primary/5 shadow-sm`
 
   const tabs = [
     {
@@ -316,31 +326,62 @@ export function MuloRecommenderStep({ onComplete }: MuloRecommenderStepProps) {
           )}
           {step === 'comparison' && (
             <>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-[repeat(auto-fit,minmax(240px,1fr))]">
-                {graphImageUrl && (
-                  <figure>
-                    <img src={graphImageUrl} alt="Original output" className={resultImageClass} />
-                    <figcaption>Original Output</figcaption>
-                  </figure>
+              <p className={mutedText}>Click an image to select which output to keep.</p>
+              <div
+                className="grid grid-cols-1 gap-4 sm:grid-cols-[repeat(auto-fit,minmax(240px,1fr))]"
+                role="radiogroup"
+                aria-label="Controller output choice"
+              >
+                {graphImageUrl && controllerJson.Initial_controller != null && (
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={chosenController === 'Initial_controller'}
+                    className={
+                      chosenController === 'Initial_controller'
+                        ? comparisonOptionSelectedClass
+                        : comparisonOptionIdleClass
+                    }
+                    onClick={() => setChosenController('Initial_controller')}
+                  >
+                    <figure className="m-0">
+                      <img
+                        src={graphImageUrl}
+                        alt="Original output"
+                        className={comparisonImageClass}
+                        draggable={false}
+                      />
+                      <figcaption className="mt-2 text-center text-sm font-medium text-foreground">
+                        Original Output
+                      </figcaption>
+                    </figure>
+                  </button>
                 )}
                 {ragGraphEntries.map((entry) => (
-                  <figure key={entry.key}>
-                    <img src={entry.url} alt={entry.key} className={resultImageClass} />
-                    <figcaption>{entry.key}</figcaption>
-                  </figure>
-                ))}
-              </div>
-              <div className="flex flex-col gap-2">
-                {controllerKeys.map((key) => (
-                  <label key={key} className="flex items-center gap-2">
-                    <input
-                      type="radio"
-                      name="controller-choice"
-                      checked={chosenController === key}
-                      onChange={() => setChosenController(key)}
-                    />
-                    {key.replace('_controller', '')}
-                  </label>
+                  <button
+                    key={entry.key}
+                    type="button"
+                    role="radio"
+                    aria-checked={chosenController === entry.key}
+                    className={
+                      chosenController === entry.key
+                        ? comparisonOptionSelectedClass
+                        : comparisonOptionIdleClass
+                    }
+                    onClick={() => setChosenController(entry.key)}
+                  >
+                    <figure className="m-0">
+                      <img
+                        src={entry.url}
+                        alt={entry.key.replace('_controller', '')}
+                        className={comparisonImageClass}
+                        draggable={false}
+                      />
+                      <figcaption className="mt-2 text-center text-sm font-medium text-foreground">
+                        {entry.key.replace('_controller', '')}
+                      </figcaption>
+                    </figure>
+                  </button>
                 ))}
               </div>
               <div className="flex gap-3 flex-wrap mt-4">
