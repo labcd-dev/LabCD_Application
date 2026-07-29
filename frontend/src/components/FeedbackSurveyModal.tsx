@@ -19,6 +19,10 @@ type LikertKey = (typeof LIKERT_FIELDS)[number]['key']
 interface FeedbackSurveyModalProps {
   open: boolean
   pipelineType: FeedbackPipelineType
+  /** When more than one, show a design picker. Defaults to `[pipelineType]`. */
+  availablePipelines?: FeedbackPipelineType[]
+  /** Voluntary FAB flow uses Cancel + general copy instead of post-design prompt. */
+  voluntary?: boolean
   onSubmitted: () => void | Promise<void>
   onDismiss: () => void
 }
@@ -26,9 +30,13 @@ interface FeedbackSurveyModalProps {
 export function FeedbackSurveyModal({
   open,
   pipelineType,
+  availablePipelines,
+  voluntary = false,
   onSubmitted,
   onDismiss,
 }: FeedbackSurveyModalProps) {
+  const pipelines = availablePipelines?.length ? availablePipelines : [pipelineType]
+  const [selectedPipeline, setSelectedPipeline] = useState<FeedbackPipelineType>(pipelineType)
   const [ratings, setRatings] = useState<Partial<Record<LikertKey, number>>>({})
   const [mainProblems, setMainProblems] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -36,15 +44,18 @@ export function FeedbackSurveyModal({
 
   useEffect(() => {
     if (!open) return
+    const pipelines = availablePipelines?.length ? availablePipelines : [pipelineType]
+    setSelectedPipeline(pipelines.includes(pipelineType) ? pipelineType : pipelines[0])
     setRatings({})
     setMainProblems('')
     setError(null)
     setSaving(false)
-  }, [open, pipelineType])
+  }, [open, pipelineType, availablePipelines])
 
   if (!open) return null
 
-  const designLabel = pipelineLabel(pipelineType)
+  const designLabel = pipelineLabel(selectedPipeline)
+  const showPipelinePicker = pipelines.length > 1
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()
@@ -58,7 +69,7 @@ export function FeedbackSurveyModal({
     setError(null)
     try {
       await surveyApi.submitFeedback({
-        pipeline_type: pipelineType,
+        pipeline_type: selectedPipeline,
         satisfaction: ratings.satisfaction!,
         ease_of_use: ratings.ease_of_use!,
         product_value: ratings.product_value!,
@@ -80,7 +91,7 @@ export function FeedbackSurveyModal({
       <button
         type="button"
         className="admin-fade-in absolute inset-0 bg-foreground/45 backdrop-blur-[2px]"
-        aria-label="Dismiss feedback survey"
+        aria-label={voluntary ? 'Close feedback survey' : 'Dismiss feedback survey'}
         onClick={onDismiss}
       />
       <div
@@ -90,14 +101,33 @@ export function FeedbackSurveyModal({
         aria-labelledby="feedback-survey-title"
       >
         <h2 id="feedback-survey-title" className="m-0 text-xl font-semibold text-foreground">
-          How was your {designLabel} experience?
+          {voluntary ? 'Send feedback' : `How was your ${designLabel} experience?`}
         </h2>
         <p className="mt-2 text-sm text-muted-text">
-          Rate each item from 1 (low) to 5 (high). You can skip for now; we will ask again after
-          your next successful {designLabel} design.
+          {voluntary
+            ? 'Rate each item from 1 (low) to 5 (high). Thanks for helping us improve LabCD.'
+            : `Rate each item from 1 (low) to 5 (high). You can skip for now; we will ask again after your next successful ${designLabel} design.`}
         </p>
 
         <form className="mt-5" onSubmit={(e) => void handleSubmit(e)}>
+          {showPipelinePicker && (
+            <label className={fieldLabel}>
+              <span>Design</span>
+              <select
+                className={fieldInput}
+                value={selectedPipeline}
+                onChange={(e) => setSelectedPipeline(e.target.value as FeedbackPipelineType)}
+                required
+              >
+                {pipelines.map((pipeline) => (
+                  <option key={pipeline} value={pipeline}>
+                    {pipelineLabel(pipeline)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+
           {LIKERT_FIELDS.map((field) => (
             <label key={field.key} className={fieldLabel}>
               <span>{field.label}</span>
@@ -139,7 +169,7 @@ export function FeedbackSurveyModal({
 
           <div className="mt-2 flex flex-col gap-2 sm:flex-row">
             <button type="button" className={`${btnBase} ${btnWide} sm:mt-4`} onClick={onDismiss}>
-              Skip for now
+              {voluntary ? 'Cancel' : 'Skip for now'}
             </button>
             <button type="submit" className={`${btnPrimary} ${btnWide}`} disabled={saving}>
               {saving ? 'Submitting…' : 'Submit feedback'}

@@ -12,7 +12,7 @@ import {
 } from 'lucide-react'
 import { surveyApi } from '../api/endpoints'
 import type { TutorialVideo } from '../api/types'
-import { BugReportFab } from './BugReportFab'
+import { SupportFabs } from './SupportFabs'
 import { ThemeToggle } from './ThemeToggle'
 import { TutorialSliderModal } from './TutorialSliderModal'
 import { useAuth } from '../context/AuthContext'
@@ -304,7 +304,7 @@ export function Layout() {
           }}
         />
       )}
-      {user && <BugReportFab />}
+      {user && <SupportFabs />}
     </div>
   )
 }
