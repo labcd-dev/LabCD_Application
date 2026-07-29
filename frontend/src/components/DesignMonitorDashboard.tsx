@@ -57,8 +57,11 @@ export function DesignMonitorDashboard({
     }
   }, [followLatest, steps.length, steps.at(-1)?.metrics])
 
+  const latestMetrics = steps.at(-1)?.metrics
   const chartRevision =
-    steps.length > 0 ? `${steps.length}-${JSON.stringify(steps.at(-1)?.metrics)}` : '0'
+    steps.length > 0
+      ? `${steps.length}-${latestMetrics?.mse ?? ''}-${latestMetrics?.settling_time ?? ''}-${latestMetrics?.overshoot ?? ''}-${latestMetrics?.stable ?? ''}`
+      : '0'
 
   const activeStepIndex =
     selectedStep !== null && selectedStep >= 0 && selectedStep < steps.length

@@ -31,7 +31,11 @@ export function SiloLiveRunPanel({ jobId, onTerminal, onDesignSuccess }: SiloLiv
   const notifiedTerminalRef = useRef<string | null>(null)
 
   const fetchMonitor = useCallback(async () => siloApi.monitor(jobId), [jobId])
-  const poll = usePoll(fetchMonitor, 3000, true)
+  const poll = usePoll(
+    fetchMonitor,
+    3000,
+    stream.needsPollFallback && !stream.isDone,
+  )
 
   useEffect(() => {
     if (!cancelling) return
@@ -69,7 +73,7 @@ export function SiloLiveRunPanel({ jobId, onTerminal, onDesignSuccess }: SiloLiv
   const isStopping = cancelling && !stream.isCancelled
   const monitorState = useMonitorState(
     poll.data as Record<string, unknown> | null | undefined,
-    stream.events,
+    stream.latestMonitor,
   )
   const llmResponses = (monitorState?.llm_responses ?? []) as Array<Record<string, unknown>>
   const progressHistory = (monitorState?.progress_history ?? []) as Array<Record<string, unknown>>

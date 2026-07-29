@@ -30,6 +30,8 @@ function messageFromMonitor(content: Record<string, unknown> | undefined): strin
 
 export function useJobStream({ module, jobId, enabled = true }: UseJobStreamOptions) {
   const [events, setEvents] = useState<StreamEvent[]>([])
+  const [latestMonitor, setLatestMonitor] = useState<Record<string, unknown> | null>(null)
+  const [needsPollFallback, setNeedsPollFallback] = useState(false)
   const [progress, setProgress] = useState(0)
   const [statusText, setStatusText] = useState('')
   const [isRunning, setIsRunning] = useState(false)
@@ -44,6 +46,8 @@ export function useJobStream({ module, jobId, enabled = true }: UseJobStreamOpti
     if (!jobId || !enabled) return
 
     setEvents([])
+    setLatestMonitor(null)
+    setNeedsPollFallback(false)
     setProgress(0)
     setStatusText('')
     setError(null)
@@ -71,6 +75,23 @@ export function useJobStream({ module, jobId, enabled = true }: UseJobStreamOpti
 
     const unsubscribe = subscribeJobStream(streamUrl(module, jobId), {
       onEvent: (event) => {
+        if (event.type === 'monitor') {
+          const content = event.content as Record<string, unknown> | undefined
+          if (content && typeof content === 'object') {
+            setLatestMonitor(content)
+          }
+          const monitorProgress = progressFromMonitor(content)
+          if (monitorProgress !== null) {
+            setProgress((prev) => Math.max(prev, monitorProgress))
+          }
+          const monitorMessage = messageFromMonitor(content)
+          if (monitorMessage) {
+            setStatusText(monitorMessage)
+          }
+          captureSummary(event)
+          return
+        }
+
         setEvents((prev) => [...prev, event])
         captureSummary(event)
 
@@ -93,23 +114,11 @@ export function useJobStream({ module, jobId, enabled = true }: UseJobStreamOpti
             setStatusText(content.text as string)
           }
         }
-
-        if (event.type === 'monitor') {
-          const content = event.content as Record<string, unknown> | undefined
-          const monitorProgress = progressFromMonitor(content)
-          if (monitorProgress !== null) {
-            setProgress((prev) => Math.max(prev, monitorProgress))
-          }
-          const monitorMessage = messageFromMonitor(content)
-          if (monitorMessage) {
-            setStatusText(monitorMessage)
-          }
-          setEvents((prev) => [...prev, { type: 'monitor_update', content: event.content }])
-        }
       },
       onDone: (event) => {
         setIsRunning(false)
         setIsDone(true)
+        setNeedsPollFallback(false)
         setProgress(1)
         captureSummary(event)
         if (event.status === 'failed') {
@@ -139,6 +148,7 @@ export function useJobStream({ module, jobId, enabled = true }: UseJobStreamOpti
           if (status.status === 'completed') {
             setIsRunning(false)
             setIsDone(true)
+            setNeedsPollFallback(false)
             setProgress(1)
             setError(null)
             return
@@ -146,6 +156,7 @@ export function useJobStream({ module, jobId, enabled = true }: UseJobStreamOpti
           if (status.status === 'failed') {
             setIsRunning(false)
             setIsDone(true)
+            setNeedsPollFallback(false)
             setError(status.error ?? err.message)
             return
           }
@@ -153,11 +164,13 @@ export function useJobStream({ module, jobId, enabled = true }: UseJobStreamOpti
             setIsRunning(false)
             setIsDone(true)
             setIsCancelled(true)
+            setNeedsPollFallback(false)
             setStatusText('Design cancelled')
             setError(null)
             return
           }
           // Stream dropped but the backend job is still running; polling can continue.
+          setNeedsPollFallback(true)
           setError(null)
           return
         } catch {
@@ -172,6 +185,8 @@ export function useJobStream({ module, jobId, enabled = true }: UseJobStreamOpti
 
   return {
     events,
+    latestMonitor,
+    needsPollFallback,
     logs,
     progress,
     statusText,

@@ -1,19 +1,4 @@
 import { useMemo } from 'react'
-import type { StreamEvent } from '../api/types'
-
-function latestMonitorFromEvents(events: StreamEvent[]): Record<string, unknown> | null {
-  for (let index = events.length - 1; index >= 0; index -= 1) {
-    const event = events[index]
-    if (
-      (event.type === 'monitor' || event.type === 'monitor_update') &&
-      event.content &&
-      typeof event.content === 'object'
-    ) {
-      return event.content as Record<string, unknown>
-    }
-  }
-  return null
-}
 
 function arrayLength(value: unknown): number {
   return Array.isArray(value) ? value.length : 0
@@ -82,15 +67,10 @@ function mergeMonitorState(
 
 export function useMonitorState(
   pollData: Record<string, unknown> | null | undefined,
-  streamEvents: StreamEvent[],
+  streamMonitor: Record<string, unknown> | null,
 ): Record<string, unknown> | null {
-  const streamSnapshot = useMemo(
-    () => latestMonitorFromEvents(streamEvents),
-    [streamEvents],
-  )
-
   return useMemo(
-    () => mergeMonitorState(pollData, streamSnapshot),
-    [pollData, streamSnapshot],
+    () => mergeMonitorState(pollData, streamMonitor),
+    [pollData, streamMonitor],
   )
 }
