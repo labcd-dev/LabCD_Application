@@ -85,7 +85,7 @@ export function SiloPage() {
 
       <h1 className='text-xl font-bold'>How does it work?</h1>
 
-      <div className="my-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="my-5 flex flex-col gap-5">
         <img
           src="/silo-agent-loop-closed.svg"
           alt="Closed-loop agent system: Actor, Critic, Terminator, and Juror with redesign, refinement, and evaluation"
