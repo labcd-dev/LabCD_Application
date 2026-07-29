@@ -292,6 +292,7 @@ export interface ProjectSummary {
   status: ProjectStatus
   file_name: string
   file_type: string
+  file_url?: string | null
   llm_model: string
   has_results: boolean
   job_id?: string | null

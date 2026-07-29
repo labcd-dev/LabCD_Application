@@ -12,6 +12,10 @@ from backend_api.common.serialization import make_serializable
 from backend_api.db.models import Project, User
 from backend_api.db.session import SessionLocal
 from backend_api.http.config import RESULTS_DIR
+from backend_api.http.services.dynamics_file_service import (
+    delete_dynamics_file,
+    save_dynamics_file,
+)
 
 VALID_PIPELINE_TYPES = frozenset({"siloDesign", "muloDesign"})
 VALID_STATUSES = frozenset({"draft", "running", "completed", "failed", "cancelled"})
@@ -45,6 +49,7 @@ def project_to_summary(project: Project, *, include_owner: bool = False) -> dict
         "status": project.status,
         "file_name": project.file_name,
         "file_type": project.file_type,
+        "file_url": project.file_url,
         "llm_model": project.llm_model or "gpt-4o",
         "has_results": bool(project.results),
         "job_id": project.job_id,
@@ -63,6 +68,31 @@ def project_to_detail(project: Project, *, include_owner: bool = False) -> dict[
         }
     )
     return data
+
+
+def _persist_project_file(project: Project) -> None:
+    """Write project dynamics content to disk and set file_url."""
+    url = save_dynamics_file(
+        content=project.file_content or "",
+        file_name=project.file_name or "dynamics.py",
+        file_type=project.file_type or "python",
+        existing_url=project.file_url,
+    )
+    if url:
+        project.file_url = url
+
+
+def ensure_project_file_on_disk(db: Session, project: Project) -> Project:
+    """Backfill on-disk file for legacy projects that only have DB content."""
+    if project.file_url:
+        return project
+    if not (project.file_content or "").strip():
+        return project
+    _persist_project_file(project)
+    db.add(project)
+    db.commit()
+    db.refresh(project)
+    return project
 
 
 def create_project(
@@ -101,6 +131,7 @@ def create_project(
         created_at=_now(),
         updated_at=_now(),
     )
+    _persist_project_file(project)
     db.add(project)
     db.commit()
     db.refresh(project)
@@ -160,16 +191,22 @@ def update_project(
         project.status = status
     if control_objective is not None:
         project.control_objective = control_objective
+    file_changed = False
     if file_name is not None:
         project.file_name = file_name
+        file_changed = True
     if file_type is not None:
         project.file_type = file_type
+        file_changed = True
     if file_content is not None:
         project.file_content = file_content
+        file_changed = True
     if job_id is not None:
         project.job_id = job_id
     if results is not None:
         project.results = make_serializable(results)
+    if file_changed:
+        _persist_project_file(project)
     project.updated_at = _now()
     db.add(project)
     db.commit()
@@ -178,6 +215,7 @@ def update_project(
 
 
 def delete_project(db: Session, project: Project) -> None:
+    delete_dynamics_file(project.file_url)
     db.delete(project)
     db.commit()
 

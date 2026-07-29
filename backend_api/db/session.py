@@ -107,7 +107,24 @@ def _migrate_schema() -> None:
     _migrate_plan_allowed_models()
     _migrate_bug_reports()
     _migrate_project_llm_model()
+    _migrate_project_file_url()
     _migrate_feedback_survey_pipeline()
+
+
+def _migrate_project_file_url() -> None:
+    """Add projects.file_url for on-disk copies of uploaded dynamics files."""
+    from sqlalchemy import inspect
+
+    inspector = inspect(engine)
+    if "projects" not in inspector.get_table_names():
+        return
+
+    columns = {col["name"] for col in inspector.get_columns("projects")}
+    if "file_url" in columns:
+        return
+
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE projects ADD COLUMN file_url VARCHAR(512)"))
 
 
 def _migrate_bug_reports() -> None:

@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Trash2 } from 'lucide-react'
+import { ArrowLeft, Download, Trash2 } from 'lucide-react'
 import { adminApi } from '../api/endpoints'
 import type { ProjectDetail } from '../api/types'
 import { CodePreview } from '../components/CodePreview'
 import { ProjectResultsView } from '../components/ProjectResultsView'
 import { StatusMessage } from '../components/StatusMessage'
-import { btnBase, btnCompact, cardPanel } from '../lib/classes'
+import { btnBase, btnCompact, btnPrimary, cardPanel } from '../lib/classes'
 import { pipelineLabel, statusBadgeClass } from '../lib/projectLabels'
 
 export function AdminProjectDetailPage() {
@@ -64,6 +64,8 @@ export function AdminProjectDetailPage() {
     )
   }
 
+  const downloadName = project.file_name || `project-${project.id}.py`
+
   return (
     <div className="admin-fade-in space-y-6">
       <Link to="/admin/projects" className={`${btnBase} ${btnCompact} w-fit`}>
@@ -91,10 +93,26 @@ export function AdminProjectDetailPage() {
       {error && <StatusMessage type="error" message={error} />}
 
       <div className={cardPanel}>
-        <h2 className="m-0 mb-2 text-lg font-semibold text-foreground">Uploaded file</h2>
-        <p className="mt-0 mb-3 text-sm text-muted-text">
-          {project.file_name || 'Untitled'} ({project.file_type})
-        </p>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="m-0 text-lg font-semibold text-foreground">Uploaded file</h2>
+            <p className="mt-1 mb-0 text-sm text-muted-text">
+              {project.file_name || 'Untitled'} ({project.file_type})
+            </p>
+          </div>
+          {project.file_url ? (
+            <a
+              href={project.file_url}
+              download={downloadName}
+              target="_blank"
+              rel="noreferrer"
+              className={`${btnPrimary} ${btnCompact}`}
+            >
+              <Download className="size-3.5" />
+              Download file
+            </a>
+          ) : null}
+        </div>
         <CodePreview value={project.file_content || '# No file content'} readOnly />
       </div>
 

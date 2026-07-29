@@ -66,6 +66,7 @@ def get_my_project(
         project_service.assert_project_access(project, user)
     except ProjectAccessDenied as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
+    project = project_service.ensure_project_file_on_disk(db, project)
     return ProjectDetail(**project_service.project_to_detail(project))
 
 

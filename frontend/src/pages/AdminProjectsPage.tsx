@@ -217,6 +217,18 @@ export function AdminProjectsPage() {
                       >
                         View
                       </Link>
+                      {project.file_url ? (
+                        <a
+                          href={project.file_url}
+                          download={project.file_name || `project-${project.id}.py`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className={`${btnBase} ${btnCompact}`}
+                          title="Download uploaded file"
+                        >
+                          File
+                        </a>
+                      ) : null}
                       <button
                         type="button"
                         className={`${btnBase} ${btnCompact}`}

@@ -36,6 +36,7 @@ class ProjectSummary(BaseModel):
     status: str
     file_name: str
     file_type: str
+    file_url: Optional[str] = None
     llm_model: str
     has_results: bool
     job_id: Optional[str] = None

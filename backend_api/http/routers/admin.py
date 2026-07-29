@@ -415,6 +415,7 @@ def get_any_project(
     project = project_service.get_project(db, project_id)
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
+    project = project_service.ensure_project_file_on_disk(db, project)
     return ProjectDetail(**project_service.project_to_detail(project, include_owner=True))
 
 
