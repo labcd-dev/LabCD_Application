@@ -225,17 +225,15 @@ export function HomePage() {
               />
             </div>
 
-            {pipeline.pipeline && (
-              <label className={`${fieldLabel} mt-4`}>
-                <span>Design Instructions (Optional)</span>
-                <textarea
-                  className={`${fieldInput} min-h-24`}
-                  placeholder="e.g., Minimize settling time, explore cascaded loops, or define MIMO architectures..."
-                  value={pipeline.userPrompt}
-                  onChange={(e) => pipeline.setUserPrompt(e.target.value)}
-                />
-              </label>
-            )}
+            <label className={`${fieldLabel} mt-4`}>
+              <span>Design Instructions (Optional)</span>
+              <textarea
+                className={`${fieldInput} min-h-24`}
+                placeholder="e.g., Minimize settling time, explore cascaded loops, or define MIMO architectures..."
+                value={pipeline.userPrompt}
+                onChange={(e) => pipeline.setUserPrompt(e.target.value)}
+              />
+            </label>
 
             <PipelineSelector
               value={pipeline.pipeline}
