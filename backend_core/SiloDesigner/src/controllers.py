@@ -413,6 +413,19 @@ def run_simulation(state: Dict) -> Dict:
     params = state["current_params"]
     simulator = state["simulator"]
 
+    failed_metrics = {
+        "mse": float("inf"),
+        "rmse": float("inf"),
+        "settling_time": float("inf"),
+        "rise_time": float("inf"),
+        "overshoot": float("inf"),
+        "stable": False,
+        "zero_crossings": 0,
+        "control_effort": 0.0,
+        "control_zero_crossings": 0,
+        "ss_error": float("inf"),
+    }
+
     # Case 1: Invalid or missing parameters
     if not params:
         log_to_file("❗️Failed to generate valid parameters", True)
@@ -420,15 +433,7 @@ def run_simulation(state: Dict) -> Dict:
             "results": {
                 "success": False,
                 "error": "Invalid or missing parameters",
-                "metrics": {
-                    "mse": float('inf'),
-                    "settling_time": float('inf'),
-                    "overshoot": float('inf'),
-                    "stable": False,
-                    "zero_crossings": 0,
-                    "control_effort": 0,
-                    "control_zero_crossings": 0
-                },
+                "metrics": failed_metrics,
                 "trajectory": [],
                 "control_signals": [],
                 "errors": []
@@ -446,15 +451,7 @@ def run_simulation(state: Dict) -> Dict:
             "results": {
                 "success": False,
                 "error": result['error'],
-                "metrics": {
-                    "mse": float('inf'),
-                    "settling_time": float('inf'),
-                    "overshoot": float('inf'),
-                    "stable": False,
-                    "zero_crossings": 0,
-                    "control_effort": 0,
-                    "control_zero_crossings": 0
-                },
+                "metrics": failed_metrics,
                 "trajectory": [],
                 "control_signals": [],
                 "errors": []
@@ -547,16 +544,16 @@ def update_buffer(state: Dict) -> Dict:
     if param_strings:
         metrics_line += " | ".join(param_strings) + " | "
 
-    # Add standard metrics
-    metrics_line += f"MSE:{metrics['mse']:.4f} | "
-    metrics_line += f"Ts:{metrics['settling_time']:.2f} | "
-    metrics_line += f"Tr:{metrics['rise_time']:.2f} | "
-    metrics_line += f"%OS:{metrics['overshoot']:.2f} | "
-    metrics_line += f"ZC:{metrics['zero_crossings']} | "
-    metrics_line += f"CZC:{metrics['control_zero_crossings']} | "
-    metrics_line += f"CE:{metrics['control_effort']:.2f} | "
-    metrics_line += f"e_ss:{metrics['ss_error']:.2f} | "
-    metrics_line += f"isStb:{metrics['stable']}"
+    # Add standard metrics (use defaults so failed-run payloads never KeyError)
+    metrics_line += f"MSE:{metrics.get('mse', float('inf')):.4f} | "
+    metrics_line += f"Ts:{metrics.get('settling_time', float('inf')):.2f} | "
+    metrics_line += f"Tr:{metrics.get('rise_time', float('inf')):.2f} | "
+    metrics_line += f"%OS:{metrics.get('overshoot', float('inf')):.2f} | "
+    metrics_line += f"ZC:{metrics.get('zero_crossings', 0)} | "
+    metrics_line += f"CZC:{metrics.get('control_zero_crossings', 0)} | "
+    metrics_line += f"CE:{metrics.get('control_effort', 0.0):.2f} | "
+    metrics_line += f"e_ss:{metrics.get('ss_error', float('inf')):.2f} | "
+    metrics_line += f"isStb:{metrics.get('stable', False)}"
 
     # Print and log
     print(metrics_line)

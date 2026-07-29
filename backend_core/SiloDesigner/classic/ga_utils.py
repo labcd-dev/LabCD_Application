@@ -578,5 +578,16 @@ class GAOptimizer:
             except Exception:
                 continue
         if successful_runs == 0:
-            return {"mse": float('inf'), "settling_time": float('inf'), "overshoot": float('inf')}
+            return {
+                "mse": float("inf"),
+                "rmse": float("inf"),
+                "settling_time": float("inf"),
+                "rise_time": float("inf"),
+                "overshoot": float("inf"),
+                "stable": False,
+                "zero_crossings": 0,
+                "control_effort": 0.0,
+                "control_zero_crossings": 0,
+                "ss_error": float("inf"),
+            }
         return {key: np.mean([m[key] for m in all_metrics]) for key in all_metrics[0].keys()}

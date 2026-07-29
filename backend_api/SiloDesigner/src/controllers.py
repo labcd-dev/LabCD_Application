@@ -28,6 +28,22 @@ def _ensure_running(state: Dict) -> None:
         raise DesignCancelledError("Design cancelled by user")
 
 
+def _failed_simulation_metrics() -> Dict[str, Any]:
+    """Full metrics payload for failed runs (must include every key update_buffer reads)."""
+    return {
+        "mse": float("inf"),
+        "rmse": float("inf"),
+        "settling_time": float("inf"),
+        "rise_time": float("inf"),
+        "overshoot": float("inf"),
+        "stable": False,
+        "zero_crossings": 0,
+        "control_effort": 0.0,
+        "control_zero_crossings": 0,
+        "ss_error": float("inf"),
+    }
+
+
 def initialize_state(
     llm_model: str = "deepseek-r1-distill-llama-70b",
     run_id: int = 1,
@@ -445,15 +461,7 @@ def run_simulation(state: Dict) -> Dict:
             "results": {
                 "success": False,
                 "error": "Invalid or missing parameters",
-                "metrics": {
-                    "mse": float('inf'),
-                    "settling_time": float('inf'),
-                    "overshoot": float('inf'),
-                    "stable": False,
-                    "zero_crossings": 0,
-                    "control_effort": 0,
-                    "control_zero_crossings": 0
-                },
+                "metrics": _failed_simulation_metrics(),
                 "trajectory": [],
                 "control_signals": [],
                 "errors": []
@@ -471,15 +479,7 @@ def run_simulation(state: Dict) -> Dict:
             "results": {
                 "success": False,
                 "error": result['error'],
-                "metrics": {
-                    "mse": float('inf'),
-                    "settling_time": float('inf'),
-                    "overshoot": float('inf'),
-                    "stable": False,
-                    "zero_crossings": 0,
-                    "control_effort": 0,
-                    "control_zero_crossings": 0
-                },
+                "metrics": _failed_simulation_metrics(),
                 "trajectory": [],
                 "control_signals": [],
                 "errors": []
@@ -574,16 +574,16 @@ def update_buffer(state: Dict) -> Dict:
     if param_strings:
         metrics_line += " | ".join(param_strings) + " | "
 
-    # Add standard metrics
-    metrics_line += f"MSE:{metrics['mse']:.4f} | "
-    metrics_line += f"Ts:{metrics['settling_time']:.2f} | "
-    metrics_line += f"Tr:{metrics['rise_time']:.2f} | "
-    metrics_line += f"%OS:{metrics['overshoot']:.2f} | "
-    metrics_line += f"ZC:{metrics['zero_crossings']} | "
-    metrics_line += f"CZC:{metrics['control_zero_crossings']} | "
-    metrics_line += f"CE:{metrics['control_effort']:.2f} | "
-    metrics_line += f"e_ss:{metrics['ss_error']:.2f} | "
-    metrics_line += f"isStb:{metrics['stable']}"
+    # Add standard metrics (use defaults so failed-run payloads never KeyError)
+    metrics_line += f"MSE:{metrics.get('mse', float('inf')):.4f} | "
+    metrics_line += f"Ts:{metrics.get('settling_time', float('inf')):.2f} | "
+    metrics_line += f"Tr:{metrics.get('rise_time', float('inf')):.2f} | "
+    metrics_line += f"%OS:{metrics.get('overshoot', float('inf')):.2f} | "
+    metrics_line += f"ZC:{metrics.get('zero_crossings', 0)} | "
+    metrics_line += f"CZC:{metrics.get('control_zero_crossings', 0)} | "
+    metrics_line += f"CE:{metrics.get('control_effort', 0.0):.2f} | "
+    metrics_line += f"e_ss:{metrics.get('ss_error', float('inf')):.2f} | "
+    metrics_line += f"isStb:{metrics.get('stable', False)}"
 
     # Print and log
     print(metrics_line)
@@ -666,12 +666,7 @@ def judge_termination(state: Dict) -> Dict:
     if state["buffer"].history:
         current_metrics = state["results"]["metrics"]
     else:
-        current_metrics = {
-            "mse": float('inf'),
-            "settling_time": float('inf'),
-            "overshoot": float('inf'),
-            "stable": False
-        }
+        current_metrics = _failed_simulation_metrics()
 
     # Get termination decision
     termination_data, _ = termination_judge.judge_termination(

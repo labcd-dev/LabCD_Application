@@ -83,11 +83,18 @@ export function SiloPage() {
 
       {error && <StatusMessage type="error" message={error} />}
 
-      <div className="my-5 flex justify-center">
+      <h1 className='text-xl font-bold'>How does it work?</h1>
+
+      <div className="my-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <img
-          src="/silo-agent-loop.png"
-          alt="Single-loop agent refinement and evaluation flow: Actor, Critic, Terminator, and Juror"
-          className="h-auto w-full max-w-3xl object-contain"
+          src="/silo-agent-loop-closed.svg"
+          alt="Closed-loop agent system: Actor, Critic, Terminator, and Juror with redesign, refinement, and evaluation"
+          className="h-auto w-full object-contain rounded-lg border border-border bg-white"
+        />
+        <img
+          src="/silo-agent-loop-flow.svg"
+          alt="Single-loop agent decision flow from IN through Actor, Critic, Terminator, Juror, and Buffer to OUT"
+          className="h-auto w-full object-contain rounded-lg border border-border bg-white"
         />
       </div>
 
