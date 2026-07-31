@@ -5,14 +5,18 @@ from typing import Dict, Any, Tuple, List
 
 # from backend_api.Recommender.states import OverallState
 
-def check_bounds(var_str: str, num_inputs: int, num_states: int) -> Tuple[bool, str]:
-    """Helper function to validate format and bounds."""
+def check_bounds(var_str: str, num_inputs: int, num_states: int, allowed_types: Tuple[str, ...]) -> Tuple[bool, str]:
+    """Helper function to validate format, allowed types, and bounds."""
     match = re.match(r"^(U|X|X_sp)\[(\d+)\]$", var_str)
     if not match:
         return False, f"Invalid format '{var_str}' (expected U[m], X[n], or X_sp[n])."
 
     var_type, idx_str = match.groups()
     idx = int(idx_str)
+
+    # NEW: Check if the prefix is permitted for this specific field
+    if var_type not in allowed_types:
+        return False, f"Type '{var_type}' is not allowed here. Expected one of {allowed_types}."
 
     if var_type == "U" and idx >= num_inputs:
         return False, f"Input index '{var_str}' must be < total system inputs ({num_inputs})."
@@ -22,9 +26,8 @@ def check_bounds(var_str: str, num_inputs: int, num_states: int) -> Tuple[bool, 
     return True, ""
 
 
-def check_rule_1_siso_and_bounds(controller_data: Dict[str, Any], system_data: Dict[str, Any]) -> Tuple[
-    bool, str, List[str], List[str], List[str]]:
-    """Validates Rule 1: SISO Check & Variable Index Bounds."""
+def check_rule_1_siso_and_bounds(controller_data: Dict[str, Any], system_data: Dict[str, Any]) -> Tuple[bool, str, List[str], List[str], List[str]]:
+    """Validates Rule 1: SISO Check, Variable Index Bounds, Formatting, & Self-Loops."""
     feedback = []
     all_controlled_vars = []
     all_output_vars = []
@@ -45,52 +48,74 @@ def check_rule_1_siso_and_bounds(controller_data: Dict[str, Any], system_data: D
             controlled_var = controller.get("controlled_variable_in_equation")
             output_var = controller.get("output_variable_in_equation")
 
+            # Validate Controlled Variable
             if not controlled_var or not isinstance(controlled_var, str):
                 passed = False
                 feedback.append(f"Loop {loop_num}, Controller {i+1}: Missing 'controlled_variable_in_equation'.")
             else:
-                valid, err_msg = check_bounds(controlled_var, num_inputs, num_states)
+                valid, err_msg = check_bounds(controlled_var, num_inputs, num_states, allowed_types=("X", "X_sp"))
                 if not valid:
                     passed = False
-                    feedback.append(f"Loop {loop_num}, Controller {i+1}: {err_msg}")
+                    feedback.append(f"Loop {loop_num}, Controller {i+1}: Controlled Var Error - {err_msg}")
                 all_controlled_vars.append(controlled_var)
 
+            # Validate Output Variable
             if not output_var or not isinstance(output_var, str):
                 passed = False
                 feedback.append(f"Loop {loop_num}, Controller {i+1}: Missing 'output_variable_in_equation'.")
             else:
-                valid, err_msg = check_bounds(output_var, num_inputs, num_states)
+                valid, err_msg = check_bounds(output_var, num_inputs, num_states, allowed_types=("U", "X_sp"))
                 if not valid:
                     passed = False
-                    feedback.append(f"Loop {loop_num}, Controller {i+1}: {err_msg}")
+                    feedback.append(f"Loop {loop_num}, Controller {i+1}: Output Var Error - {err_msg}")
                 all_output_vars.append(output_var)
 
+            # NEW: Self-loop prevention (Base variable match check)
+            if controlled_var and output_var:
+                base_controlled = controlled_var.replace("_sp", "")
+                base_output = output_var.replace("_sp", "")
+                if base_controlled == base_output:
+                    passed = False
+                    feedback.append(f"Loop {loop_num}, Controller {i+1}: Self-loop detected. A controller cannot output the setpoint for the same underlying state it is controlling ({base_controlled}).")
+
     if passed:
-        audit_log = "SISO Check: Pass - All controllers have exactly one valid controlled/output variable within system bounds."
+        audit_log = "SISO Check: Pass - All controllers have strictly valid variables and no self-loops."
     else:
-        audit_log = "SISO Check: Fail - Controllers must have valid variable formatting that stays within system limits."
+        audit_log = "SISO Check: Fail - Invalid formatting, out-of-bounds indices, or self-loops detected."
 
     return passed, audit_log, feedback, all_controlled_vars, all_output_vars
 
 
 def check_rule_2_uniqueness(all_controlled_vars: List[str], all_output_vars: List[str]) -> Tuple[bool, str, List[str]]:
-    """Validates Rule 2: Uniqueness."""
+    """Validates Rule 2: Uniqueness and Cross-Contamination."""
     feedback = []
     passed = True
 
-    duplicates_controlled = set([x for x in all_controlled_vars if all_controlled_vars.count(x) > 1])
-    duplicates_output = set([x for x in all_output_vars if all_output_vars.count(x) > 1])
+    # Normalize variables by stripping "_sp" to evaluate the underlying physical state
+    base_controlled = [v.replace("_sp", "") for v in all_controlled_vars]
+    base_output = [v.replace("_sp", "") for v in all_output_vars]
+
+    # 1. Check for internal duplicates using BASE variables to prevent naming tricks
+    duplicates_controlled = set([x for x in base_controlled if base_controlled.count(x) > 1])
+    duplicates_output = set([x for x in base_output if base_output.count(x) > 1])
 
     if duplicates_controlled:
         passed = False
-        feedback.append(f"Duplicate controlled variables found: {', '.join(duplicates_controlled)}.")
+        feedback.append(f"Duplicate controlled variables found (base states): {', '.join(duplicates_controlled)}. A physical state can only be controlled by one controller.")
 
     if duplicates_output:
         passed = False
-        feedback.append(f"Duplicate output variables found: {', '.join(duplicates_output)}.")
+        feedback.append(f"Duplicate output variables found (base states/inputs): {', '.join(duplicates_output)}. Multiple controllers cannot drive the same physical output or setpoint.")
+
+    # 2. Check for exact cross-contamination (e.g., U[0] acting as both controlled and output globally)
+    # We use exact strings here to allow valid cascades (outer loop outputs X_sp[n], inner controls X[n]).
+    overlap = set(all_controlled_vars).intersection(set(all_output_vars))
+    if overlap:
+        passed = False
+        feedback.append(f"Conflict error: The following exact variables are assigned as both a controlled variable and an output variable globally: {', '.join(overlap)}.")
 
     if passed:
-        audit_log = "Uniqueness: Pass - No duplicate controlled or output variables across controllers."
+        audit_log = "Uniqueness: Pass - No duplicate or conflicting variable assignments detected."
     else:
         audit_log = "Uniqueness: Fail - Conflicting variable assignments detected."
 
@@ -290,16 +315,16 @@ def apply_system_names(controller_json_str: str, system_json_str: str) -> str:
     return json.dumps(controller_data, indent=2)
 
 
-# # --- Execution Example ---
-# if __name__ == "__main__":
-#     system = "quadcopter"
-#
-#     with open(f'inputs/{system}/controller.json', 'r') as file:
-#         controller_json = json.load(file)
-#
-#     with open(f'inputs/{system}/system_identification.json', 'r') as file:
-#         system_json = json.load(file)
-#
-#     result = structural_supervisor_node(controller_json, system_json)
-#     import pprint
-#     pprint.pprint(result)
+# --- Execution Example ---
+if __name__ == "__main__":
+    # system = "quadcopter"
+
+    with open(f'inputs/controller.json', 'r') as file:
+        controller_json = json.load(file)
+
+    with open(f'inputs/system_identification.json', 'r') as file:
+        system_json = json.load(file)
+
+    result = validate_structural_rules(controller_json, system_json)
+    import pprint
+    pprint.pprint(result)
