@@ -12,8 +12,10 @@ import {
 import { adminApi } from '../api/endpoints'
 import type { AuthUser, PlanInfo } from '../api/types'
 import { AdminDownloadCsvButton } from '../components/admin/AdminDownloadCsvButton'
+import { AdminPagination } from '../components/admin/AdminPagination'
 import { StatusMessage } from '../components/StatusMessage'
 import { useAuth } from '../context/AuthContext'
+import { useClientPagination } from '../hooks/useClientPagination'
 import { downloadCsv } from '../lib/downloadCsv'
 import {
   btnBase,
@@ -80,6 +82,8 @@ export function AdminUsersPage() {
         u.actions.some((a) => a.toLowerCase().includes(q)),
     )
   }, [users, query])
+
+  const pagination = useClientPagination(filteredUsers, { resetKey: query })
 
   if (!currentUser?.is_admin) {
     return <Navigate to="/studio" replace />
@@ -236,111 +240,121 @@ export function AdminUsersPage() {
             )}
           </div>
         ) : (
-          <div className="overflow-x-auto rounded-xl border border-border-subtle">
-            <table className="admin-users-table w-full min-w-[720px] border-collapse text-sm">
-              <thead>
-                <tr className="border-b border-border bg-surface-muted/80 text-left">
-                  <th className="px-4 py-3 font-medium text-foreground-secondary">Email</th>
-                  <th className="px-4 py-3 font-medium text-foreground-secondary">Role</th>
-                  <th className="px-4 py-3 font-medium text-foreground-secondary">Status</th>
-                  <th className="px-4 py-3 font-medium text-foreground-secondary">Plan</th>
-                  <th className="px-4 py-3 font-medium text-foreground-secondary">Modules</th>
-                  <th className="px-4 py-3 font-medium text-foreground-secondary">Created</th>
-                  <th className="px-4 py-3 text-right font-medium text-foreground-secondary">
-                    <span className="sr-only">Actions</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredUsers.map((user) => (
-                  <tr
-                    key={user.id}
-                    className="border-b border-border-subtle transition-colors last:border-b-0 hover:bg-surface-hover/50"
-                  >
-                    <td className="px-4 py-3 font-medium text-foreground">
-                      <Link
-                        to={`/admin/users/${user.id}`}
-                        className="text-foreground hover:text-primary"
-                      >
-                        {user.email}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3">
-                      {user.is_admin ? (
-                        <span className="inline-flex items-center gap-1 rounded-md bg-[color-mix(in_srgb,var(--app-primary)_14%,transparent)] px-2 py-0.5 text-xs font-semibold text-primary">
-                          <Shield className="size-3" aria-hidden />
-                          Admin
-                        </span>
-                      ) : (
-                        <span className="rounded-md bg-surface-elevated px-2 py-0.5 text-xs font-medium text-muted-text ring-1 ring-border">
-                          User
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      {user.is_active ? (
-                        <span className="rounded-md bg-[var(--app-status-success-bg)] px-2 py-0.5 text-xs font-medium text-[var(--app-status-success-text)]">
-                          Active
-                        </span>
-                      ) : (
-                        <span className="rounded-md bg-[var(--app-status-warning-bg)] px-2 py-0.5 text-xs font-medium text-[var(--app-status-warning-text)]">
-                          Inactive
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      {user.plan_name ? (
-                        <span className="font-medium text-foreground">{user.plan_name}</span>
-                      ) : (
-                        <span className="text-muted-text">None</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      {user.actions.length === 0 ? (
-                        <span className="text-muted-text">None</span>
-                      ) : (
-                        <div className="flex max-w-md flex-wrap gap-1.5">
-                          {user.actions.map((code) => (
-                            <span
-                              key={code}
-                              className="rounded-md bg-surface-elevated px-1.5 py-0.5 font-mono text-[0.68rem] text-foreground-secondary ring-1 ring-border-subtle"
-                            >
-                              {code}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-muted-text">
-                      {new Date(user.created_at).toLocaleDateString(undefined, {
-                        year: 'numeric',
-                        month: 'short',
-                        day: 'numeric',
-                      })}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex justify-end gap-2">
+          <div className="space-y-3">
+            <div className="overflow-x-auto rounded-xl border border-border-subtle">
+              <table className="admin-users-table w-full min-w-[720px] border-collapse text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-surface-muted/80 text-left">
+                    <th className="px-4 py-3 font-medium text-foreground-secondary">Email</th>
+                    <th className="px-4 py-3 font-medium text-foreground-secondary">Role</th>
+                    <th className="px-4 py-3 font-medium text-foreground-secondary">Status</th>
+                    <th className="px-4 py-3 font-medium text-foreground-secondary">Plan</th>
+                    <th className="px-4 py-3 font-medium text-foreground-secondary">Modules</th>
+                    <th className="px-4 py-3 font-medium text-foreground-secondary">Created</th>
+                    <th className="px-4 py-3 text-right font-medium text-foreground-secondary">
+                      <span className="sr-only">Actions</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pagination.pageItems.map((user) => (
+                    <tr
+                      key={user.id}
+                      className="border-b border-border-subtle transition-colors last:border-b-0 hover:bg-surface-hover/50"
+                    >
+                      <td className="px-4 py-3 font-medium text-foreground">
                         <Link
                           to={`/admin/users/${user.id}`}
-                          className={`${btnBase} ${btnCompact}`}
+                          className="text-foreground hover:text-primary"
                         >
-                          <Eye className="size-3.5" aria-hidden />
-                          View
+                          {user.email}
                         </Link>
-                        <button
-                          type="button"
-                          className={`${btnBase} ${btnCompact}`}
-                          onClick={() => startEdit(user)}
-                        >
-                          <Pencil className="size-3.5" aria-hidden />
-                          Edit
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                      </td>
+                      <td className="px-4 py-3">
+                        {user.is_admin ? (
+                          <span className="inline-flex items-center gap-1 rounded-md bg-[color-mix(in_srgb,var(--app-primary)_14%,transparent)] px-2 py-0.5 text-xs font-semibold text-primary">
+                            <Shield className="size-3" aria-hidden />
+                            Admin
+                          </span>
+                        ) : (
+                          <span className="rounded-md bg-surface-elevated px-2 py-0.5 text-xs font-medium text-muted-text ring-1 ring-border">
+                            User
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {user.is_active ? (
+                          <span className="rounded-md bg-[var(--app-status-success-bg)] px-2 py-0.5 text-xs font-medium text-[var(--app-status-success-text)]">
+                            Active
+                          </span>
+                        ) : (
+                          <span className="rounded-md bg-[var(--app-status-warning-bg)] px-2 py-0.5 text-xs font-medium text-[var(--app-status-warning-text)]">
+                            Inactive
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {user.plan_name ? (
+                          <span className="font-medium text-foreground">{user.plan_name}</span>
+                        ) : (
+                          <span className="text-muted-text">None</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {user.actions.length === 0 ? (
+                          <span className="text-muted-text">None</span>
+                        ) : (
+                          <div className="flex max-w-md flex-wrap gap-1.5">
+                            {user.actions.map((code) => (
+                              <span
+                                key={code}
+                                className="rounded-md bg-surface-elevated px-1.5 py-0.5 font-mono text-[0.68rem] text-foreground-secondary ring-1 ring-border-subtle"
+                              >
+                                {code}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-muted-text">
+                        {new Date(user.created_at).toLocaleDateString(undefined, {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric',
+                        })}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex justify-end gap-2">
+                          <Link
+                            to={`/admin/users/${user.id}`}
+                            className={`${btnBase} ${btnCompact}`}
+                          >
+                            <Eye className="size-3.5" aria-hidden />
+                            View
+                          </Link>
+                          <button
+                            type="button"
+                            className={`${btnBase} ${btnCompact}`}
+                            onClick={() => startEdit(user)}
+                          >
+                            <Pencil className="size-3.5" aria-hidden />
+                            Edit
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <AdminPagination
+              page={pagination.page}
+              totalPages={pagination.totalPages}
+              total={pagination.total}
+              from={pagination.from}
+              to={pagination.to}
+              onPageChange={pagination.setPage}
+            />
           </div>
         )}
       </div>

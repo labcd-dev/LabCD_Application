@@ -9,8 +9,10 @@ import type {
   TutorialVideo,
 } from '../api/types'
 import { AdminDownloadCsvButton } from '../components/admin/AdminDownloadCsvButton'
+import { AdminPagination } from '../components/admin/AdminPagination'
 import { StatusMessage } from '../components/StatusMessage'
 import { useAuth } from '../context/AuthContext'
+import { useClientPagination } from '../hooks/useClientPagination'
 import { downloadCsv } from '../lib/downloadCsv'
 import {
   btnBase,
@@ -70,6 +72,10 @@ export function AdminSurveyPage() {
     if (!currentUser?.is_admin) return
     void load()
   }, [currentUser?.is_admin, load])
+
+  const videoPagination = useClientPagination(videos)
+  const profilePagination = useClientPagination(profileRows)
+  const feedbackPagination = useClientPagination(feedbackRows)
 
   if (!currentUser?.is_admin) {
     return <Navigate to="/studio" replace />
@@ -226,36 +232,48 @@ export function AdminSurveyPage() {
         {videos.length === 0 ? (
           <p className="text-sm text-muted-text">No tutorial videos yet.</p>
         ) : (
-          <ul className="m-0 list-none space-y-3 p-0">
-            {videos.map((video, index) => (
-              <li
-                key={video.id}
-                className="flex flex-col gap-3 rounded-xl border border-border-subtle p-3 sm:flex-row sm:items-center"
-              >
-                <span className="text-xs font-medium text-muted">{index + 1}</span>
-                <input
-                  className={`${fieldInput} flex-1`}
-                  defaultValue={video.title}
-                  onBlur={(e) => void handleTitleBlur(video, e.target.value)}
-                  aria-label={`Title for video ${video.id}`}
-                />
-                <video
-                  className="h-16 w-28 shrink-0 rounded-md bg-black object-cover"
-                  src={video.file_url}
-                  muted
-                  playsInline
-                />
-                <button
-                  type="button"
-                  className={`${btnBase} ${btnCompact} text-[var(--app-status-error-text)]`}
-                  onClick={() => void handleDeleteVideo(video)}
+          <div className="space-y-3">
+            <ul className="m-0 list-none space-y-3 p-0">
+              {videoPagination.pageItems.map((video, index) => (
+                <li
+                  key={video.id}
+                  className="flex flex-col gap-3 rounded-xl border border-border-subtle p-3 sm:flex-row sm:items-center"
                 >
-                  <Trash2 className="size-3.5" />
-                  Delete
-                </button>
-              </li>
-            ))}
-          </ul>
+                  <span className="text-xs font-medium text-muted">
+                    {videoPagination.from + index}
+                  </span>
+                  <input
+                    className={`${fieldInput} flex-1`}
+                    defaultValue={video.title}
+                    onBlur={(e) => void handleTitleBlur(video, e.target.value)}
+                    aria-label={`Title for video ${video.id}`}
+                  />
+                  <video
+                    className="h-16 w-28 shrink-0 rounded-md bg-black object-cover"
+                    src={video.file_url}
+                    muted
+                    playsInline
+                  />
+                  <button
+                    type="button"
+                    className={`${btnBase} ${btnCompact} text-[var(--app-status-error-text)]`}
+                    onClick={() => void handleDeleteVideo(video)}
+                  >
+                    <Trash2 className="size-3.5" />
+                    Delete
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <AdminPagination
+              page={videoPagination.page}
+              totalPages={videoPagination.totalPages}
+              total={videoPagination.total}
+              from={videoPagination.from}
+              to={videoPagination.to}
+              onPageChange={videoPagination.setPage}
+            />
+          </div>
         )}
       </div>
 
@@ -280,33 +298,43 @@ export function AdminSurveyPage() {
         {profileRows.length === 0 ? (
           <p className="text-sm text-muted-text">No profile surveys submitted yet.</p>
         ) : (
-          <div className="mt-3 overflow-x-auto">
-            <table className="w-full min-w-[720px] border-collapse text-left text-sm">
-              <thead>
-                <tr className="border-b border-border text-muted-text">
-                  <th className="px-2 py-2 font-medium">User</th>
-                  <th className="px-2 py-2 font-medium">University</th>
-                  <th className="px-2 py-2 font-medium">Degree</th>
-                  <th className="px-2 py-2 font-medium">Major</th>
-                  <th className="px-2 py-2 font-medium">MATLAB</th>
-                  <th className="px-2 py-2 font-medium">Control</th>
-                  <th className="px-2 py-2 font-medium">Completed</th>
-                </tr>
-              </thead>
-              <tbody>
-                {profileRows.map((row) => (
-                  <tr key={row.user_id} className="border-b border-border-subtle">
-                    <td className="px-2 py-2 text-foreground">{row.email}</td>
-                    <td className="px-2 py-2">{row.university ?? '—'}</td>
-                    <td className="px-2 py-2">{row.degree ?? '—'}</td>
-                    <td className="px-2 py-2">{row.major ?? '—'}</td>
-                    <td className="px-2 py-2">{row.matlab_experience ?? '—'}</td>
-                    <td className="px-2 py-2">{row.control_design_experience ?? '—'}</td>
-                    <td className="px-2 py-2">{formatWhen(row.completed_at)}</td>
+          <div className="mt-3 space-y-3">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[720px] border-collapse text-left text-sm">
+                <thead>
+                  <tr className="border-b border-border text-muted-text">
+                    <th className="px-2 py-2 font-medium">User</th>
+                    <th className="px-2 py-2 font-medium">University</th>
+                    <th className="px-2 py-2 font-medium">Degree</th>
+                    <th className="px-2 py-2 font-medium">Major</th>
+                    <th className="px-2 py-2 font-medium">MATLAB</th>
+                    <th className="px-2 py-2 font-medium">Control</th>
+                    <th className="px-2 py-2 font-medium">Completed</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {profilePagination.pageItems.map((row) => (
+                    <tr key={row.user_id} className="border-b border-border-subtle">
+                      <td className="px-2 py-2 text-foreground">{row.email}</td>
+                      <td className="px-2 py-2">{row.university ?? '—'}</td>
+                      <td className="px-2 py-2">{row.degree ?? '—'}</td>
+                      <td className="px-2 py-2">{row.major ?? '—'}</td>
+                      <td className="px-2 py-2">{row.matlab_experience ?? '—'}</td>
+                      <td className="px-2 py-2">{row.control_design_experience ?? '—'}</td>
+                      <td className="px-2 py-2">{formatWhen(row.completed_at)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <AdminPagination
+              page={profilePagination.page}
+              totalPages={profilePagination.totalPages}
+              total={profilePagination.total}
+              from={profilePagination.from}
+              to={profilePagination.to}
+              onPageChange={profilePagination.setPage}
+            />
           </div>
         )}
       </div>
@@ -332,46 +360,56 @@ export function AdminSurveyPage() {
         {feedbackRows.length === 0 ? (
           <p className="text-sm text-muted-text">No feedback surveys submitted yet.</p>
         ) : (
-          <div className="mt-3 overflow-x-auto">
-            <table className="w-full min-w-[900px] border-collapse text-left text-sm">
-              <thead>
-                <tr className="border-b border-border text-muted-text">
-                  <th className="px-2 py-2 font-medium">User</th>
-                  <th className="px-2 py-2 font-medium">Design</th>
-                  <th className="px-2 py-2 font-medium">Sat.</th>
-                  <th className="px-2 py-2 font-medium">Ease</th>
-                  <th className="px-2 py-2 font-medium">Value</th>
-                  <th className="px-2 py-2 font-medium">Conf.</th>
-                  <th className="px-2 py-2 font-medium">Reuse</th>
-                  <th className="px-2 py-2 font-medium">Pay</th>
-                  <th className="px-2 py-2 font-medium">Problems</th>
-                  <th className="px-2 py-2 font-medium">When</th>
-                </tr>
-              </thead>
-              <tbody>
-                {feedbackRows.map((row) => (
-                  <tr
-                    key={`${row.user_id}-${row.pipeline_type}-${row.created_at}`}
-                    className="border-b border-border-subtle"
-                  >
-                    <td className="px-2 py-2 text-foreground">{row.email}</td>
-                    <td className="px-2 py-2">
-                      {row.pipeline_type === 'muloDesign' ? 'Multi Loop' : 'Single Loop'}
-                    </td>
-                    <td className="px-2 py-2">{row.satisfaction}</td>
-                    <td className="px-2 py-2">{row.ease_of_use}</td>
-                    <td className="px-2 py-2">{row.product_value}</td>
-                    <td className="px-2 py-2">{row.confidence}</td>
-                    <td className="px-2 py-2">{row.reuse_intention}</td>
-                    <td className="px-2 py-2">{row.willingness_to_pay}</td>
-                    <td className="max-w-[200px] truncate px-2 py-2" title={row.main_problems}>
-                      {row.main_problems || '—'}
-                    </td>
-                    <td className="px-2 py-2">{formatWhen(row.created_at)}</td>
+          <div className="mt-3 space-y-3">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[900px] border-collapse text-left text-sm">
+                <thead>
+                  <tr className="border-b border-border text-muted-text">
+                    <th className="px-2 py-2 font-medium">User</th>
+                    <th className="px-2 py-2 font-medium">Design</th>
+                    <th className="px-2 py-2 font-medium">Sat.</th>
+                    <th className="px-2 py-2 font-medium">Ease</th>
+                    <th className="px-2 py-2 font-medium">Value</th>
+                    <th className="px-2 py-2 font-medium">Conf.</th>
+                    <th className="px-2 py-2 font-medium">Reuse</th>
+                    <th className="px-2 py-2 font-medium">Pay</th>
+                    <th className="px-2 py-2 font-medium">Problems</th>
+                    <th className="px-2 py-2 font-medium">When</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {feedbackPagination.pageItems.map((row) => (
+                    <tr
+                      key={`${row.user_id}-${row.pipeline_type}-${row.created_at}`}
+                      className="border-b border-border-subtle"
+                    >
+                      <td className="px-2 py-2 text-foreground">{row.email}</td>
+                      <td className="px-2 py-2">
+                        {row.pipeline_type === 'muloDesign' ? 'Multi Loop' : 'Single Loop'}
+                      </td>
+                      <td className="px-2 py-2">{row.satisfaction}</td>
+                      <td className="px-2 py-2">{row.ease_of_use}</td>
+                      <td className="px-2 py-2">{row.product_value}</td>
+                      <td className="px-2 py-2">{row.confidence}</td>
+                      <td className="px-2 py-2">{row.reuse_intention}</td>
+                      <td className="px-2 py-2">{row.willingness_to_pay}</td>
+                      <td className="max-w-[200px] truncate px-2 py-2" title={row.main_problems}>
+                        {row.main_problems || '—'}
+                      </td>
+                      <td className="px-2 py-2">{formatWhen(row.created_at)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <AdminPagination
+              page={feedbackPagination.page}
+              totalPages={feedbackPagination.totalPages}
+              total={feedbackPagination.total}
+              from={feedbackPagination.from}
+              to={feedbackPagination.to}
+              onPageChange={feedbackPagination.setPage}
+            />
           </div>
         )}
       </div>

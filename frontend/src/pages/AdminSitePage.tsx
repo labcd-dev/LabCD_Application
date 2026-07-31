@@ -3,8 +3,10 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { adminSiteApi } from '../api/endpoints'
 import type { NavMenuItem, SiteBrand } from '../api/types'
 import { ImageUploadField } from '../components/ImageUploadField'
+import { AdminPagination } from '../components/admin/AdminPagination'
 import { StatusMessage } from '../components/StatusMessage'
 import { useAuth } from '../context/AuthContext'
+import { useClientPagination } from '../hooks/useClientPagination'
 import {
   btnBase,
   btnPrimary,
@@ -131,6 +133,9 @@ export function AdminSitePage() {
     void load()
   }, [currentUser?.is_admin, load])
 
+  const filteredMenus = menus.filter((m) => m.location === menuLocation)
+  const menuPagination = useClientPagination(filteredMenus, { resetKey: menuLocation })
+
   if (!currentUser?.is_admin) {
     return <Navigate to="/studio" replace />
   }
@@ -232,8 +237,6 @@ export function AdminSitePage() {
   const finalCta = (landing.final_cta as Record<string, string> | undefined) ?? {}
   const footer = (landing.footer as { description?: string; copyright?: string } | undefined) ?? {}
 
-  const filteredMenus = menus.filter((m) => m.location === menuLocation)
-
   return (
     <section className={pageSection}>
       <header className="mb-6">
@@ -307,7 +310,7 @@ export function AdminSitePage() {
             </form>
           </div>
           <div className={`${cardPanel} space-y-3`}>
-            {filteredMenus.map((item) => (
+            {menuPagination.pageItems.map((item) => (
               <div key={item.id} className="grid gap-2 rounded-lg border border-border-subtle p-3 sm:grid-cols-[1fr_1fr_auto_auto_auto]">
                 <input className={fieldInput} value={item.label} onChange={(e) => void updateMenuItem(item, { label: e.target.value })} />
                 <input className={fieldInput} value={item.href} onChange={(e) => void updateMenuItem(item, { href: e.target.value })} />
@@ -322,6 +325,14 @@ export function AdminSitePage() {
               </div>
             ))}
             {filteredMenus.length === 0 && <p className="text-muted-text">No items in this menu.</p>}
+            <AdminPagination
+              page={menuPagination.page}
+              totalPages={menuPagination.totalPages}
+              total={menuPagination.total}
+              from={menuPagination.from}
+              to={menuPagination.to}
+              onPageChange={menuPagination.setPage}
+            />
           </div>
         </div>
       ) : (

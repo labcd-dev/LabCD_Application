@@ -3,7 +3,9 @@ import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft, Shield } from 'lucide-react'
 import { adminApi } from '../api/endpoints'
 import type { AdminUserDetail } from '../api/types'
+import { AdminPagination } from '../components/admin/AdminPagination'
 import { StatusMessage } from '../components/StatusMessage'
+import { useClientPagination } from '../hooks/useClientPagination'
 import { btnBase, btnCompact, cardPanel } from '../lib/classes'
 import { pipelineLabel, statusBadgeClass } from '../lib/projectLabels'
 
@@ -50,6 +52,11 @@ export function AdminUserDetailPage() {
     void load()
   }, [id])
 
+  const projects = detail?.projects ?? []
+  const errors = detail?.errors ?? []
+  const projectsPagination = useClientPagination(projects)
+  const errorsPagination = useClientPagination(errors)
+
   if (loading) {
     return <p className="text-muted-text">Loading user…</p>
   }
@@ -66,7 +73,7 @@ export function AdminUserDetailPage() {
     )
   }
 
-  const { user, profile_survey, feedback_surveys, projects, errors, allowed_models } = detail
+  const { user, profile_survey, feedback_surveys, allowed_models } = detail
 
   return (
     <div className="admin-fade-in space-y-6">
@@ -249,42 +256,52 @@ export function AdminUserDetailPage() {
         {projects.length === 0 ? (
           <p className="m-0 text-sm text-muted-text">No projects created by this user.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] border-collapse text-left text-sm">
-              <thead>
-                <tr className="border-b border-border text-muted-text">
-                  <th className="px-2 py-2 font-medium">Title</th>
-                  <th className="px-2 py-2 font-medium">Pipeline</th>
-                  <th className="px-2 py-2 font-medium">Status</th>
-                  <th className="px-2 py-2 font-medium">File</th>
-                  <th className="px-2 py-2 font-medium">Updated</th>
-                  <th className="px-2 py-2 font-medium" />
-                </tr>
-              </thead>
-              <tbody>
-                {projects.map((project) => (
-                  <tr key={project.id} className="border-b border-border-subtle">
-                    <td className="px-2 py-2 font-medium text-foreground">{project.title}</td>
-                    <td className="px-2 py-2">{pipelineLabel(project.pipeline_type)}</td>
-                    <td className="px-2 py-2">
-                      <span className={statusBadgeClass(project.status)}>{project.status}</span>
-                    </td>
-                    <td className="px-2 py-2 text-muted-text">{project.file_name || '—'}</td>
-                    <td className="px-2 py-2 whitespace-nowrap text-muted-text">
-                      {formatWhen(project.updated_at)}
-                    </td>
-                    <td className="px-2 py-2 text-right">
-                      <Link
-                        to={`/admin/projects/${project.id}`}
-                        className={`${btnBase} ${btnCompact}`}
-                      >
-                        View
-                      </Link>
-                    </td>
+          <div className="space-y-3">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[640px] border-collapse text-left text-sm">
+                <thead>
+                  <tr className="border-b border-border text-muted-text">
+                    <th className="px-2 py-2 font-medium">Title</th>
+                    <th className="px-2 py-2 font-medium">Pipeline</th>
+                    <th className="px-2 py-2 font-medium">Status</th>
+                    <th className="px-2 py-2 font-medium">File</th>
+                    <th className="px-2 py-2 font-medium">Updated</th>
+                    <th className="px-2 py-2 font-medium" />
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {projectsPagination.pageItems.map((project) => (
+                    <tr key={project.id} className="border-b border-border-subtle">
+                      <td className="px-2 py-2 font-medium text-foreground">{project.title}</td>
+                      <td className="px-2 py-2">{pipelineLabel(project.pipeline_type)}</td>
+                      <td className="px-2 py-2">
+                        <span className={statusBadgeClass(project.status)}>{project.status}</span>
+                      </td>
+                      <td className="px-2 py-2 text-muted-text">{project.file_name || '—'}</td>
+                      <td className="px-2 py-2 whitespace-nowrap text-muted-text">
+                        {formatWhen(project.updated_at)}
+                      </td>
+                      <td className="px-2 py-2 text-right">
+                        <Link
+                          to={`/admin/projects/${project.id}`}
+                          className={`${btnBase} ${btnCompact}`}
+                        >
+                          View
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <AdminPagination
+              page={projectsPagination.page}
+              totalPages={projectsPagination.totalPages}
+              total={projectsPagination.total}
+              from={projectsPagination.from}
+              to={projectsPagination.to}
+              onPageChange={projectsPagination.setPage}
+            />
           </div>
         )}
       </div>
@@ -296,40 +313,50 @@ export function AdminUserDetailPage() {
         {errors.length === 0 ? (
           <p className="m-0 text-sm text-muted-text">No errors recorded for this user.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px] border-collapse text-left text-sm">
-              <thead>
-                <tr className="border-b border-border text-muted-text">
-                  <th className="px-2 py-2 font-medium">When</th>
-                  <th className="px-2 py-2 font-medium">Source</th>
-                  <th className="px-2 py-2 font-medium">Status</th>
-                  <th className="px-2 py-2 font-medium">Message</th>
-                  <th className="px-2 py-2 font-medium">Path</th>
-                </tr>
-              </thead>
-              <tbody>
-                {errors.map((event) => (
-                  <tr key={event.id} className="border-b border-border-subtle align-top">
-                    <td className="px-2 py-2 whitespace-nowrap text-muted-text">
-                      {formatWhen(event.created_at)}
-                    </td>
-                    <td className="px-2 py-2">{event.source}</td>
-                    <td className="px-2 py-2">{event.status_code ?? '—'}</td>
-                    <td className="max-w-xs px-2 py-2">
-                      <p className="m-0 line-clamp-2 text-foreground">{event.message}</p>
-                      {event.stack_trace && (
-                        <p className="mt-1 line-clamp-2 font-mono text-[0.68rem] text-muted-text">
-                          {event.stack_trace}
-                        </p>
-                      )}
-                    </td>
-                    <td className="max-w-[12rem] px-2 py-2 break-all text-muted-text">
-                      {event.path || event.page_url || '—'}
-                    </td>
+          <div className="space-y-3">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[900px] border-collapse text-left text-sm">
+                <thead>
+                  <tr className="border-b border-border text-muted-text">
+                    <th className="px-2 py-2 font-medium">When</th>
+                    <th className="px-2 py-2 font-medium">Source</th>
+                    <th className="px-2 py-2 font-medium">Status</th>
+                    <th className="px-2 py-2 font-medium">Message</th>
+                    <th className="px-2 py-2 font-medium">Path</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {errorsPagination.pageItems.map((event) => (
+                    <tr key={event.id} className="border-b border-border-subtle align-top">
+                      <td className="px-2 py-2 whitespace-nowrap text-muted-text">
+                        {formatWhen(event.created_at)}
+                      </td>
+                      <td className="px-2 py-2">{event.source}</td>
+                      <td className="px-2 py-2">{event.status_code ?? '—'}</td>
+                      <td className="max-w-xs px-2 py-2">
+                        <p className="m-0 line-clamp-2 text-foreground">{event.message}</p>
+                        {event.stack_trace && (
+                          <p className="mt-1 line-clamp-2 font-mono text-[0.68rem] text-muted-text">
+                            {event.stack_trace}
+                          </p>
+                        )}
+                      </td>
+                      <td className="max-w-[12rem] px-2 py-2 break-all text-muted-text">
+                        {event.path || event.page_url || '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <AdminPagination
+              page={errorsPagination.page}
+              totalPages={errorsPagination.totalPages}
+              total={errorsPagination.total}
+              from={errorsPagination.from}
+              to={errorsPagination.to}
+              onPageChange={errorsPagination.setPage}
+            />
           </div>
         )}
       </div>

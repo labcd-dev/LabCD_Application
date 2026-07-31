@@ -4,7 +4,9 @@ import { FolderKanban, Search, Trash2 } from 'lucide-react'
 import { adminApi } from '../api/endpoints'
 import type { AuthUser, ProjectSummary } from '../api/types'
 import { AdminDownloadCsvButton } from '../components/admin/AdminDownloadCsvButton'
+import { AdminPagination } from '../components/admin/AdminPagination'
 import { StatusMessage } from '../components/StatusMessage'
+import { useClientPagination } from '../hooks/useClientPagination'
 import { downloadCsv } from '../lib/downloadCsv'
 import {
   btnBase,
@@ -59,6 +61,10 @@ export function AdminProjectsPage() {
         p.status.toLowerCase().includes(q),
     )
   }, [projects, query])
+
+  const pagination = useClientPagination(filtered, {
+    resetKey: `${query}|${userId}|${pipelineFilter}`,
+  })
 
   const handleDelete = async (projectId: number) => {
     if (!window.confirm('Delete this user project? This cannot be undone.')) return
@@ -182,66 +188,76 @@ export function AdminProjectsPage() {
           </p>
         </div>
       ) : (
-        <div className={`${cardPanel} overflow-x-auto p-0`}>
-          <table className="w-full min-w-[720px] border-collapse text-left text-sm">
-            <thead>
-              <tr className="border-b border-border bg-surface-muted text-xs uppercase tracking-wide text-muted">
-                <th className="px-4 py-3 font-semibold">Project</th>
-                <th className="px-4 py-3 font-semibold">Owner</th>
-                <th className="px-4 py-3 font-semibold">Pipeline</th>
-                <th className="px-4 py-3 font-semibold">Status</th>
-                <th className="px-4 py-3 font-semibold">Updated</th>
-                <th className="px-4 py-3 font-semibold">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((project) => (
-                <tr key={project.id} className="border-b border-border-subtle last:border-0">
-                  <td className="px-4 py-3">
-                    <div className="font-medium text-foreground">{project.title}</div>
-                    <div className="text-xs text-muted-text">{project.file_name || 'No file'}</div>
-                  </td>
-                  <td className="px-4 py-3 text-muted-text">{project.owner_email ?? `#${project.user_id}`}</td>
-                  <td className="px-4 py-3">{pipelineLabel(project.pipeline_type)}</td>
-                  <td className="px-4 py-3">
-                    <span className={statusBadgeClass(project.status)}>{project.status}</span>
-                  </td>
-                  <td className="px-4 py-3 text-muted-text">
-                    {new Date(project.updated_at).toLocaleString()}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex gap-2">
-                      <Link
-                        to={`/admin/projects/${project.id}`}
-                        className={`${btnBase} ${btnCompact}`}
-                      >
-                        View
-                      </Link>
-                      {project.file_url ? (
-                        <a
-                          href={project.file_url}
-                          download={project.file_name || `project-${project.id}.py`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className={`${btnBase} ${btnCompact}`}
-                          title="Download uploaded file"
-                        >
-                          File
-                        </a>
-                      ) : null}
-                      <button
-                        type="button"
-                        className={`${btnBase} ${btnCompact}`}
-                        onClick={() => void handleDelete(project.id)}
-                      >
-                        <Trash2 className="size-3.5" />
-                      </button>
-                    </div>
-                  </td>
+        <div className={`${cardPanel} space-y-3`}>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[720px] border-collapse text-left text-sm">
+              <thead>
+                <tr className="border-b border-border bg-surface-muted text-xs uppercase tracking-wide text-muted">
+                  <th className="px-4 py-3 font-semibold">Project</th>
+                  <th className="px-4 py-3 font-semibold">Owner</th>
+                  <th className="px-4 py-3 font-semibold">Pipeline</th>
+                  <th className="px-4 py-3 font-semibold">Status</th>
+                  <th className="px-4 py-3 font-semibold">Updated</th>
+                  <th className="px-4 py-3 font-semibold">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {pagination.pageItems.map((project) => (
+                  <tr key={project.id} className="border-b border-border-subtle last:border-0">
+                    <td className="px-4 py-3">
+                      <div className="font-medium text-foreground">{project.title}</div>
+                      <div className="text-xs text-muted-text">{project.file_name || 'No file'}</div>
+                    </td>
+                    <td className="px-4 py-3 text-muted-text">{project.owner_email ?? `#${project.user_id}`}</td>
+                    <td className="px-4 py-3">{pipelineLabel(project.pipeline_type)}</td>
+                    <td className="px-4 py-3">
+                      <span className={statusBadgeClass(project.status)}>{project.status}</span>
+                    </td>
+                    <td className="px-4 py-3 text-muted-text">
+                      {new Date(project.updated_at).toLocaleString()}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex gap-2">
+                        <Link
+                          to={`/admin/projects/${project.id}`}
+                          className={`${btnBase} ${btnCompact}`}
+                        >
+                          View
+                        </Link>
+                        {project.file_url ? (
+                          <a
+                            href={project.file_url}
+                            download={project.file_name || `project-${project.id}.py`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className={`${btnBase} ${btnCompact}`}
+                            title="Download uploaded file"
+                          >
+                            File
+                          </a>
+                        ) : null}
+                        <button
+                          type="button"
+                          className={`${btnBase} ${btnCompact}`}
+                          onClick={() => void handleDelete(project.id)}
+                        >
+                          <Trash2 className="size-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <AdminPagination
+            page={pagination.page}
+            totalPages={pagination.totalPages}
+            total={pagination.total}
+            from={pagination.from}
+            to={pagination.to}
+            onPageChange={pagination.setPage}
+          />
         </div>
       )}
     </div>

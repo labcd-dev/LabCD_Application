@@ -4,8 +4,10 @@ import { RefreshCw } from 'lucide-react'
 import { bugReportsApi } from '../api/endpoints'
 import type { BugReport, BugReportSettings } from '../api/types'
 import { AdminDownloadCsvButton } from '../components/admin/AdminDownloadCsvButton'
+import { AdminPagination } from '../components/admin/AdminPagination'
 import { StatusMessage } from '../components/StatusMessage'
 import { useAuth } from '../context/AuthContext'
+import { useClientPagination } from '../hooks/useClientPagination'
 import { downloadCsv } from '../lib/downloadCsv'
 import {
   btnBase,
@@ -73,6 +75,8 @@ export function AdminBugReportsPage() {
     if (!currentUser?.is_admin) return
     void load()
   }, [currentUser?.is_admin, load])
+
+  const pagination = useClientPagination(reports, { resetKey: statusFilter })
 
   if (!currentUser?.is_admin) {
     return <Navigate to="/studio" replace />
@@ -199,7 +203,7 @@ export function AdminBugReportsPage() {
 
       <section className={cardPanel}>
         <p className="mb-3 text-sm text-muted-text">
-          Showing {reports.length} report{reports.length === 1 ? '' : 's'}
+          {reports.length} report{reports.length === 1 ? '' : 's'}
           {statusFilter !== 'all' ? ` (${statusFilter})` : ''}
         </p>
 
@@ -208,92 +212,102 @@ export function AdminBugReportsPage() {
         ) : reports.length === 0 ? (
           <p className="text-sm text-muted-text">No bug reports yet.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] border-collapse text-left text-sm">
-              <thead>
-                <tr className="border-b border-border text-muted-text">
-                  <th className="px-2 py-2 font-medium">When</th>
-                  <th className="px-2 py-2 font-medium">User</th>
-                  <th className="px-2 py-2 font-medium">Description</th>
-                  <th className="px-2 py-2 font-medium">Status</th>
-                  <th className="px-2 py-2 font-medium">Image</th>
-                  <th className="px-2 py-2 font-medium">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {reports.map((report) => (
-                  <tr
-                    key={report.id}
-                    className={`border-b border-border-subtle align-top ${
-                      selectedId === report.id ? 'bg-surface-muted' : ''
-                    }`}
-                  >
-                    <td className="whitespace-nowrap px-2 py-2 text-muted-text">
-                      {formatWhen(report.created_at)}
-                    </td>
-                    <td className="px-2 py-2 text-foreground">
-                      {report.user_email ?? '—'}
-                    </td>
-                    <td className="max-w-[280px] px-2 py-2 text-foreground">
-                      <button
-                        type="button"
-                        className="line-clamp-2 text-left hover:underline"
-                        title={report.description}
-                        onClick={() =>
-                          setSelectedId((prev) => (prev === report.id ? null : report.id))
-                        }
-                      >
-                        {truncate(report.description)}
-                      </button>
-                    </td>
-                    <td className="px-2 py-2 capitalize text-foreground">{report.status}</td>
-                    <td className="px-2 py-2">
-                      {report.image_url ? (
-                        <img
-                          src={report.image_url}
-                          alt=""
-                          className="size-12 rounded-md border border-border object-cover"
-                        />
-                      ) : (
-                        <span className="text-muted-text">—</span>
-                      )}
-                    </td>
-                    <td className="px-2 py-2">
-                      <div className="flex flex-wrap gap-2">
+          <div className="space-y-3">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[720px] border-collapse text-left text-sm">
+                <thead>
+                  <tr className="border-b border-border text-muted-text">
+                    <th className="px-2 py-2 font-medium">When</th>
+                    <th className="px-2 py-2 font-medium">User</th>
+                    <th className="px-2 py-2 font-medium">Description</th>
+                    <th className="px-2 py-2 font-medium">Status</th>
+                    <th className="px-2 py-2 font-medium">Image</th>
+                    <th className="px-2 py-2 font-medium">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pagination.pageItems.map((report) => (
+                    <tr
+                      key={report.id}
+                      className={`border-b border-border-subtle align-top ${
+                        selectedId === report.id ? 'bg-surface-muted' : ''
+                      }`}
+                    >
+                      <td className="whitespace-nowrap px-2 py-2 text-muted-text">
+                        {formatWhen(report.created_at)}
+                      </td>
+                      <td className="px-2 py-2 text-foreground">
+                        {report.user_email ?? '—'}
+                      </td>
+                      <td className="max-w-[280px] px-2 py-2 text-foreground">
                         <button
                           type="button"
-                          className={`${btnBase} ${btnCompact}`}
+                          className="line-clamp-2 text-left hover:underline"
+                          title={report.description}
                           onClick={() =>
                             setSelectedId((prev) => (prev === report.id ? null : report.id))
                           }
                         >
-                          {selectedId === report.id ? 'Hide' : 'View'}
+                          {truncate(report.description)}
                         </button>
-                        {report.status === 'fixed' ? (
+                      </td>
+                      <td className="px-2 py-2 capitalize text-foreground">{report.status}</td>
+                      <td className="px-2 py-2">
+                        {report.image_url ? (
+                          <img
+                            src={report.image_url}
+                            alt=""
+                            className="size-12 rounded-md border border-border object-cover"
+                          />
+                        ) : (
+                          <span className="text-muted-text">—</span>
+                        )}
+                      </td>
+                      <td className="px-2 py-2">
+                        <div className="flex flex-wrap gap-2">
                           <button
                             type="button"
                             className={`${btnBase} ${btnCompact}`}
-                            disabled={updatingId === report.id}
-                            onClick={() => void setStatus(report, 'open')}
+                            onClick={() =>
+                              setSelectedId((prev) => (prev === report.id ? null : report.id))
+                            }
                           >
-                            Reopen
+                            {selectedId === report.id ? 'Hide' : 'View'}
                           </button>
-                        ) : (
-                          <button
-                            type="button"
-                            className={`${btnPrimary} ${btnCompact}`}
-                            disabled={updatingId === report.id}
-                            onClick={() => void setStatus(report, 'fixed')}
-                          >
-                            Mark fixed
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                          {report.status === 'fixed' ? (
+                            <button
+                              type="button"
+                              className={`${btnBase} ${btnCompact}`}
+                              disabled={updatingId === report.id}
+                              onClick={() => void setStatus(report, 'open')}
+                            >
+                              Reopen
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className={`${btnPrimary} ${btnCompact}`}
+                              disabled={updatingId === report.id}
+                              onClick={() => void setStatus(report, 'fixed')}
+                            >
+                              Mark fixed
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <AdminPagination
+              page={pagination.page}
+              totalPages={pagination.totalPages}
+              total={pagination.total}
+              from={pagination.from}
+              to={pagination.to}
+              onPageChange={pagination.setPage}
+            />
           </div>
         )}
       </section>

@@ -4,7 +4,9 @@ import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { adminBlogApi } from '../api/endpoints'
 import type { BlogPostListItem } from '../api/types'
 import { StatusMessage } from '../components/StatusMessage'
+import { AdminPagination } from '../components/admin/AdminPagination'
 import { useAuth } from '../context/AuthContext'
+import { useClientPagination } from '../hooks/useClientPagination'
 import { btnBase, btnPrimary, pageIntro, pageSection, pageTitle } from '../lib/classes'
 
 export function AdminBlogPage() {
@@ -30,6 +32,8 @@ export function AdminBlogPage() {
     if (!currentUser?.is_admin) return
     void load()
   }, [currentUser?.is_admin, load])
+
+  const pagination = useClientPagination(posts)
 
   if (!currentUser?.is_admin) {
     return <Navigate to="/studio" replace />
@@ -67,42 +71,52 @@ export function AdminBlogPage() {
       {loading ? (
         <p className="text-muted-text">Loading…</p>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-border">
-          <table className="w-full min-w-[640px] text-left text-sm">
-            <thead className="border-b border-border bg-surface-muted">
-              <tr>
-                <th className="px-4 py-3 font-semibold">Title</th>
-                <th className="px-4 py-3 font-semibold">Status</th>
-                <th className="px-4 py-3 font-semibold">Updated</th>
-                <th className="px-4 py-3 font-semibold">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {posts.map((post) => (
-                <tr key={post.id} className="border-b border-border-subtle">
-                  <td className="px-4 py-3">
-                    <div className="font-medium">{post.title}</div>
-                    <div className="text-xs text-muted">/{post.slug}</div>
-                  </td>
-                  <td className="px-4 py-3 capitalize">{post.status}</td>
-                  <td className="px-4 py-3">{new Date(post.updated_at).toLocaleString()}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex gap-2">
-                      <Link to={`/admin/blog/${post.id}`} className={`${btnBase} inline-flex items-center gap-1`}>
-                        <Pencil className="size-3.5" />
-                        Edit
-                      </Link>
-                      <button type="button" className={`${btnBase} inline-flex items-center gap-1`} onClick={() => void handleDelete(post.id)}>
-                        <Trash2 className="size-3.5" />
-                        Delete
-                      </button>
-                    </div>
-                  </td>
+        <div className="space-y-3">
+          <div className="overflow-x-auto rounded-xl border border-border">
+            <table className="w-full min-w-[640px] text-left text-sm">
+              <thead className="border-b border-border bg-surface-muted">
+                <tr>
+                  <th className="px-4 py-3 font-semibold">Title</th>
+                  <th className="px-4 py-3 font-semibold">Status</th>
+                  <th className="px-4 py-3 font-semibold">Updated</th>
+                  <th className="px-4 py-3 font-semibold">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-          {posts.length === 0 && <p className="p-6 text-muted-text">No articles yet.</p>}
+              </thead>
+              <tbody>
+                {pagination.pageItems.map((post) => (
+                  <tr key={post.id} className="border-b border-border-subtle">
+                    <td className="px-4 py-3">
+                      <div className="font-medium">{post.title}</div>
+                      <div className="text-xs text-muted">/{post.slug}</div>
+                    </td>
+                    <td className="px-4 py-3 capitalize">{post.status}</td>
+                    <td className="px-4 py-3">{new Date(post.updated_at).toLocaleString()}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex gap-2">
+                        <Link to={`/admin/blog/${post.id}`} className={`${btnBase} inline-flex items-center gap-1`}>
+                          <Pencil className="size-3.5" />
+                          Edit
+                        </Link>
+                        <button type="button" className={`${btnBase} inline-flex items-center gap-1`} onClick={() => void handleDelete(post.id)}>
+                          <Trash2 className="size-3.5" />
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {posts.length === 0 && <p className="p-6 text-muted-text">No articles yet.</p>}
+          </div>
+          <AdminPagination
+            page={pagination.page}
+            totalPages={pagination.totalPages}
+            total={pagination.total}
+            from={pagination.from}
+            to={pagination.to}
+            onPageChange={pagination.setPage}
+          />
         </div>
       )}
     </section>
