@@ -33,6 +33,7 @@ export function OnboardingGate({ children }: OnboardingGateProps) {
       const next = await surveyApi.status()
       setStatus(next)
     } catch {
+      // Don't block the app on survey/status failures (timeouts under load).
       setStatus(null)
     } finally {
       setLoading(false)
@@ -47,6 +48,7 @@ export function OnboardingGate({ children }: OnboardingGateProps) {
     return <>{children}</>
   }
 
+  // Only block briefly while the first status request is in flight.
   if (loading && !status) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center text-muted-text">

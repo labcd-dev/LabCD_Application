@@ -8,8 +8,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+import anyio.to_thread
+
 from backend_api.db.session import init_db
-from backend_api.http.config import API_PREFIX, CORS_ORIGINS, UPLOADS_DIR
+from backend_api.http.config import API_PREFIX, API_THREAD_LIMIT, CORS_ORIGINS, UPLOADS_DIR
 from backend_api.http.middleware.error_tracking import ErrorTrackingMiddleware
 from backend_api.http.middleware.request_metrics import RequestMetricsMiddleware
 from backend_api.http.routers import (
@@ -36,6 +38,8 @@ from backend_api.http.services import error_tracking_service
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    # Sync routes (auth/bcrypt, DB) share the process with design-job threads.
+    anyio.to_thread.current_default_thread_limiter().total_tokens = API_THREAD_LIMIT
     init_db()
     # Warm config cache once at startup (defaults to disabled if unset).
     try:

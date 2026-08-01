@@ -8,13 +8,14 @@ import {
   type ReactNode,
 } from 'react'
 import { authApi } from '../api/endpoints'
-import { clearAuthToken, getAuthToken, setAuthToken } from '../api/client'
+import { ApiError, clearAuthToken, getAuthToken, setAuthToken } from '../api/client'
 import type { AuthUser } from '../api/types'
 
 interface AuthContextValue {
   user: AuthUser | null
   token: string | null
   loading: boolean
+  sessionError: boolean
   login: (email: string, password: string) => Promise<void>
   register: (email: string, password: string) => Promise<void>
   logout: () => void
@@ -30,29 +31,59 @@ const PIPELINE_ACTION: Record<'siloDesign' | 'muloDesign', string> = {
   muloDesign: 'pipeline:mulo',
 }
 
+function isUnauthorized(err: unknown): boolean {
+  return err instanceof ApiError && err.status === 401
+}
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => window.setTimeout(resolve, ms))
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [token, setToken] = useState<string | null>(() => getAuthToken())
   const [loading, setLoading] = useState(true)
+  const [sessionError, setSessionError] = useState(false)
 
   const refreshUser = useCallback(async () => {
     const current = getAuthToken()
     if (!current) {
       setUser(null)
       setToken(null)
+      setSessionError(false)
       setLoading(false)
       return
     }
-    try {
-      const me = await authApi.me()
-      setUser(me)
-      setToken(current)
-    } catch {
-      clearAuthToken()
-      setUser(null)
-      setToken(null)
-    } finally {
-      setLoading(false)
+
+    setLoading(true)
+    setSessionError(false)
+    const maxAttempts = 2
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const me = await authApi.me()
+        setUser(me)
+        setToken(current)
+        setSessionError(false)
+        setLoading(false)
+        return
+      } catch (err) {
+        if (isUnauthorized(err)) {
+          clearAuthToken()
+          setUser(null)
+          setToken(null)
+          setSessionError(false)
+          setLoading(false)
+          return
+        }
+        if (attempt < maxAttempts) {
+          await sleep(500)
+          continue
+        }
+        // Keep token on transient failures so the user can retry without re-entering password.
+        setSessionError(true)
+        setLoading(false)
+      }
     }
   }, [])
 
@@ -63,8 +94,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const applyToken = useCallback(async (accessToken: string) => {
     setAuthToken(accessToken)
     setToken(accessToken)
-    const me = await authApi.me()
-    setUser(me)
+    try {
+      const me = await authApi.me()
+      setUser(me)
+      setSessionError(false)
+    } catch (err) {
+      clearAuthToken()
+      setToken(null)
+      setUser(null)
+      throw err
+    }
   }, [])
 
   const login = useCallback(
@@ -87,6 +126,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     clearAuthToken()
     setToken(null)
     setUser(null)
+    setSessionError(false)
   }, [])
 
   const hasAction = useCallback(
@@ -108,6 +148,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       token,
       loading,
+      sessionError,
       login,
       register,
       logout,
@@ -115,7 +156,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       canUsePipeline,
       refreshUser,
     }),
-    [user, token, loading, login, register, logout, hasAction, canUsePipeline, refreshUser],
+    [
+      user,
+      token,
+      loading,
+      sessionError,
+      login,
+      register,
+      logout,
+      hasAction,
+      canUsePipeline,
+      refreshUser,
+    ],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

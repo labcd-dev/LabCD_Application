@@ -165,11 +165,12 @@ class Action(Base):
     code: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     description: Mapped[str] = mapped_column(Text, default="", nullable=False)
 
+    # noload: avoid loading every Plan for every Action on each /auth/me.
     plans: Mapped[list[Plan]] = relationship(
         "Plan",
         secondary=plan_actions,
         back_populates="actions",
-        lazy="selectin",
+        lazy="noload",
     )
 
 
