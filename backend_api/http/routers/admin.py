@@ -20,6 +20,7 @@ from backend_api.http.schemas.auth import (
     UserOut,
 )
 from backend_api.http.services import admin_user_service
+from backend_api.common.csv_utils import csv_response
 from backend_api.http.services.admin_csv_service import (
     export_monitoring_csv,
     export_overview_csv,
@@ -52,14 +53,6 @@ from backend_api.http.services.profile_service import user_out
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 
-def _csv_response(content: str, filename: str) -> StreamingResponse:
-    return StreamingResponse(
-        iter([content]),
-        media_type="text/csv",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
-
-
 def _plan_out(plan) -> PlanOut:
     return PlanOut(**plan_service.plan_out_dict(plan))
 
@@ -71,7 +64,7 @@ def get_monitoring(_: User = Depends(require_admin)) -> MonitoringResponse:
 
 @router.get("/monitoring/export.csv")
 def export_monitoring_csv_endpoint(_: User = Depends(require_admin)) -> StreamingResponse:
-    return _csv_response(export_monitoring_csv(), "monitoring_history.csv")
+    return csv_response(export_monitoring_csv(), "monitoring_history.csv")
 
 
 @router.get("/overview/export.csv")
@@ -79,7 +72,7 @@ def export_overview_csv_endpoint(
     _: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> StreamingResponse:
-    return _csv_response(export_overview_csv(db), "admin_all_data.csv")
+    return csv_response(export_overview_csv(db), "admin_all_data.csv")
 
 
 @router.get("/errors/settings", response_model=ErrorTrackingSettings)
@@ -156,11 +149,7 @@ def export_error_events_csv(
         q=q,
         limit=limit,
     )
-    return StreamingResponse(
-        iter([content]),
-        media_type="text/csv",
-        headers={"Content-Disposition": 'attachment; filename="error_events.csv"'},
-    )
+    return csv_response(content, "error_events.csv")
 
 
 @router.get("/plans/export.csv")
@@ -168,7 +157,7 @@ def export_plans_csv_endpoint(
     _: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> StreamingResponse:
-    return _csv_response(export_plans_csv(db), "plans.csv")
+    return csv_response(export_plans_csv(db), "plans.csv")
 
 
 @router.get("/actions", response_model=list[ActionOut])
@@ -290,7 +279,7 @@ def export_users_csv_endpoint(
     _: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> StreamingResponse:
-    return _csv_response(export_users_csv(db), "users.csv")
+    return csv_response(export_users_csv(db), "users.csv")
 
 
 @router.get("/users/{user_id}", response_model=AdminUserDetailOut)
@@ -388,7 +377,7 @@ def export_projects_csv_endpoint(
         user_id=user_id,
         pipeline_type=pipeline_type,
     )
-    return _csv_response(content, "projects.csv")
+    return csv_response(content, "projects.csv")
 
 
 @router.get("/projects/profiling/export.csv")
@@ -403,7 +392,7 @@ def export_projects_profiling_csv_endpoint(
         user_id=user_id,
         pipeline_type=pipeline_type,
     )
-    return _csv_response(content, "project_profiling.csv")
+    return csv_response(content, "project_profiling.csv")
 
 
 @router.get("/projects/{project_id}", response_model=ProjectDetail)

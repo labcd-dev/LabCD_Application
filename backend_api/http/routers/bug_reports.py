@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Reques
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
+from backend_api.common.csv_utils import csv_response
 from backend_api.db.models import User
 from backend_api.db.session import get_db
 from backend_api.http.dependencies import get_current_user, require_admin
@@ -91,11 +92,7 @@ def admin_export_bug_reports_csv(
     db: Session = Depends(get_db),
 ) -> StreamingResponse:
     content = bug_report_service.export_csv(db, status=report_status)
-    return StreamingResponse(
-        iter([content]),
-        media_type="text/csv",
-        headers={"Content-Disposition": 'attachment; filename="bug_reports.csv"'},
-    )
+    return csv_response(content, "bug_reports.csv")
 
 
 @router.get("/admin/bug-reports", response_model=list[BugReportOut])
