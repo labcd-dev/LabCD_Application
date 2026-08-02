@@ -13,6 +13,7 @@ import {
   type ScenarioMetricsEntry,
 } from '../lib/scenarioMetrics'
 import { cardPanel, mutedText } from '../lib/classes'
+import { BestControllersPanel } from './BestControllersPanel'
 import { ComputationalProfilingPanel } from './ComputationalProfilingPanel'
 import { StatusMessage } from './StatusMessage'
 
@@ -47,7 +48,7 @@ export function SiloSummaryPanel({
     () => extractScenarioBestResults(currentState, stateHistory),
     [currentState, stateHistory],
   )
-  const showBestTeaser = hasBestControllerData(bestResults) && !isRunning
+  const showBestControllers = hasBestControllerData(bestResults) && !isRunning
 
   if (!currentState && history.length === 0) {
     return (
@@ -59,10 +60,10 @@ export function SiloSummaryPanel({
 
   return (
     <div className="flex flex-col gap-5">
-      {showBestTeaser && (
+      {showBestControllers && (
         <StatusMessage
           type="success"
-          message="Design complete! See the Best Controllers tab for export-ready parameters."
+          message="Design complete! Export-ready best controller parameters are below."
         />
       )}
 
@@ -77,6 +78,13 @@ export function SiloSummaryPanel({
       {currentState && <SimulationConfig state={currentState} />}
 
       <ComputationalProfilingPanel scenarioMetricsHistory={scenarioMetricsHistory} />
+
+      {showBestControllers && (
+        <BestControllersPanel
+          currentState={currentState}
+          stateHistory={stateHistory}
+        />
+      )}
     </div>
   )
 }

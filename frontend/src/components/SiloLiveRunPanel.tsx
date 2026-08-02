@@ -3,7 +3,6 @@ import { OctagonX } from 'lucide-react'
 import { jobsApi, siloApi } from '../api/endpoints'
 import { ActivityLog } from './ActivityLog'
 import { DesignIterationReport } from './DesignIterationReport'
-import { BestControllersPanel } from './BestControllersPanel'
 import { DesignMonitorDashboard } from './DesignMonitorDashboard'
 import { SiloSummaryPanel } from './SiloSummaryPanel'
 import { ProcessingCard } from './ProcessingCard'
@@ -158,16 +157,6 @@ export function SiloLiveRunPanel({ jobId, onTerminal, onDesignSuccess }: SiloLiv
           currentState={currentState}
           stateHistory={stateHistory}
           isRunning={stream.isRunning && !stream.isDone}
-        />
-      ),
-    },
-    {
-      id: 'best',
-      label: 'Best Controllers',
-      content: (
-        <BestControllersPanel
-          currentState={currentState}
-          stateHistory={stateHistory}
         />
       ),
     },

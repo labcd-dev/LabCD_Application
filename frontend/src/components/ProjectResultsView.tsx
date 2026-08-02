@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react'
 import { FileText } from 'lucide-react'
 import { adminApi, projectsApi } from '../api/endpoints'
 import type { ProjectPipelineType } from '../api/types'
-import { BestControllersPanel } from './BestControllersPanel'
 import { DesignIterationReport } from './DesignIterationReport'
 import { DesignMonitorDashboard } from './DesignMonitorDashboard'
 import { SiloSummaryPanel } from './SiloSummaryPanel'
@@ -101,21 +100,6 @@ function SiloResults({ monitorState }: { monitorState: Record<string, unknown> }
           isRunning={false}
         />
       ),
-    },
-    {
-      id: 'best',
-      label: 'Best Controllers',
-      content: (
-        <BestControllersPanel
-          currentState={currentState}
-          stateHistory={stateHistory}
-        />
-      ),
-    },
-    {
-      id: 'raw',
-      label: 'Raw JSON',
-      content: <CodePreview value={JSON.stringify(monitorState, null, 2)} readOnly />,
     },
   ]
 
@@ -219,11 +203,6 @@ function MuloResults({ results }: { results: Record<string, unknown> }) {
       ) : (
         <p className={mutedText}>No LLM summary charts were saved.</p>
       ),
-    },
-    {
-      id: 'raw',
-      label: 'Raw JSON',
-      content: <CodePreview value={JSON.stringify(results, null, 2)} readOnly />,
     },
   ]
 
