@@ -23,6 +23,13 @@ DATABASE_URL = os.getenv(
     "DATABASE_URL",
     "postgresql+psycopg://labcd:labcd@localhost:5432/labcd",
 )
+# Keep pool headroom for API requests while design jobs open short-lived sessions.
+DB_POOL_SIZE = int(os.getenv("DB_POOL_SIZE", "10"))
+DB_MAX_OVERFLOW = int(os.getenv("DB_MAX_OVERFLOW", "20"))
+DB_POOL_TIMEOUT = int(os.getenv("DB_POOL_TIMEOUT", "10"))
+# Sync route threadpool size (design jobs share the process; login must not starve).
+API_THREAD_LIMIT = int(os.getenv("API_THREAD_LIMIT", "64"))
+
 JWT_SECRET = os.getenv("JWT_SECRET", "change-me-in-production")
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 JWT_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "1440"))

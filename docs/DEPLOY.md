@@ -243,10 +243,11 @@ Also back up `uploads/` and `results/`.
 | `Bind for 0.0.0.0:80 failed: port is already allocated` | Something else owns host :80. On the server: `docker ps --filter publish=80` and `sudo ss -tlnp \| grep ':80 '`. Stop the other container, or disable host nginx/apache (`sudo systemctl disable --now nginx`). Then re-run `bash deploy/deploy.sh`. |
 | `502` Bad Gateway | `docker compose ... ps` and logs for `frontend` / `api` |
 | CORS / login errors | Set `CORS_ORIGINS` to production HTTPS URLs; recreate `api` |
+| Login hangs / times out under load | API keeps one worker (in-memory jobs). Raise `DB_POOL_SIZE` / `DB_MAX_OVERFLOW` / `API_THREAD_LIMIT` in `.env` and recreate `api`. Frontend times out auth requests after 30s with Retry. |
 | API 404 under `/api/` | Frontend nginx proxies `/api/` → `api:8000`; ensure both containers are up |
 | SSE job dies early | Frontend nginx already uses long `proxy_read_timeout`; raise timeout on any extra proxy |
 | Actions SSH fails | Test key locally; confirm `deploy` is in `docker` group and owns `/opt/labcd` |
-| Admin login fails | Recheck `.env` admin vars; recreate `api` so env reloads |
+| Admin login fails | Recheck `.env` admin vars; recreate `api` so env reloads. Note: changing `ADMIN_PASSWORD` does not update an existing admin hash — reset via DB or admin UI. |
 
 ---
 

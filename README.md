@@ -195,6 +195,8 @@ See `.env.example`. Important ones:
 | `DATABASE_URL` | Postgres connection |
 | `JWT_SECRET` | Auth signing key |
 | `CORS_ORIGINS` | Allowed frontend origins |
+| `DB_POOL_SIZE` / `DB_MAX_OVERFLOW` | SQLAlchemy pool (defaults 10 / 20) |
+| `API_THREAD_LIMIT` | Sync route threadpool size (default 64) |
 | `RESULTS_DIR` / `UPLOADS_DIR` | Artifact paths |
 | `VITE_API_BASE_URL` | Frontend API base (`frontend/.env`) |
 
