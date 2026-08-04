@@ -21,6 +21,7 @@ MONITOR_STATE_KEYS = (
     'dt',
     'max_time',
     'target',
+    'target_metrics',
     'num_inputs',
     'input_channel',
     'output_channel',
@@ -72,6 +73,9 @@ def lightweight_monitor_snapshot(state: Dict[str, Any]) -> Dict[str, Any]:
             continue
         if key == 'current_params' and isinstance(state.get('current_params'), dict):
             snapshot['current_params'] = copy.deepcopy(state['current_params'])
+            continue
+        if key == 'target_metrics' and isinstance(state.get('target_metrics'), dict):
+            snapshot['target_metrics'] = copy.deepcopy(state['target_metrics'])
             continue
         snapshot[key] = state[key]
     return snapshot

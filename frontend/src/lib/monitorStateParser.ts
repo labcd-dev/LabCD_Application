@@ -27,6 +27,12 @@ export interface SimulationStep {
   target: number
 }
 
+export interface TargetMetrics {
+  mse?: number
+  settling_time?: number
+  overshoot?: number
+}
+
 export interface MonitorSummary {
   iteration: number
   maxIterations: number
@@ -186,6 +192,37 @@ export function extractSimulationSteps(
   }
 
   return steps
+}
+
+export function extractTargetMetrics(
+  currentState?: Record<string, unknown> | null,
+  stateHistory?: StateHistoryEntry[],
+): TargetMetrics | null {
+  const sources: Array<Record<string, unknown> | null | undefined> = [currentState]
+  if (stateHistory) {
+    for (let i = stateHistory.length - 1; i >= 0; i -= 1) {
+      sources.push(stateHistory[i]?.state)
+    }
+  }
+
+  for (const source of sources) {
+    const raw = asRecord(source?.target_metrics)
+    if (!raw) continue
+    const targets: TargetMetrics = {
+      mse: asNumber(raw.mse),
+      settling_time: asNumber(raw.settling_time),
+      overshoot: asNumber(raw.overshoot),
+    }
+    if (
+      targets.mse !== undefined ||
+      targets.settling_time !== undefined ||
+      targets.overshoot !== undefined
+    ) {
+      return targets
+    }
+  }
+
+  return null
 }
 
 export function buildMonitorSummary(currentState: Record<string, unknown> | null): MonitorSummary | null {

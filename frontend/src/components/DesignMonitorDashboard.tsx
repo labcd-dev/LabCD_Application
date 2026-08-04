@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { Data } from 'plotly.js'
+import type { Data, Layout } from 'plotly.js'
 import { PlotlyChart } from './PlotlyChart'
 import {
   buildMonitorSummary,
   buildTimePoints,
   extractSimulationSteps,
+  extractTargetMetrics,
   formatMetricValue,
   paramsSummary,
   type SimulationStep,
   type StateHistoryEntry,
+  type TargetMetrics,
 } from '../lib/monitorStateParser'
 import { badgeStyles, cardPanel, fieldInput, mutedText } from '../lib/classes'
 
@@ -25,9 +27,47 @@ const METRIC_COLORS = {
   control: '#f58518',
   error: '#72b7b2',
   target: '#54a24b',
+  metricTarget: '#d62728',
 } as const
 
 const PARAM_COLORS = ['#4c78a8', '#f58518', '#e45756', '#72b7b2', '#b279a2', '#ff9da6']
+
+function targetLineShape(
+  axis: '' | '2' | '3',
+  x0: number,
+  x1: number,
+  value: number,
+): NonNullable<Layout['shapes']>[number] {
+  return {
+    type: 'line',
+    xref: axis === '' ? 'x' : `x${axis}`,
+    yref: axis === '' ? 'y' : `y${axis}`,
+    x0,
+    x1,
+    y0: value,
+    y1: value,
+    line: { color: METRIC_COLORS.metricTarget, dash: 'dash', width: 1.5 },
+  }
+}
+
+function targetLineAnnotation(
+  axis: '' | '2' | '3',
+  x: number,
+  value: number,
+  label: string,
+): NonNullable<Layout['annotations']>[number] {
+  return {
+    xref: axis === '' ? 'x' : `x${axis}`,
+    yref: axis === '' ? 'y' : `y${axis}`,
+    x,
+    y: value,
+    xanchor: 'right',
+    yanchor: 'bottom',
+    text: label,
+    showarrow: false,
+    font: { size: 10, color: METRIC_COLORS.metricTarget },
+  }
+}
 
 export function DesignMonitorDashboard({
   stateHistory,
@@ -40,6 +80,10 @@ export function DesignMonitorDashboard({
   const summary = useMemo(
     () => buildMonitorSummary(currentState ?? null),
     [currentState],
+  )
+  const targetMetrics = useMemo(
+    () => extractTargetMetrics(currentState, stateHistory),
+    [currentState, stateHistory],
   )
   const [selectedStep, setSelectedStep] = useState<number | null>(null)
   const [followLatest, setFollowLatest] = useState(true)
@@ -60,7 +104,7 @@ export function DesignMonitorDashboard({
   const latestMetrics = steps.at(-1)?.metrics
   const chartRevision =
     steps.length > 0
-      ? `${steps.length}-${latestMetrics?.mse ?? ''}-${latestMetrics?.settling_time ?? ''}-${latestMetrics?.overshoot ?? ''}-${latestMetrics?.stable ?? ''}`
+      ? `${steps.length}-${latestMetrics?.mse ?? ''}-${latestMetrics?.settling_time ?? ''}-${latestMetrics?.overshoot ?? ''}-${latestMetrics?.stable ?? ''}-${targetMetrics?.mse ?? ''}-${targetMetrics?.settling_time ?? ''}-${targetMetrics?.overshoot ?? ''}`
       : '0'
 
   const activeStepIndex =
@@ -82,7 +126,11 @@ export function DesignMonitorDashboard({
     <div className="flex flex-col gap-4">
       {summary && <SummaryCards summary={summary} stepCount={steps.length} />}
 
-      <MetricsProgressPanel steps={steps} revision={chartRevision} />
+      <MetricsProgressPanel
+        steps={steps}
+        targetMetrics={targetMetrics}
+        revision={chartRevision}
+      />
       <ParametersPanel steps={steps} revision={chartRevision} />
       <SimulationPanel
         steps={steps}
@@ -170,12 +218,16 @@ function MetricCard({
 
 function MetricsProgressPanel({
   steps,
+  targetMetrics,
   revision,
 }: {
   steps: SimulationStep[]
+  targetMetrics: TargetMetrics | null
   revision: string
 }) {
   const x = steps.map((step) => step.globalStep)
+  const x0 = x[0] ?? 1
+  const x1 = x.length > 1 ? (x[x.length - 1] ?? x0) : x0 + 1
 
   const traces: Data[] = [
     {
@@ -217,6 +269,38 @@ function MetricsProgressPanel({
     },
   ]
 
+  const shapes: NonNullable<Layout['shapes']> = []
+  const annotations: NonNullable<Layout['annotations']> = []
+
+  if (targetMetrics?.mse !== undefined) {
+    shapes.push(targetLineShape('', x0, x1, targetMetrics.mse))
+    annotations.push(
+      targetLineAnnotation('', x1, targetMetrics.mse, `Target: ${targetMetrics.mse.toFixed(3)}`),
+    )
+  }
+  if (targetMetrics?.settling_time !== undefined) {
+    shapes.push(targetLineShape('2', x0, x1, targetMetrics.settling_time))
+    annotations.push(
+      targetLineAnnotation(
+        '2',
+        x1,
+        targetMetrics.settling_time,
+        `Target: ${targetMetrics.settling_time.toFixed(2)}s`,
+      ),
+    )
+  }
+  if (targetMetrics?.overshoot !== undefined) {
+    shapes.push(targetLineShape('3', x0, x1, targetMetrics.overshoot))
+    annotations.push(
+      targetLineAnnotation(
+        '3',
+        x1,
+        targetMetrics.overshoot,
+        `Target: ${targetMetrics.overshoot.toFixed(1)}%`,
+      ),
+    )
+  }
+
   return (
     <section className={cardPanel}>
       <SectionHeader
@@ -236,6 +320,8 @@ function MetricsProgressPanel({
           xaxis3: { title: { text: 'Step' } },
           yaxis3: { title: { text: 'Overshoot (%)' } },
           showlegend: false,
+          shapes,
+          annotations,
         }}
       />
     </section>
