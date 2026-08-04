@@ -1,7 +1,7 @@
 """Project history API schemas."""
 
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, Field
 
@@ -25,6 +25,13 @@ class ProjectUpdateRequest(BaseModel):
     file_content: Optional[str] = None
     job_id: Optional[str] = None
     results: Optional[dict[str, Any]] = None
+
+
+class ProjectSiloSimulateRequest(BaseModel):
+    """Manual gain re-simulation for a saved single-loop project."""
+
+    gains: Dict[str, float] = Field(default_factory=dict)
+    scenario: Optional[Dict[str, Any]] = None
 
 
 class ProjectSummary(BaseModel):

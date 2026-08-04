@@ -4,6 +4,7 @@ import { jobsApi, siloApi } from '../api/endpoints'
 import { ActivityLog } from './ActivityLog'
 import { DesignIterationReport } from './DesignIterationReport'
 import { DesignMonitorDashboard } from './DesignMonitorDashboard'
+import { SiloPerformancePanel } from './SiloPerformancePanel'
 import { SiloSummaryPanel } from './SiloSummaryPanel'
 import { ProcessingCard } from './ProcessingCard'
 import { ProgressBar } from './ProgressBar'
@@ -136,6 +137,17 @@ export function SiloLiveRunPanel({ jobId, onTerminal, onDesignSuccess }: SiloLiv
             <p className={mutedText}>Waiting for simulation data...</p>
           )}
         </>
+      ),
+    },
+    {
+      id: 'time-response',
+      label: 'Time Response',
+      content: (
+        <SiloPerformancePanel
+          jobId={jobId}
+          currentState={currentState}
+          disabled={stream.isRunning && !stream.isDone}
+        />
       ),
     },
     {

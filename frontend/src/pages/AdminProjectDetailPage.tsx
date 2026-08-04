@@ -122,6 +122,7 @@ export function AdminProjectDetailPage() {
           pipelineType={project.pipeline_type}
           results={project.results}
           projectId={project.id}
+          jobId={project.job_id}
           artifactScope="admin"
         />
       </div>

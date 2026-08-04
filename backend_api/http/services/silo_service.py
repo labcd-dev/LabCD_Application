@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import threading
-from typing import Any, Dict
+from typing import Any, Dict, Optional
+
+import numpy as np
 
 from backend_api.SiloDesigner.app import (
     DesignCancelledError,
@@ -11,12 +13,20 @@ from backend_api.SiloDesigner.app import (
     get_serializable_monitor_state,
     run_design_with_monitoring,
 )
-from backend_api.SiloDesigner.config import build_design_config
+from backend_api.SiloDesigner.config import build_design_config, get_default_param_ranges
+from backend_api.SiloDesigner.src.controllers import initialize_state
 from backend_api.common.serialization import make_serializable
 from backend_api.http.services.job_store import JobStatus, job_store
 from backend_api.http.services.project_service import link_or_create_for_job, sync_project_from_job
 
 MONITOR_PUBLISH_INTERVAL_SECONDS = 3.0
+
+_INIT_EXCLUDED_KEYS = frozenset({"enable_ga", "ga_config", "file_name", "monitor"})
+_DEFAULT_SCENARIO = {
+    "initial_condition_range": (-1.0, 1.0),
+    "randomness_level": 0.0,
+    "disturbance_level": 0.0,
+}
 
 
 def _file_type_label(file_type: str | None) -> str:
@@ -126,7 +136,7 @@ def _silo_worker(job_id: str) -> None:
             project_id=job.metadata.get("project_id"),
             job_id=job_id,
             status="completed",
-            results={"monitor_state": make_serializable(job.metadata["monitor_state"])},
+            results=_silo_project_results(job),
         )
     except DesignCancelledError:
         job.metadata["monitor_state"] = get_serializable_monitor_state(monitor)
@@ -137,7 +147,7 @@ def _silo_worker(job_id: str) -> None:
             project_id=job.metadata.get("project_id"),
             job_id=job_id,
             status="cancelled",
-            results={"monitor_state": make_serializable(job.metadata["monitor_state"])},
+            results=_silo_project_results(job),
             error=job.error,
         )
     except Exception as exc:
@@ -206,3 +216,271 @@ def get_silo_monitor_state(job_id: str) -> Dict[str, Any]:
     job = job_store.get(job_id)
     monitor = job.metadata["monitor"]
     return make_serializable(get_serializable_monitor_state(monitor))
+
+
+def _silo_project_results(job) -> Dict[str, Any]:
+    """Persist monitor snapshot plus design config for later manual re-simulation."""
+    return {
+        "monitor_state": make_serializable(job.metadata.get("monitor_state")),
+        "design_config": make_serializable(job.metadata.get("config")),
+    }
+
+
+def _numeric_gains(params: Any) -> Dict[str, float]:
+    if not isinstance(params, dict):
+        return {}
+    gains: Dict[str, float] = {}
+    for key, value in params.items():
+        if key == "reasoning":
+            continue
+        try:
+            gains[str(key)] = float(value)
+        except (TypeError, ValueError):
+            continue
+    return gains
+
+
+def _controller_type_from_state(state: Dict[str, Any]) -> str:
+    explicit = state.get("controller_type")
+    if isinstance(explicit, str) and explicit.strip():
+        return explicit.strip()
+    controllers = state.get("controllers_list") or []
+    index = state.get("current_controller_index", 0)
+    if isinstance(controllers, list) and isinstance(index, int):
+        if 0 <= index < len(controllers) and isinstance(controllers[index], str):
+            return controllers[index]
+    return "PID"
+
+
+def _resolve_param_bounds(
+    system: Any,
+    controller_type: str,
+    config: Optional[Dict[str, Any]] = None,
+) -> Dict[str, list[float]]:
+    """Match Streamlit Time Response slider range priority."""
+    if system is not None and hasattr(system, "get_control_param_schema"):
+        try:
+            schema = system.get_control_param_schema(controller_type)
+            if isinstance(schema, dict) and schema:
+                return {
+                    str(key): [float(info["min"]), float(info["max"])]
+                    for key, info in schema.items()
+                    if isinstance(info, dict) and "min" in info and "max" in info
+                }
+        except Exception:
+            pass
+
+    config_ranges = (config or {}).get("param_ranges")
+    if isinstance(config_ranges, dict):
+        typed = config_ranges.get(controller_type)
+        if isinstance(typed, dict) and typed:
+            bounds: Dict[str, list[float]] = {}
+            for key, value in typed.items():
+                if isinstance(value, (list, tuple)) and len(value) >= 2:
+                    bounds[str(key)] = [float(value[0]), float(value[1])]
+            if bounds:
+                return bounds
+
+    defaults = get_default_param_ranges(controller_type, system)
+    if defaults:
+        return {str(k): [float(v[0]), float(v[1])] for k, v in defaults.items()}
+    return {}
+
+
+def _build_runtime_state(config: Dict[str, Any]) -> Dict[str, Any]:
+    filtered = {k: v for k, v in config.items() if k not in _INIT_EXCLUDED_KEYS}
+    init_kwargs = {
+        **filtered,
+        "dt": filtered.get("dt", 0.01),
+        "max_time": filtered.get("max_time", 5.0),
+        "target": filtered.get("target", 0.0),
+        "num_inputs": filtered.get("num_inputs", 1),
+        "input_channel": filtered.get("input_channel", 0),
+        "output_channel": filtered.get("output_channel", 0),
+        "trim_values": filtered.get("trim_values"),
+        "num_states": filtered.get("num_states"),
+        "matlab_func_name": filtered.get("matlab_func_name"),
+        "min_ctrl": filtered.get("min_ctrl", -10.0),
+        "max_ctrl": filtered.get("max_ctrl", 10.0),
+        "monitor": None,
+    }
+    return initialize_state(**init_kwargs)
+
+
+def _resolve_simulator(
+    config: Dict[str, Any],
+    monitor: DesignMonitor | None,
+) -> tuple[Any, Any, Dict[str, Any]]:
+    """Prefer live monitor simulator; otherwise rebuild from design config."""
+    live_state: Dict[str, Any] = {}
+    if monitor is not None and isinstance(monitor.current_state, dict):
+        live_state = monitor.current_state
+        simulator = live_state.get("simulator")
+        system = live_state.get("system")
+        if simulator is not None:
+            if getattr(simulator, "system", None) is None and system is not None:
+                simulator.system = system
+            if getattr(simulator, "system", None) is not None:
+                return simulator, simulator.system, live_state
+
+    rebuilt = _build_runtime_state(config)
+    return rebuilt["simulator"], rebuilt["system"], {**live_state, **rebuilt}
+
+
+def _fixed_initial_state(system: Any) -> np.ndarray:
+    initial_state = np.zeros(system.num_states)
+    ic_min, ic_max = system.initial_condition_range
+    initial_state[system.output_channel] = (float(ic_min) + float(ic_max)) / 2.0
+    return initial_state
+
+
+def _serialize_sim_result(result: Dict[str, Any]) -> Dict[str, Any]:
+    if not result.get("success"):
+        raise ValueError(result.get("error") or "Simulation failed")
+    return {
+        "metrics": make_serializable(result.get("metrics", {})),
+        "trajectory": make_serializable(result.get("trajectory")),
+        "control_signals": make_serializable(result.get("control_signals")),
+        "errors": make_serializable(result.get("errors")),
+    }
+
+
+def _run_manual_simulation(
+    *,
+    config: Dict[str, Any],
+    monitor: DesignMonitor | None,
+    monitor_state: Optional[Dict[str, Any]],
+    gains: Dict[str, float],
+    scenario: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    simulator, system, live_state = _resolve_simulator(config, monitor)
+
+    serialized_current = {}
+    if isinstance(monitor_state, dict):
+        serialized_current = monitor_state.get("current_state") or {}
+        if not isinstance(serialized_current, dict):
+            serialized_current = {}
+
+    controller_type = _controller_type_from_state(live_state) or _controller_type_from_state(
+        serialized_current
+    )
+    optimal_gains = _numeric_gains(live_state.get("current_params"))
+    if not optimal_gains:
+        optimal_gains = _numeric_gains(serialized_current.get("current_params"))
+    if not optimal_gains:
+        raise ValueError("No optimal controller gains available yet")
+
+    manual_gains = _numeric_gains(gains) if gains else dict(optimal_gains)
+    if not manual_gains:
+        manual_gains = dict(optimal_gains)
+
+    selected_scenario = scenario if isinstance(scenario, dict) and scenario else _DEFAULT_SCENARIO
+    simulator.set_scenario(selected_scenario)
+    system = simulator.system
+    if system is None:
+        raise ValueError("Simulator system is not initialized")
+
+    initial_state = _fixed_initial_state(system)
+    optimal_result = simulator.evaluate_parameters(optimal_gains, initial_state=initial_state)
+    optimal_payload = _serialize_sim_result(optimal_result)
+
+    manual_payload = None
+    if manual_gains != optimal_gains:
+        manual_result = simulator.evaluate_parameters(manual_gains, initial_state=initial_state)
+        manual_payload = _serialize_sim_result(manual_result)
+
+    dt = float(getattr(system, "dt", config.get("dt", 0.01)) or 0.01)
+    max_time = float(getattr(system, "max_time", config.get("max_time", 5.0)) or 5.0)
+    target = float(getattr(system, "target", config.get("target", 0.0)) or 0.0)
+    traj_len = len(optimal_payload.get("trajectory") or [])
+    expected_steps = int(max_time / dt) + 1
+    time_points = (np.arange(0, max_time + dt, dt)[:expected_steps])[:traj_len].tolist()
+
+    param_bounds = _resolve_param_bounds(system, controller_type, config)
+    for key in set(optimal_gains) | set(manual_gains):
+        param_bounds.setdefault(key, [0.0, 100.0])
+
+    return {
+        "controller_type": controller_type,
+        "optimal_gains": optimal_gains,
+        "manual_gains": manual_gains,
+        "param_bounds": param_bounds,
+        "target": target,
+        "dt": dt,
+        "max_time": max_time,
+        "time": time_points,
+        "optimal": optimal_payload,
+        "manual": manual_payload,
+    }
+
+
+def simulate_silo_response(
+    job_id: str,
+    gains: Dict[str, float],
+    scenario: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Re-simulate closed-loop response with manual gains (Streamlit parity)."""
+    job = job_store.get(job_id)
+    config = job.metadata.get("config")
+    if not isinstance(config, dict):
+        raise ValueError("Design configuration is missing for this job")
+    monitor = job.metadata.get("monitor")
+    monitor_state = job.metadata.get("monitor_state")
+    if monitor_state is None and isinstance(monitor, DesignMonitor):
+        monitor_state = get_serializable_monitor_state(monitor)
+    return _run_manual_simulation(
+        config=config,
+        monitor=monitor if isinstance(monitor, DesignMonitor) else None,
+        monitor_state=monitor_state if isinstance(monitor_state, dict) else None,
+        gains=gains,
+        scenario=scenario,
+    )
+
+
+def simulate_silo_project_response(
+    *,
+    design_config: Dict[str, Any] | None,
+    monitor_state: Optional[Dict[str, Any]],
+    file_content: str = "",
+    gains: Dict[str, float],
+    scenario: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Re-simulate from persisted project design_config + monitor snapshot."""
+    config: Dict[str, Any] = dict(design_config) if isinstance(design_config, dict) else {}
+    serialized_current: Dict[str, Any] = {}
+    if isinstance(monitor_state, dict):
+        raw_current = monitor_state.get("current_state")
+        if isinstance(raw_current, dict):
+            serialized_current = raw_current
+
+    if not config:
+        if not file_content and not serialized_current:
+            raise ValueError(
+                "Saved design configuration is missing; re-run the design to enable gain simulation"
+            )
+        config = {
+            "system_name": "custom" if file_content else "ball_beam",
+            "dt": serialized_current.get("dt", 0.01),
+            "max_time": serialized_current.get("max_time", 5.0),
+            "target": serialized_current.get("target", 0.0),
+            "num_inputs": serialized_current.get("num_inputs", 1),
+            "input_channel": serialized_current.get("input_channel", 0),
+            "output_channel": serialized_current.get("output_channel", 0),
+            "min_ctrl": serialized_current.get("min_ctrl", -10.0),
+            "max_ctrl": serialized_current.get("max_ctrl", 10.0),
+            "controllers": serialized_current.get("controllers_list")
+            or ["PID", "FSF"],
+        }
+
+    if file_content and not config.get("file_content"):
+        config["file_content"] = file_content
+        config["system_name"] = config.get("system_name") or "custom"
+        if config.get("file_content"):
+            config["file_type"] = "Python (.py)"
+    return _run_manual_simulation(
+        config=config,
+        monitor=None,
+        monitor_state=monitor_state,
+        gains=gains,
+        scenario=scenario,
+    )

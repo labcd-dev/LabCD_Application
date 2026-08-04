@@ -10,11 +10,13 @@ from backend_api.http.dependencies import assert_model_allowed, get_current_user
 from backend_api.http.schemas.projects import (
     ProjectCreateRequest,
     ProjectDetail,
+    ProjectSiloSimulateRequest,
     ProjectSummary,
     ProjectUpdateRequest,
 )
 from backend_api.http.services import project_service
 from backend_api.http.services.project_service import ProjectAccessDenied
+from backend_api.http.services.silo_service import simulate_silo_project_response
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -100,6 +102,44 @@ def update_my_project(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return ProjectDetail(**project_service.project_to_detail(project))
+
+
+@router.post("/{project_id}/silo/simulate")
+def simulate_my_silo_project(
+    project_id: int,
+    request: ProjectSiloSimulateRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    project = project_service.get_project(db, project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    try:
+        project_service.assert_project_access(project, user)
+    except ProjectAccessDenied as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    if project.pipeline_type != "siloDesign":
+        raise HTTPException(status_code=400, detail="Project is not a single-loop design")
+    results = project.results if isinstance(project.results, dict) else {}
+    design_config = results.get("design_config")
+    monitor_state = results.get("monitor_state")
+    if not isinstance(design_config, dict) and not isinstance(monitor_state, dict):
+        raise HTTPException(
+            status_code=400,
+            detail="Saved design results are missing; re-run the design to enable gain simulation",
+        )
+    try:
+        return simulate_silo_project_response(
+            design_config=design_config if isinstance(design_config, dict) else None,
+            monitor_state=monitor_state if isinstance(monitor_state, dict) else None,
+            file_content=project.file_content or "",
+            gains=request.gains,
+            scenario=request.scenario,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/{project_id}/artifacts/{filename}")

@@ -8,11 +8,15 @@ from backend_api.db.models import User
 from backend_api.db.session import get_db
 from backend_api.http.dependencies import assert_job_access, assert_model_allowed, require_action
 from backend_api.http.schemas.common import JobResponse
-from backend_api.http.schemas.silo import SiloStartRequest
+from backend_api.http.schemas.silo import SiloSimulateRequest, SiloStartRequest
 from backend_api.http.services import project_service
 from backend_api.http.services.events import sse_response
 from backend_api.http.services.job_store import job_store
-from backend_api.http.services.silo_service import get_silo_monitor_state, start_silo_job
+from backend_api.http.services.silo_service import (
+    get_silo_monitor_state,
+    simulate_silo_response,
+    start_silo_job,
+)
 
 router = APIRouter(prefix="/silo", tags=["silo"])
 
@@ -66,3 +70,21 @@ def silo_monitor(
         return get_silo_monitor_state(job_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Job not found") from exc
+
+
+@router.post("/{job_id}/simulate")
+def silo_simulate(
+    job_id: str,
+    request: SiloSimulateRequest,
+    user: User = Depends(require_action("module:silo")),
+) -> dict:
+    try:
+        job = job_store.get(job_id)
+        assert_job_access(job, user)
+        return simulate_silo_response(job_id, request.gains, request.scenario)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Job not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

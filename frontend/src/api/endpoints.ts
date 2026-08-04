@@ -23,6 +23,7 @@ import type {
   RagStatusResponse,
   RecommenderHandoffResponse,
   RegularizeResponse,
+  SiloSimulateResponse,
   StandardizeResponse,
   SurveyResponses,
   SurveySettings,
@@ -339,6 +340,15 @@ export const projectsApi = {
     }),
   downloadArtifact: (projectId: number, filename: string) =>
     projectArtifactUrl(projectId, filename, 'user'),
+
+  simulateSilo: (
+    projectId: number,
+    body: { gains: Record<string, number>; scenario?: Record<string, unknown> },
+  ) =>
+    apiFetch<SiloSimulateResponse>(`/projects/${projectId}/silo/simulate`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
 }
 
 export const healthApi = {
@@ -489,6 +499,15 @@ export const siloApi = {
 
   monitor: (jobId: string) =>
     apiFetch<Record<string, unknown>>(`/silo/${jobId}/monitor`),
+
+  simulate: (
+    jobId: string,
+    body: { gains: Record<string, number>; scenario?: Record<string, unknown> },
+  ) =>
+    apiFetch<SiloSimulateResponse>(`/silo/${jobId}/simulate`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
 }
 
 export const muloApi = {

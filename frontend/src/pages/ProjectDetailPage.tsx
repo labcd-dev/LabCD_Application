@@ -331,6 +331,7 @@ export function ProjectDetailPage() {
             pipelineType={project.pipeline_type}
             results={project.results}
             projectId={project.id}
+            jobId={project.job_id}
           />
         </div>
       )}

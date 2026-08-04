@@ -105,6 +105,26 @@ export interface MuloSimulateResponse {
   amplitude?: number
 }
 
+export interface SiloSimTrace {
+  metrics: Record<string, number | boolean | null>
+  trajectory: number[]
+  control_signals: number[]
+  errors?: number[]
+}
+
+export interface SiloSimulateResponse {
+  controller_type: string
+  optimal_gains: Record<string, number>
+  manual_gains: Record<string, number>
+  param_bounds: Record<string, [number, number]>
+  target: number
+  dt: number
+  max_time: number
+  time: number[]
+  optimal: SiloSimTrace
+  manual: SiloSimTrace | null
+}
+
 export type PipelineType = 'siloDesign' | 'muloDesign' | null
 
 export interface StreamEvent {

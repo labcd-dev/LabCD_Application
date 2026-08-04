@@ -4,6 +4,7 @@ import { adminApi, projectsApi } from '../api/endpoints'
 import type { ProjectPipelineType } from '../api/types'
 import { DesignIterationReport } from './DesignIterationReport'
 import { DesignMonitorDashboard } from './DesignMonitorDashboard'
+import { SiloPerformancePanel } from './SiloPerformancePanel'
 import { SiloSummaryPanel } from './SiloSummaryPanel'
 import { CodePreview } from './CodePreview'
 import { JsonViewer } from './JsonViewer'
@@ -30,6 +31,7 @@ interface ProjectResultsViewProps {
   pipelineType: ProjectPipelineType
   results?: Record<string, unknown> | null
   projectId?: number
+  jobId?: string | null
   artifactScope?: 'user' | 'admin'
 }
 
@@ -62,7 +64,15 @@ function extractMuloFixedTargets(
   return targets
 }
 
-function SiloResults({ monitorState }: { monitorState: Record<string, unknown> }) {
+function SiloResults({
+  monitorState,
+  jobId,
+  projectId,
+}: {
+  monitorState: Record<string, unknown>
+  jobId?: string | null
+  projectId?: number
+}) {
   const [activeTab, setActiveTab] = useState('simulation')
   const llmResponses = asArray(monitorState.llm_responses) as LlmResponseEntry[]
   const stateHistory = asArray(monitorState.state_history) as StateHistoryEntry[]
@@ -78,6 +88,18 @@ function SiloResults({ monitorState }: { monitorState: Record<string, unknown> }
         ) : (
           <p className={mutedText}>No simulation metrics were saved for this project.</p>
         ),
+    },
+    {
+      id: 'time-response',
+      label: 'Time Response',
+      content: (
+        <SiloPerformancePanel
+          jobId={jobId}
+          projectId={projectId}
+          currentState={currentState}
+          disabled={false}
+        />
+      ),
     },
     {
       id: 'process',
@@ -277,6 +299,7 @@ export function ProjectResultsView({
   pipelineType,
   results,
   projectId,
+  jobId,
   artifactScope = 'user',
 }: ProjectResultsViewProps) {
   if (!results) {
@@ -301,7 +324,13 @@ export function ProjectResultsView({
   if (pipelineType === 'siloDesign') {
     const monitorState = asRecord(results.monitor_state)
     if (monitorState) {
-      return <SiloResults monitorState={monitorState} />
+      return (
+        <SiloResults
+          monitorState={monitorState}
+          jobId={jobId}
+          projectId={projectId}
+        />
+      )
     }
   }
 
