@@ -1,4 +1,4 @@
-import { apiFetch, artifactUrl, getAuthToken, projectArtifactUrl } from './client'
+import { apiFetch, artifactUrl, AUTH_TIMEOUT_MS, getAuthToken, projectArtifactUrl } from './client'
 import type {
   ActionInfo,
   ArtifactResponse,
@@ -81,16 +81,24 @@ export async function downloadAdminCsv(
 
 export const authApi = {
   login: (body: { email: string; password: string }) =>
-    apiFetch<TokenResponse>('/auth/login', {
-      method: 'POST',
-      body: JSON.stringify(body),
-    }),
+    apiFetch<TokenResponse>(
+      '/auth/login',
+      {
+        method: 'POST',
+        body: JSON.stringify(body),
+      },
+      AUTH_TIMEOUT_MS,
+    ),
   register: (body: { email: string; password: string }) =>
-    apiFetch<TokenResponse>('/auth/register', {
-      method: 'POST',
-      body: JSON.stringify(body),
-    }),
-  me: () => apiFetch<AuthUser>('/auth/me'),
+    apiFetch<TokenResponse>(
+      '/auth/register',
+      {
+        method: 'POST',
+        body: JSON.stringify(body),
+      },
+      AUTH_TIMEOUT_MS,
+    ),
+  me: () => apiFetch<AuthUser>('/auth/me', {}, AUTH_TIMEOUT_MS),
   updateProfile: (body: {
     display_name?: string | null
     email?: string
@@ -287,7 +295,7 @@ export const adminApi = {
 }
 
 export const surveyApi = {
-  status: () => apiFetch<SurveyStatus>('/survey/status'),
+  status: () => apiFetch<SurveyStatus>('/survey/status', {}, AUTH_TIMEOUT_MS),
   submitProfile: (body: ProfileSurveyRequest) =>
     apiFetch<AuthUser>('/survey/profile', {
       method: 'POST',

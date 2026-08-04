@@ -1,5 +1,11 @@
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '/api/v1'
 const TOKEN_KEY = 'labcd_access_token'
+/**
+ * Fail before nginx's hour-long SSE proxy timeout.
+ * Auth uses a shorter timeout via AUTH_TIMEOUT_MS.
+ */
+export const DEFAULT_TIMEOUT_MS = 120_000
+export const AUTH_TIMEOUT_MS = 30_000
 
 export class ApiError extends Error {
   status: number
@@ -25,7 +31,15 @@ export function clearAuthToken(): void {
 async function parseError(response: Response): Promise<string> {
   try {
     const body = await response.json()
-    return body.detail ?? body.message ?? response.statusText
+    const detail = body.detail ?? body.message ?? response.statusText
+    if (typeof detail === 'string') return detail
+    if (Array.isArray(detail)) {
+      return detail
+        .map((item: { msg?: string }) => item?.msg)
+        .filter(Boolean)
+        .join('; ') || response.statusText
+    }
+    return response.statusText
   } catch {
     return response.statusText
   }
@@ -50,17 +64,37 @@ function reportApiFailure(path: string, method: string, status: number, message:
 export async function apiFetch<T>(
   path: string,
   options: RequestInit = {},
+  timeoutMs: number = DEFAULT_TIMEOUT_MS,
 ): Promise<T> {
   const token = getAuthToken()
   const method = (options.method ?? 'GET').toUpperCase()
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: {
-      ...(options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
-    },
-  })
+  const controller = new AbortController()
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs)
+
+  let response: Response
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      ...options,
+      signal: options.signal ?? controller.signal,
+      headers: {
+        ...(options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...options.headers,
+      },
+    })
+  } catch (err) {
+    const aborted =
+      (err instanceof DOMException && err.name === 'AbortError') ||
+      (err instanceof Error && err.name === 'AbortError')
+    if (aborted) {
+      const message = 'Request timed out. Please try again.'
+      reportApiFailure(path, method, 408, message)
+      throw new ApiError(408, message)
+    }
+    throw err
+  } finally {
+    window.clearTimeout(timer)
+  }
 
   if (response.status === 401 && !path.startsWith('/auth/')) {
     clearAuthToken()
