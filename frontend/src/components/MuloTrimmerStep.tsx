@@ -268,31 +268,11 @@ export function MuloTrimmerStep({ onComplete }: MuloTrimmerStepProps) {
                   message="Trimmer finished but no equilibrium result payload was returned. Re-run Trimmer or check the activity log."
                 />
               )}
-              {pdfError && <StatusMessage type="error" message={pdfError} />}
               <div className="flex gap-3 flex-wrap mt-4">
                 <button type="button" className={btnBase} onClick={restartTrimmer}>
                   <RotateCcw className="size-4" aria-hidden />
                   Change Settings & Re-run
                 </button>
-                <button
-                  type="button"
-                  className={btnPrimary}
-                  disabled={pdfLoading || !jobId || !hasEquilibriumResult(artifacts)}
-                  onClick={() => void generatePdf()}
-                >
-                  <FileText className="size-4" aria-hidden />
-                  {pdfLoading ? 'Generating PDF…' : 'Generate PDF'}
-                </button>
-                {pdfUrl && (
-                  <a
-                    href={pdfUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={btnBase}
-                  >
-                    Download PDF
-                  </a>
-                )}
               </div>
             </>
           )}
@@ -415,6 +395,33 @@ export function MuloTrimmerStep({ onComplete }: MuloTrimmerStepProps) {
             </>
           )}
         </>
+      )}
+
+      {step === 'results' && artifacts && (
+        <div className="space-y-3">
+          {pdfError && <StatusMessage type="error" message={pdfError} />}
+          <div className="flex gap-3 flex-wrap">
+            <button
+              type="button"
+              className={btnPrimary}
+              disabled={pdfLoading || !jobId || !hasEquilibriumResult(artifacts)}
+              onClick={() => void generatePdf()}
+            >
+              <FileText className="size-4" aria-hidden />
+              {pdfLoading ? 'Generating PDF…' : 'Generate PDF'}
+            </button>
+            {pdfUrl && (
+              <a
+                href={pdfUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={btnBase}
+              >
+                Download PDF
+              </a>
+            )}
+          </div>
+        </div>
       )}
 
       {(step === 'running' || step === 'results') && (
