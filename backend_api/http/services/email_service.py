@@ -1,9 +1,14 @@
-"""Send auth emails via SMTP, or log to console when SMTP is unset."""
+"""Send auth emails via SMTP, or log to console when SMTP is unset.
+
+Delivery runs on a background worker thread so HTTP handlers return immediately.
+"""
 
 from __future__ import annotations
 
 import logging
+import queue
 import smtplib
+import threading
 from email.message import EmailMessage
 
 from backend_api.http.config import (
@@ -18,8 +23,13 @@ from backend_api.http.config import (
 
 logger = logging.getLogger(__name__)
 
+_EmailJob = tuple[str, str, str]  # to, subject, body
+_email_queue: queue.Queue[_EmailJob] = queue.Queue()
+_worker_lock = threading.Lock()
+_worker_started = False
 
-def send_email(*, to: str, subject: str, body: str) -> None:
+
+def _deliver_email(*, to: str, subject: str, body: str) -> None:
     """Deliver email through SMTP or print to logs for local development."""
     if not SMTP_HOST:
         logger.info(
@@ -47,6 +57,33 @@ def send_email(*, to: str, subject: str, body: str) -> None:
             if SMTP_USER:
                 smtp.login(SMTP_USER, SMTP_PASSWORD)
             smtp.send_message(message)
+
+
+def _email_worker() -> None:
+    while True:
+        to, subject, body = _email_queue.get()
+        try:
+            _deliver_email(to=to, subject=subject, body=body)
+        except Exception:
+            logger.exception("Failed to send email to %s (subject=%r)", to, subject)
+        finally:
+            _email_queue.task_done()
+
+
+def _ensure_worker() -> None:
+    global _worker_started
+    with _worker_lock:
+        if _worker_started:
+            return
+        thread = threading.Thread(target=_email_worker, name="email-queue", daemon=True)
+        thread.start()
+        _worker_started = True
+
+
+def send_email(*, to: str, subject: str, body: str) -> None:
+    """Queue email for background delivery; returns immediately."""
+    _ensure_worker()
+    _email_queue.put((to, subject, body))
 
 
 def send_verification_email(*, to: str, token: str) -> None:
