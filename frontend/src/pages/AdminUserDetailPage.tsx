@@ -22,6 +22,8 @@ function formatFailureReason(reason: string | null): string {
   if (reason === 'invalid_credentials') return 'Invalid credentials'
   if (reason === 'inactive') return 'Account inactive'
   if (reason === 'unknown_user') return 'Unknown user'
+  if (reason === 'unverified') return 'Email not verified'
+  if (reason === 'locked') return 'Locked out'
   return reason
 }
 
@@ -75,6 +77,7 @@ export function AdminUserDetailPage() {
   const projects = detail?.projects ?? []
   const errors = detail?.errors ?? []
   const loginHistory = detail?.login_history ?? []
+  const sessions = detail?.sessions ?? []
   const projectsPagination = useClientPagination(projects)
   const errorsPagination = useClientPagination(errors)
   const loginPagination = useClientPagination(loginHistory)
@@ -115,6 +118,22 @@ export function AdminUserDetailPage() {
       navigate('/admin/users', { replace: true })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Delete failed')
+      setBusy(false)
+    }
+  }
+
+  const handleRevokeSession = async (sessionId: number) => {
+    if (!detail) return
+    setBusy(true)
+    setError(null)
+    setMessage(null)
+    try {
+      await adminApi.revokeUserSession(detail.user.id, sessionId)
+      setMessage('Session revoked')
+      await loadDetail({ quiet: true })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to revoke session')
+    } finally {
       setBusy(false)
     }
   }
@@ -257,6 +276,10 @@ export function AdminUserDetailPage() {
             }
           />
           <DetailRow label="Theme" value={user.theme} />
+          <DetailRow
+            label="Email verified"
+            value={user.email_verified === false ? 'No' : 'Yes'}
+          />
           <DetailRow label="Joined" value={formatWhen(user.created_at)} />
           <DetailRow
             label="Profile survey"
@@ -276,6 +299,60 @@ export function AdminUserDetailPage() {
             value={user.tutorial_dont_show_again ? 'Hidden permanently' : 'May show on login'}
           />
         </dl>
+      </div>
+
+      <div className={cardPanel}>
+        <h2 className="m-0 mb-4 text-lg font-semibold text-foreground">
+          Active sessions ({sessions.length})
+        </h2>
+        {sessions.length === 0 ? (
+          <p className="m-0 text-sm text-muted-text">No active sessions for this user.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] border-collapse text-left text-sm">
+              <thead>
+                <tr className="border-b border-border text-muted-text">
+                  <th className="px-2 py-2 font-medium">IP</th>
+                  <th className="px-2 py-2 font-medium">User agent</th>
+                  <th className="px-2 py-2 font-medium">Created</th>
+                  <th className="px-2 py-2 font-medium">Last seen</th>
+                  <th className="px-2 py-2 font-medium" />
+                </tr>
+              </thead>
+              <tbody>
+                {sessions.map((session) => (
+                  <tr key={session.id} className="border-b border-border-subtle align-top">
+                    <td className="px-2 py-2 font-mono text-[0.75rem]">
+                      {session.ip_address || '—'}
+                    </td>
+                    <td
+                      className="max-w-[16rem] px-2 py-2 text-muted-text"
+                      title={session.user_agent ?? undefined}
+                    >
+                      {truncateAgent(session.user_agent)}
+                    </td>
+                    <td className="px-2 py-2 whitespace-nowrap text-muted-text">
+                      {formatWhen(session.created_at)}
+                    </td>
+                    <td className="px-2 py-2 whitespace-nowrap text-muted-text">
+                      {formatWhen(session.last_seen_at)}
+                    </td>
+                    <td className="px-2 py-2 text-right">
+                      <button
+                        type="button"
+                        className={`${btnBase} ${btnCompact}`}
+                        disabled={busy}
+                        onClick={() => void handleRevokeSession(session.id)}
+                      >
+                        Log out
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       <div className={cardPanel}>

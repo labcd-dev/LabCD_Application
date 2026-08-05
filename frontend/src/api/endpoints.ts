@@ -40,6 +40,8 @@ import type {
   BlogPostListItem,
   BugReport,
   BugReportSettings,
+  AuthSessionInfo,
+  MessageResponse,
 } from './types'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '/api/v1'
@@ -90,7 +92,7 @@ export const authApi = {
       AUTH_TIMEOUT_MS,
     ),
   register: (body: { email: string; password: string }) =>
-    apiFetch<TokenResponse>(
+    apiFetch<MessageResponse>(
       '/auth/register',
       {
         method: 'POST',
@@ -98,6 +100,47 @@ export const authApi = {
       },
       AUTH_TIMEOUT_MS,
     ),
+  verifyEmail: (body: { token: string }) =>
+    apiFetch<MessageResponse>(
+      '/auth/verify-email',
+      {
+        method: 'POST',
+        body: JSON.stringify(body),
+      },
+      AUTH_TIMEOUT_MS,
+    ),
+  resendVerification: (body: { email: string }) =>
+    apiFetch<MessageResponse>(
+      '/auth/resend-verification',
+      {
+        method: 'POST',
+        body: JSON.stringify(body),
+      },
+      AUTH_TIMEOUT_MS,
+    ),
+  forgotPassword: (body: { email: string }) =>
+    apiFetch<MessageResponse>(
+      '/auth/forgot-password',
+      {
+        method: 'POST',
+        body: JSON.stringify(body),
+      },
+      AUTH_TIMEOUT_MS,
+    ),
+  resetPassword: (body: { token: string; new_password: string }) =>
+    apiFetch<MessageResponse>(
+      '/auth/reset-password',
+      {
+        method: 'POST',
+        body: JSON.stringify(body),
+      },
+      AUTH_TIMEOUT_MS,
+    ),
+  logout: () =>
+    apiFetch<void>('/auth/logout', { method: 'POST' }, AUTH_TIMEOUT_MS),
+  listSessions: () => apiFetch<AuthSessionInfo[]>('/auth/sessions'),
+  revokeSession: (sessionId: number) =>
+    apiFetch<void>(`/auth/sessions/${sessionId}`, { method: 'DELETE' }),
   me: () => apiFetch<AuthUser>('/auth/me', {}, AUTH_TIMEOUT_MS),
   updateProfile: (body: {
     display_name?: string | null
@@ -168,6 +211,8 @@ export const adminApi = {
     }),
   listUsers: () => apiFetch<AuthUser[]>('/admin/users'),
   getUser: (userId: number) => apiFetch<AdminUserDetail>(`/admin/users/${userId}`),
+  revokeUserSession: (userId: number, sessionId: number) =>
+    apiFetch<void>(`/admin/users/${userId}/sessions/${sessionId}`, { method: 'DELETE' }),
   createUser: (body: {
     email: string
     password: string

@@ -27,7 +27,7 @@ export function ProtectedRoute() {
             type="button"
             className={btnBase}
             onClick={() => {
-              logout()
+              void logout()
             }}
           >
             Sign in again

@@ -15,6 +15,7 @@ import { adminApi } from '../api/endpoints'
 import type { AuthUser, PlanInfo } from '../api/types'
 import { AdminDownloadCsvButton } from '../components/admin/AdminDownloadCsvButton'
 import { AdminPagination } from '../components/admin/AdminPagination'
+import { PasswordStrengthMeter } from '../components/PasswordStrengthMeter'
 import { StatusMessage } from '../components/StatusMessage'
 import { useAuth } from '../context/AuthContext'
 import { useClientPagination } from '../hooks/useClientPagination'
@@ -28,6 +29,7 @@ import {
   fieldInput,
   fieldLabel,
 } from '../lib/classes'
+import { passwordMeetsPolicy, passwordPolicyError } from '../lib/passwordStrength'
 
 export function AdminUsersPage() {
   const { user: currentUser } = useAuth()
@@ -141,6 +143,13 @@ export function AdminUsersPage() {
     event.preventDefault()
     setError(null)
     setMessage(null)
+    if (editingUserId == null || password) {
+      const policyError = passwordPolicyError(password, { email })
+      if (policyError || !passwordMeetsPolicy(password, { email })) {
+        setError(policyError ?? 'Password does not meet requirements')
+        return
+      }
+    }
     const resolvedPlanId = planId === '' ? null : Number(planId)
     try {
       if (editingUserId == null) {
@@ -479,11 +488,12 @@ export function AdminUsersPage() {
                   <input
                     className={fieldInput}
                     type="password"
-                    minLength={6}
+                    minLength={12}
                     required={editingUserId == null}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                   />
+                  {password ? <PasswordStrengthMeter password={password} email={email} /> : null}
                 </label>
                 <label className={fieldCheckbox}>
                   <input

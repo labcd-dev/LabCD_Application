@@ -152,6 +152,8 @@ Fill at least:
 - `POSTGRES_PASSWORD` — `openssl rand -hex 24`
 - At least one LLM API key you use
 - Keep `CORS_ORIGINS=https://labcd.ai,https://www.labcd.ai`
+- SMTP settings for auth emails (see [§4 Email (SMTP)](#4-email-smtp-for-production))
+- `APP_PUBLIC_URL=https://labcd.ai` (used in verify / reset links)
 
 Then:
 
@@ -182,7 +184,88 @@ In the browser:
 
 ---
 
-## 4. GitHub Actions CI/CD
+## 4. Email (SMTP) for production
+
+LabCD does **not** run its own SMTP server. The API is an SMTP **client**: it connects to an external mail provider and sends verification and password-reset emails.
+
+If `SMTP_HOST` is empty, emails are only logged to the API console (dev fallback). That is not suitable for production.
+
+### Recommended approach
+
+Use a transactional email provider. Do **not** install Postfix/Sendmail on the app server for outbound auth mail — deliverability and spam reputation are hard to manage yourself.
+
+| Provider | Typical host | Port |
+|----------|--------------|------|
+| Resend | `smtp.resend.com` | 587 |
+| SendGrid | `smtp.sendgrid.net` | 587 |
+| Amazon SES | `email-smtp.<region>.amazonaws.com` | 587 |
+| Mailgun | `smtp.mailgun.org` | 587 |
+| Brevo | `smtp-relay.brevo.com` | 587 |
+| Gmail (Workspace / app password) | `smtp.gmail.com` | 587 |
+
+### Configure on the server
+
+In `/opt/labcd/.env`:
+
+```env
+SMTP_HOST=smtp.sendgrid.net
+SMTP_PORT=587
+SMTP_USER=apikey
+SMTP_PASSWORD=SG.xxxxxxxx
+SMTP_TLS=true
+EMAIL_FROM=noreply@yourdomain.com
+APP_PUBLIC_URL=https://labcd.ai
+```
+
+Notes:
+
+- **`SMTP_TLS=true`** — the API uses STARTTLS on port 587.
+- **`EMAIL_FROM`** — must be a domain/address the provider allows you to send from. Verify DNS (SPF, DKIM, DMARC) for that domain.
+- **`APP_PUBLIC_URL`** — used in email verify / password-reset links; must be the real public URL, not `localhost`.
+- After changing env, recreate the API:
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env up -d --force-recreate api
+```
+
+### Example: SendGrid
+
+1. Create a SendGrid account and verify your domain.
+2. Create an API key with Mail Send permission.
+3. Set:
+
+```env
+SMTP_HOST=smtp.sendgrid.net
+SMTP_PORT=587
+SMTP_USER=apikey
+SMTP_PASSWORD=<your-sendgrid-api-key>
+SMTP_TLS=true
+EMAIL_FROM=noreply@yourdomain.com
+```
+
+### Example: Amazon SES
+
+1. Verify the domain in SES; move out of sandbox if you need to mail arbitrary users.
+2. Create SMTP credentials in SES.
+3. Set host to your region endpoint (e.g. `email-smtp.eu-west-1.amazonaws.com`) plus the SES SMTP user/password.
+
+### Optional local SMTP relay
+
+You can run Postfix, Mailu, or similar as a relay to a provider, then point `SMTP_HOST` at that relay (`localhost` or another container). That is optional infrastructure; the app only needs a reachable SMTP host with auth.
+
+### Sanity check
+
+1. Register a user or trigger password reset.
+2. Confirm the message arrives (and check spam).
+3. If nothing is sent, check API logs — empty `SMTP_HOST` means console-only logging:
+
+```bash
+docker compose -f docker-compose.prod.yml logs -f api
+```
+
+---
+
+## 5. GitHub Actions CI/CD
 
 Repo → **Settings → Secrets and variables → Actions** → add:
 
@@ -203,7 +286,7 @@ If your default branch is `master`, change the branch in:
 
 ---
 
-## 5. Day-2 operations
+## 6. Day-2 operations
 
 ```bash
 cd /opt/labcd
@@ -235,7 +318,7 @@ Also back up `uploads/` and `results/`.
 
 ---
 
-## 6. Troubleshooting
+## 7. Troubleshooting
 
 | Symptom | Fix |
 |---------|-----|
@@ -248,6 +331,7 @@ Also back up `uploads/` and `results/`.
 | SSE job dies early | Frontend nginx already uses long `proxy_read_timeout`; raise timeout on any extra proxy |
 | Actions SSH fails | Test key locally; confirm `deploy` is in `docker` group and owns `/opt/labcd` |
 | Admin login fails | Recheck `.env` admin vars; recreate `api` so env reloads. Note: changing `ADMIN_PASSWORD` does not update an existing admin hash — reset via DB or admin UI. |
+| Auth emails never arrive | Set `SMTP_HOST` / credentials in `.env`; recreate `api`. Empty `SMTP_HOST` logs email to the console only. Confirm `EMAIL_FROM` is verified at the provider and `APP_PUBLIC_URL` is the public HTTPS URL. |
 
 ---
 
@@ -255,7 +339,8 @@ Also back up `uploads/` and `results/`.
 
 1. Install Docker + UFW on Ubuntu.  
 2. Clone repo to `/opt/labcd`.  
-3. Copy `deploy/env.production.example` → `.env` and fill secrets.  
+3. Copy `deploy/env.production.example` → `.env` and fill secrets (including SMTP + `APP_PUBLIC_URL`).  
 4. `docker compose -f docker-compose.prod.yml --env-file .env up -d --build`.  
 5. Confirm https://labcd.ai and `/api/v1/health`.  
-6. Add GitHub deploy secrets; push to `master` for auto-deploy.
+6. Trigger a register / password-reset and confirm the email arrives.  
+7. Add GitHub deploy secrets; push to `master` for auto-deploy.

@@ -36,6 +36,7 @@ def user_out(user: User) -> UserOut:
         theme=theme,  # type: ignore[arg-type]
         is_admin=user.is_admin,
         is_active=user.is_active,
+        email_verified=bool(user.email_verified),
         plan_id=user.plan_id,
         plan_name=user.plan.name if user.plan is not None else None,
         actions=user.action_codes(),
@@ -49,6 +50,7 @@ def user_out(user: User) -> UserOut:
 
 
 def update_profile(db: Session, user: User, request: UpdateProfileRequest) -> User:
+    email_changed = False
     if request.display_name is not None:
         user.display_name = request.display_name.strip() or None
 
@@ -63,18 +65,36 @@ def update_profile(db: Session, user: User, request: UpdateProfileRequest) -> Us
             if not verify_password(request.current_password, user.password_hash):
                 raise ValueError("Current password is incorrect")
             if get_user_by_email(db, normalized) is not None:
-                raise ValueError("Email already registered")
+                raise ValueError("Unable to update email")
             user.email = normalized
+            user.email_verified = False
+            email_changed = True
 
     db.add(user)
     db.commit()
     db.refresh(user)
+
+    if email_changed:
+        from backend_api.http.services.email_service import send_verification_email
+        from backend_api.http.services import session_service, token_service
+
+        session_service.revoke_all_user_sessions(db, user.id)
+        raw_token = token_service.create_email_verify_token(db, user)
+        send_verification_email(to=user.email, token=raw_token)
+
     return user
 
 
 def change_password(db: Session, user: User, request: ChangePasswordRequest) -> None:
+    from backend_api.http.services.password_policy import validate_password
+
     if not verify_password(request.current_password, user.password_hash):
         raise ValueError("Current password is incorrect")
+    validate_password(
+        request.new_password,
+        email=user.email,
+        display_name=user.display_name,
+    )
     user.password_hash = hash_password(request.new_password)
     db.add(user)
     db.commit()

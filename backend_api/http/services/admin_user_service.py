@@ -5,7 +5,7 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 from backend_api.db.models import FeedbackSurveyResponse, LoginHistory, User
-from backend_api.http.services import error_tracking_service, project_service
+from backend_api.http.services import error_tracking_service, project_service, session_service
 from backend_api.http.services.auth_service import get_user_by_id, is_last_active_admin
 from backend_api.http.services.profile_service import user_out
 
@@ -82,6 +82,17 @@ def get_user_detail(db: Session, user_id: int) -> dict | None:
                 "created_at": row.created_at,
             }
             for row in login_rows
+        ],
+        "sessions": [
+            {
+                "id": row.id,
+                "ip_address": row.ip_address,
+                "user_agent": row.user_agent,
+                "created_at": row.created_at,
+                "last_seen_at": row.last_seen_at,
+                "is_current": False,
+            }
+            for row in session_service.list_user_sessions(db, user_id)
         ],
     }
 

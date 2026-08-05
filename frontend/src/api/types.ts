@@ -149,6 +149,7 @@ export interface AuthUser {
   theme: ThemeMode
   is_admin: boolean
   is_active: boolean
+  email_verified?: boolean
   plan_id: number | null
   plan_name: string | null
   actions: string[]
@@ -158,6 +159,19 @@ export interface AuthUser {
   feedback_survey_completed_silo?: boolean
   feedback_survey_completed_mulo?: boolean
   tutorial_dont_show_again?: boolean
+}
+
+export interface MessageResponse {
+  message: string
+}
+
+export interface AuthSessionInfo {
+  id: number
+  ip_address: string | null
+  user_agent: string | null
+  created_at: string
+  last_seen_at: string
+  is_current: boolean
 }
 
 export interface UserProfileSurveyDetail {
@@ -199,6 +213,7 @@ export interface AdminUserDetail {
   projects: ProjectSummary[]
   errors: ErrorEvent[]
   login_history: LoginHistoryEntry[]
+  sessions?: AuthSessionInfo[]
 }
 
 export type ExperienceLevel = 'None' | 'Beginner' | 'Intermediate' | 'Advanced'

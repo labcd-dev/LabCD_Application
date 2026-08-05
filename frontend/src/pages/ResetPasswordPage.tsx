@@ -1,47 +1,47 @@
 import { useState, type FormEvent } from 'react'
-import { Link, Navigate } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
+import { authApi } from '../api/endpoints'
 import { PasswordStrengthMeter } from '../components/PasswordStrengthMeter'
 import { StatusMessage } from '../components/StatusMessage'
-import { useAuth } from '../context/AuthContext'
 import { btnPrimary, btnWide, cardPanel, fieldInput, fieldLabel, pageIntro } from '../lib/classes'
 import { passwordMeetsPolicy, passwordPolicyError } from '../lib/passwordStrength'
 
-export function RegisterPage() {
-  const { user, loading, register } = useAuth()
-  const [email, setEmail] = useState('')
+export function ResetPasswordPage() {
+  const [params] = useSearchParams()
+  const token = params.get('token')?.trim() ?? ''
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
-  if (!loading && user) {
-    return <Navigate to="/studio" replace />
-  }
-
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()
     setError(null)
     setSuccess(null)
 
+    if (!token) {
+      setError('Missing reset token')
+      return
+    }
     if (password !== confirmPassword) {
       setError('Passwords do not match')
       return
     }
-    const policyError = passwordPolicyError(password, { email })
-    if (policyError || !passwordMeetsPolicy(password, { email })) {
+    const policyError = passwordPolicyError(password)
+    if (policyError || !passwordMeetsPolicy(password)) {
       setError(policyError ?? 'Password does not meet requirements')
       return
     }
 
     setSubmitting(true)
     try {
-      const result = await register(email.trim(), password)
+      const result = await authApi.resetPassword({ token, new_password: password })
       setSuccess(result.message)
       setPassword('')
       setConfirmPassword('')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Registration failed')
+      setError(err instanceof Error ? err.message : 'Reset failed')
     } finally {
       setSubmitting(false)
     }
@@ -52,11 +52,9 @@ export function RegisterPage() {
       <div className={`${cardPanel} space-y-4`}>
         <header>
           <h2 className="m-0 text-2xl font-semibold tracking-tight text-foreground">
-            Create account
+            Reset password
           </h2>
-          <p className={`${pageIntro} mt-2`}>
-            Register with your email. We will send a verification link before you can sign in.
-          </p>
+          <p className={`${pageIntro} mt-2`}>Choose a new strong password for your account.</p>
         </header>
 
         {error && <StatusMessage type="error" message={error} />}
@@ -65,18 +63,7 @@ export function RegisterPage() {
         {!success && (
           <form onSubmit={(e) => void handleSubmit(e)} className="space-y-1">
             <label className={fieldLabel}>
-              <span>Email</span>
-              <input
-                className={fieldInput}
-                type="email"
-                autoComplete="username"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </label>
-            <label className={fieldLabel}>
-              <span>Password</span>
+              <span>New password</span>
               <input
                 className={fieldInput}
                 type="password"
@@ -86,7 +73,7 @@ export function RegisterPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
-              <PasswordStrengthMeter password={password} email={email} />
+              <PasswordStrengthMeter password={password} />
             </label>
             <label className={fieldLabel}>
               <span>Confirm password</span>
@@ -101,27 +88,15 @@ export function RegisterPage() {
               />
             </label>
             <button type="submit" className={`${btnPrimary} ${btnWide}`} disabled={submitting}>
-              {submitting ? 'Creating account…' : 'Create account'}
+              {submitting ? 'Updating…' : 'Update password'}
             </button>
           </form>
         )}
 
         <p className="m-0 text-center text-sm text-muted-text">
-          {success ? (
-            <>
-              Ready to sign in after verifying?{' '}
-              <Link to="/login" className="font-medium text-primary hover:underline">
-                Sign in
-              </Link>
-            </>
-          ) : (
-            <>
-              Already have an account?{' '}
-              <Link to="/login" className="font-medium text-primary hover:underline">
-                Sign in
-              </Link>
-            </>
-          )}
+          <Link to="/login" className="font-medium text-primary hover:underline">
+            Back to sign in
+          </Link>
         </p>
       </div>
     </section>
