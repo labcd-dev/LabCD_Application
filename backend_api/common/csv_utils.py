@@ -34,3 +34,12 @@ def csv_response(content: str, filename: str) -> StreamingResponse:
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+def xlsx_response(content: bytes, filename: str) -> StreamingResponse:
+    """Return a downloadable Excel workbook (.xlsx)."""
+    return StreamingResponse(
+        iter([content]),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

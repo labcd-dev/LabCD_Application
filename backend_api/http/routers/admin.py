@@ -20,10 +20,10 @@ from backend_api.http.schemas.auth import (
     UserOut,
 )
 from backend_api.http.services import admin_user_service
-from backend_api.common.csv_utils import csv_response
+from backend_api.common.csv_utils import csv_response, xlsx_response
 from backend_api.http.services.admin_csv_service import (
     export_monitoring_csv,
-    export_overview_csv,
+    export_overview_xlsx,
     export_plans_csv,
     export_project_profiling_csv,
     export_projects_csv,
@@ -67,12 +67,12 @@ def export_monitoring_csv_endpoint(_: User = Depends(require_admin)) -> Streamin
     return csv_response(export_monitoring_csv(), "monitoring_history.csv")
 
 
-@router.get("/overview/export.csv")
-def export_overview_csv_endpoint(
+@router.get("/overview/export.xlsx")
+def export_overview_xlsx_endpoint(
     _: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> StreamingResponse:
-    return csv_response(export_overview_csv(db), "admin_all_data.csv")
+    return xlsx_response(export_overview_xlsx(db), "admin_all_data.xlsx")
 
 
 @router.get("/errors/settings", response_model=ErrorTrackingSettings)

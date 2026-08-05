@@ -61,6 +61,7 @@ numpy==2.4.4
 numpy-typing-compat==20251206.2.4
 oct2py==6.0.3
 openai==2.36.0
+openpyxl==3.1.5
 optype==0.17.1
 orjson==3.11.8
 ormsgpack==1.12.2

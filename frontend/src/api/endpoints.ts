@@ -262,7 +262,7 @@ export const adminApi = {
       pipeline_type: params?.pipeline_type,
     }),
   downloadMonitoringCsv: () => downloadAdminCsv('/admin/monitoring/export.csv'),
-  downloadOverviewCsv: () => downloadAdminCsv('/admin/overview/export.csv'),
+  downloadOverviewCsv: () => downloadAdminCsv('/admin/overview/export.xlsx'),
   downloadProfileSurveyCsv: () => downloadAdminCsv('/admin/survey/responses/profile/export.csv'),
   downloadFeedbackSurveyCsv: () => downloadAdminCsv('/admin/survey/responses/feedback/export.csv'),
   getSurveySettings: () => apiFetch<SurveySettings>('/admin/survey/settings'),

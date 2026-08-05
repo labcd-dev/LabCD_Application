@@ -43,7 +43,7 @@ export async function downloadAdminModuleCsv(
     case 'monitoring':
       return downloadCsv(() => adminApi.downloadMonitoringCsv(), 'monitoring_history.csv')
     case 'overview':
-      return downloadCsv(() => adminApi.downloadOverviewCsv(), 'admin_all_data.csv')
+      return downloadCsv(() => adminApi.downloadOverviewCsv(), 'admin_all_data.xlsx')
     case 'profile-survey':
       return downloadCsv(
         () => adminApi.downloadProfileSurveyCsv(),

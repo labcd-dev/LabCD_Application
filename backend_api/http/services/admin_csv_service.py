@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import csv
+import io
 import json
 from collections import defaultdict
 from datetime import datetime
@@ -887,7 +889,7 @@ def _user_data_block(
 
 
 def export_overview_csv(db: Session) -> str:
-    """Export studio data grouped by user.
+    """Export studio data grouped by user (main workbook sheet content).
 
     Layout:
     - global sections: summary, plans, monitoring, unassigned_errors
@@ -929,6 +931,46 @@ def export_overview_csv(db: Session) -> str:
         )
 
     return "\n".join(sections)
+
+
+def _write_csv_text_to_sheet(ws: Any, csv_content: str) -> None:
+    """Write a CSV string into an Excel worksheet (one CSV row per sheet row)."""
+    text = csv_content.strip()
+    if not text:
+        return
+    for row in csv.reader(io.StringIO(text)):
+        ws.append(row)
+
+
+def export_overview_xlsx(db: Session) -> bytes:
+    """Multi-sheet Excel workbook for \"Download all Data\".
+
+    - Sheet ``all_data``: original per-user overview layout (unchanged).
+    - Extra sheets: users, plans, projects, surveys, monitoring — selectable
+      tabs like a normal Excel workbook.
+    """
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    main = wb.active
+    main.title = "all_data"
+    _write_csv_text_to_sheet(main, export_overview_csv(db))
+
+    extra_sheets = [
+        ("users", export_users_csv(db)),
+        ("plans", export_plans_csv(db)),
+        ("projects", export_projects_csv(db)),
+        ("profile_survey", export_profile_survey_csv(db)),
+        ("feedback_survey", export_feedback_survey_csv(db)),
+        ("monitoring", export_monitoring_csv()),
+    ]
+    for name, content in extra_sheets:
+        ws = wb.create_sheet(name)
+        _write_csv_text_to_sheet(ws, content)
+
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    return buffer.getvalue()
 
 
 def export_profile_survey_csv(db: Session) -> str:

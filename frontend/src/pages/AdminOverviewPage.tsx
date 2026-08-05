@@ -102,13 +102,13 @@ export function AdminOverviewPage() {
           </p>
         </div>
         <AdminDownloadCsvButton
-          label="Download all Data in CSV"
+          label="Download all Data"
           onClick={async () => {
             setError(null)
             try {
-              await downloadCsv(() => adminApi.downloadOverviewCsv(), 'admin_all_data.csv')
+              await downloadCsv(() => adminApi.downloadOverviewCsv(), 'admin_all_data.xlsx')
             } catch (err) {
-              setError(err instanceof Error ? err.message : 'Failed to download CSV')
+              setError(err instanceof Error ? err.message : 'Failed to download data')
             }
           }}
           disabled={loading}
