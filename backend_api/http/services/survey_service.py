@@ -108,23 +108,10 @@ def submit_profile(db: Session, user: User, request: ProfileSurveyRequest) -> Us
 
 
 def submit_feedback(db: Session, user: User, request: FeedbackSurveyRequest) -> FeedbackSurveyResponse:
-    pipeline_type = request.pipeline_type
-    existing = (
-        db.query(FeedbackSurveyResponse)
-        .filter(
-            FeedbackSurveyResponse.user_id == user.id,
-            FeedbackSurveyResponse.pipeline_type == pipeline_type,
-        )
-        .first()
-    )
-    if existing is not None:
-        label = "Single Loop" if pipeline_type == "siloDesign" else "Multi Loop"
-        raise ValueError(f"{label} feedback survey already submitted")
-
     now = datetime.now(timezone.utc)
     row = FeedbackSurveyResponse(
         user_id=user.id,
-        pipeline_type=pipeline_type,
+        pipeline_type=request.pipeline_type,
         satisfaction=request.satisfaction,
         ease_of_use=request.ease_of_use,
         product_value=request.product_value,

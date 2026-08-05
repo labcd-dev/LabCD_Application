@@ -249,16 +249,9 @@ class Project(Base):
 
 
 class FeedbackSurveyResponse(Base):
-    """Post-use feedback survey answers — one per user per pipeline (SILO / MULO)."""
+    """Post-use feedback survey answers — any number per user per pipeline (SILO / MULO)."""
 
     __tablename__ = "feedback_survey_responses"
-    __table_args__ = (
-        UniqueConstraint(
-            "user_id",
-            "pipeline_type",
-            name="uq_feedback_survey_user_pipeline",
-        ),
-    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(

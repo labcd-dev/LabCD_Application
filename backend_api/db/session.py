@@ -196,7 +196,7 @@ def _migrate_project_llm_model() -> None:
 
 
 def _migrate_feedback_survey_pipeline() -> None:
-    """Allow one feedback survey per pipeline (SILO and MULO) instead of one per user."""
+    """Ensure pipeline_type exists and drop per-user/pipeline uniqueness (unlimited submits)."""
     from sqlalchemy import inspect
 
     inspector = inspect(engine)
@@ -222,13 +222,6 @@ def _migrate_feedback_survey_pipeline() -> None:
             text(
                 "ALTER TABLE feedback_survey_responses "
                 "DROP CONSTRAINT IF EXISTS uq_feedback_survey_user_pipeline"
-            )
-        )
-        conn.execute(
-            text(
-                "ALTER TABLE feedback_survey_responses "
-                "ADD CONSTRAINT uq_feedback_survey_user_pipeline "
-                "UNIQUE (user_id, pipeline_type)"
             )
         )
 

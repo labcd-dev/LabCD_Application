@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext'
 
 /**
  * After a successful SILO or MULO design run, prompt for that pipeline's
- * feedback form if the survey module is enabled and it has not been submitted.
+ * feedback form if the survey module is enabled.
  *
  * Own this hook above the live run panels: those unmount when the project
  * becomes completed, which would otherwise discard the modal before it opens.
@@ -20,18 +20,11 @@ export function useFeedbackSurveyPrompt() {
   const promptAfterDesignSuccess = useCallback(
     async (pipeline: FeedbackPipelineType) => {
       if (!user) return
-      if (pipeline === 'siloDesign' && user.feedback_survey_completed_silo) return
-      if (pipeline === 'muloDesign' && user.feedback_survey_completed_mulo) return
       if (open || inFlightRef.current) return
       inFlightRef.current = true
       try {
         const status = await surveyApi.status()
         if (!status.enabled) return
-        const alreadyDone =
-          pipeline === 'siloDesign'
-            ? status.feedback_completed_silo
-            : status.feedback_completed_mulo
-        if (alreadyDone) return
         setPipelineType(pipeline)
         setOpen(true)
       } catch {
