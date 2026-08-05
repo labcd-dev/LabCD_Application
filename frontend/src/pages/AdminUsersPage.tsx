@@ -6,7 +6,9 @@ import {
   Plus,
   Search,
   Shield,
+  Trash2,
   UserPlus,
+  UserX,
   X,
 } from 'lucide-react'
 import { adminApi } from '../api/endpoints'
@@ -41,6 +43,7 @@ export function AdminUsersPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isAdmin, setIsAdmin] = useState(false)
+  const [isActive, setIsActive] = useState(true)
   const [planId, setPlanId] = useState<number | ''>('')
   const [editingUserId, setEditingUserId] = useState<number | null>(null)
 
@@ -48,6 +51,15 @@ export function AdminUsersPage() {
     () => plans.filter((plan) => plan.is_active),
     [plans],
   )
+
+  const refreshUsers = async () => {
+    const [userList, planList] = await Promise.all([
+      adminApi.listUsers(),
+      adminApi.listPlans(),
+    ])
+    setUsers(userList)
+    setPlans(planList)
+  }
 
   useEffect(() => {
     if (!currentUser?.is_admin) return
@@ -89,11 +101,14 @@ export function AdminUsersPage() {
     return <Navigate to="/studio" replace />
   }
 
+  const isSelf = (user: AuthUser) => user.id === currentUser.id
+
   const openCreate = () => {
     setEditingUserId(null)
     setEmail('')
     setPassword('')
     setIsAdmin(false)
+    setIsActive(true)
     setPlanId(defaultPlanId ?? activePlans[0]?.id ?? '')
     setMessage(null)
     setError(null)
@@ -105,6 +120,7 @@ export function AdminUsersPage() {
     setEmail(user.email)
     setPassword('')
     setIsAdmin(user.is_admin)
+    setIsActive(user.is_active)
     setPlanId(user.plan_id ?? '')
     setMessage(null)
     setError(null)
@@ -117,6 +133,7 @@ export function AdminUsersPage() {
     setEmail('')
     setPassword('')
     setIsAdmin(false)
+    setIsActive(true)
     setPlanId('')
   }
 
@@ -137,20 +154,49 @@ export function AdminUsersPage() {
       } else {
         await adminApi.updateUser(editingUserId, {
           is_admin: isAdmin,
+          is_active: isActive,
           plan_id: resolvedPlanId,
           ...(password ? { password } : {}),
         })
         setMessage(`Updated user ${email}`)
       }
       closePanel()
-      const [userList, planList] = await Promise.all([
-        adminApi.listUsers(),
-        adminApi.listPlans(),
-      ])
-      setUsers(userList)
-      setPlans(planList)
+      await refreshUsers()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Save failed')
+    }
+  }
+
+  const handleToggleActive = async (user: AuthUser) => {
+    if (isSelf(user)) return
+    setError(null)
+    setMessage(null)
+    try {
+      await adminApi.updateUser(user.id, { is_active: !user.is_active })
+      setMessage(user.is_active ? `Suspended ${user.email}` : `Reactivated ${user.email}`)
+      await refreshUsers()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Update failed')
+    }
+  }
+
+  const handleDelete = async (user: AuthUser) => {
+    if (isSelf(user)) return
+    if (
+      !window.confirm(
+        `Delete user "${user.email}"? This permanently removes the account and related projects. This cannot be undone.`,
+      )
+    ) {
+      return
+    }
+    setError(null)
+    setMessage(null)
+    try {
+      await adminApi.deleteUser(user.id)
+      setMessage(`Deleted ${user.email}`)
+      await refreshUsers()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Delete failed')
     }
   }
 
@@ -324,7 +370,7 @@ export function AdminUsersPage() {
                         })}
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <div className="flex justify-end gap-2">
+                        <div className="flex flex-wrap justify-end gap-2">
                           <Link
                             to={`/admin/users/${user.id}`}
                             className={`${btnBase} ${btnCompact}`}
@@ -339,6 +385,26 @@ export function AdminUsersPage() {
                           >
                             <Pencil className="size-3.5" aria-hidden />
                             Edit
+                          </button>
+                          <button
+                            type="button"
+                            className={`${btnBase} ${btnCompact}`}
+                            disabled={isSelf(user)}
+                            title={isSelf(user) ? 'You cannot suspend your own account' : undefined}
+                            onClick={() => void handleToggleActive(user)}
+                          >
+                            <UserX className="size-3.5" aria-hidden />
+                            {user.is_active ? 'Suspend' : 'Reactivate'}
+                          </button>
+                          <button
+                            type="button"
+                            className={`${btnBase} ${btnCompact}`}
+                            disabled={isSelf(user)}
+                            title={isSelf(user) ? 'You cannot delete your own account' : undefined}
+                            onClick={() => void handleDelete(user)}
+                          >
+                            <Trash2 className="size-3.5" aria-hidden />
+                            Delete
                           </button>
                         </div>
                       </td>
@@ -427,6 +493,17 @@ export function AdminUsersPage() {
                   />
                   <span>Admin privileges</span>
                 </label>
+                {editingUserId != null && (
+                  <label className={fieldCheckbox}>
+                    <input
+                      type="checkbox"
+                      checked={isActive}
+                      disabled={editingUserId === currentUser.id}
+                      onChange={(e) => setIsActive(e.target.checked)}
+                    />
+                    <span>Account active</span>
+                  </label>
+                )}
 
                 <label className={fieldLabel}>
                   <span>Plan</span>

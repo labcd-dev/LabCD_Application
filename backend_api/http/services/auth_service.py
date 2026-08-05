@@ -6,10 +6,11 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 import bcrypt
+from fastapi import Request
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 
-from backend_api.db.models import Action, Plan, User
+from backend_api.db.models import Action, LoginHistory, Plan, User
 from backend_api.http.config import (
     ADMIN_EMAIL,
     ADMIN_PASSWORD,
@@ -18,6 +19,8 @@ from backend_api.http.config import (
     JWT_EXPIRE_MINUTES,
     JWT_SECRET,
 )
+
+FailureReason = str  # "invalid_credentials" | "inactive" | "unknown_user"
 
 # Pipeline modes + module actions available in the system.
 DEFAULT_ACTIONS: list[tuple[str, str]] = [
@@ -170,12 +173,78 @@ def create_user(
 
 
 def authenticate_user(db: Session, email: str, password: str) -> User | None:
-    user = get_user_by_email(db, email)
-    if user is None or not user.is_active:
-        return None
-    if not verify_password(password, user.password_hash):
+    user, reason = authenticate_user_with_reason(db, email, password)
+    if reason is not None:
         return None
     return user
+
+
+def authenticate_user_with_reason(
+    db: Session,
+    email: str,
+    password: str,
+) -> tuple[User | None, FailureReason | None]:
+    """Return (user, None) on success.
+
+    On failure returns (known_user_or_None, failure_reason) so callers can
+    still attribute the attempt to a known account.
+    """
+    user = get_user_by_email(db, email)
+    if user is None:
+        return None, "unknown_user"
+    if not user.is_active:
+        return user, "inactive"
+    if not verify_password(password, user.password_hash):
+        return user, "invalid_credentials"
+    return user, None
+
+
+def record_login_attempt(
+    db: Session,
+    *,
+    email: str,
+    success: bool,
+    user_id: int | None = None,
+    ip_address: str | None = None,
+    user_agent: str | None = None,
+    failure_reason: FailureReason | None = None,
+) -> LoginHistory:
+    row = LoginHistory(
+        user_id=user_id,
+        email=email.lower().strip(),
+        success=success,
+        ip_address=ip_address,
+        user_agent=(user_agent[:512] if user_agent else None),
+        failure_reason=failure_reason,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def count_active_admins(db: Session) -> int:
+    return (
+        db.query(User)
+        .filter(User.is_admin.is_(True), User.is_active.is_(True))
+        .count()
+    )
+
+
+def is_last_active_admin(db: Session, user: User) -> bool:
+    return bool(user.is_admin and user.is_active and count_active_admins(db) <= 1)
+
+
+def client_ip_from_request(request: Request) -> str | None:
+    """Resolve client IP from X-Forwarded-For or the direct connection."""
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        first = forwarded.split(",")[0].strip()
+        if first:
+            return first[:64]
+    if request.client is not None and request.client.host:
+        return request.client.host[:64]
+    return None
 
 
 def _ensure_default_plans(db: Session) -> Plan:

@@ -191,6 +191,8 @@ export const adminApi = {
       method: 'PATCH',
       body: JSON.stringify(body),
     }),
+  deleteUser: (userId: number) =>
+    apiFetch<void>(`/admin/users/${userId}`, { method: 'DELETE' }),
   listProjects: (params?: { user_id?: number; pipeline_type?: string }) => {
     const query = new URLSearchParams()
     if (params?.user_id != null) query.set('user_id', String(params.user_id))

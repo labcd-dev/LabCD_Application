@@ -1,6 +1,6 @@
 """Authentication routes: login, register, and current user profile."""
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from sqlalchemy.orm import Session
 
 from backend_api.db.models import User
@@ -15,10 +15,12 @@ from backend_api.http.schemas.auth import (
     UserOut,
 )
 from backend_api.http.services.auth_service import (
-    authenticate_user,
+    authenticate_user_with_reason,
+    client_ip_from_request,
     create_access_token,
     create_user,
     get_user_by_email,
+    record_login_attempt,
 )
 from backend_api.http.services.profile_service import (
     change_password,
@@ -32,9 +34,22 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(request: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
-    user = authenticate_user(db, request.email, request.password)
-    if user is None:
+def login(
+    request: LoginRequest,
+    http_request: Request,
+    db: Session = Depends(get_db),
+) -> TokenResponse:
+    user, failure_reason = authenticate_user_with_reason(db, request.email, request.password)
+    record_login_attempt(
+        db,
+        email=request.email,
+        success=failure_reason is None,
+        user_id=user.id if user is not None else None,
+        ip_address=client_ip_from_request(http_request),
+        user_agent=http_request.headers.get("user-agent"),
+        failure_reason=failure_reason,
+    )
+    if failure_reason is not None or user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",

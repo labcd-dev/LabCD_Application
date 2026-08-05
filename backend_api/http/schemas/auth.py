@@ -138,6 +138,18 @@ class UserFeedbackSurveyOut(BaseModel):
     created_at: datetime
 
 
+class LoginHistoryOut(BaseModel):
+    id: int
+    email: str
+    success: bool
+    ip_address: str | None = None
+    user_agent: str | None = None
+    failure_reason: str | None = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class AdminUserDetailOut(BaseModel):
     user: UserOut
     allowed_models: list[str]
@@ -145,6 +157,7 @@ class AdminUserDetailOut(BaseModel):
     feedback_surveys: list[UserFeedbackSurveyOut] = []
     projects: list["ProjectSummary"]
     errors: list["ErrorEventOut"]
+    login_history: list[LoginHistoryOut] = []
 
 
 # Avoid circular imports at runtime; populated after sibling schemas load.

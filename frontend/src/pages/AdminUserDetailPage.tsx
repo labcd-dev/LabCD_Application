@@ -1,10 +1,11 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, Shield } from 'lucide-react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { ArrowLeft, Shield, Trash2, UserX } from 'lucide-react'
 import { adminApi } from '../api/endpoints'
 import type { AdminUserDetail } from '../api/types'
 import { AdminPagination } from '../components/admin/AdminPagination'
 import { StatusMessage } from '../components/StatusMessage'
+import { useAuth } from '../context/AuthContext'
 import { useClientPagination } from '../hooks/useClientPagination'
 import { btnBase, btnCompact, cardPanel } from '../lib/classes'
 import { pipelineLabel, statusBadgeClass } from '../lib/projectLabels'
@@ -14,6 +15,19 @@ function formatWhen(iso: string | null | undefined): string {
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) return iso
   return date.toLocaleString()
+}
+
+function formatFailureReason(reason: string | null): string {
+  if (!reason) return '—'
+  if (reason === 'invalid_credentials') return 'Invalid credentials'
+  if (reason === 'inactive') return 'Account inactive'
+  if (reason === 'unknown_user') return 'Unknown user'
+  return reason
+}
+
+function truncateAgent(value: string | null, max = 64): string {
+  if (!value) return '—'
+  return value.length > max ? `${value.slice(0, max)}…` : value
 }
 
 function DetailRow({ label, value }: { label: string; value: ReactNode }) {
@@ -28,9 +42,26 @@ function DetailRow({ label, value }: { label: string; value: ReactNode }) {
 export function AdminUserDetailPage() {
   const { userId } = useParams()
   const id = Number(userId)
+  const navigate = useNavigate()
+  const { user: currentUser } = useAuth()
   const [detail, setDetail] = useState<AdminUserDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [message, setMessage] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+
+  const loadDetail = async (opts?: { quiet?: boolean }) => {
+    if (!opts?.quiet) setLoading(true)
+    setError(null)
+    try {
+      setDetail(await adminApi.getUser(id))
+    } catch (err) {
+      setDetail(null)
+      setError(err instanceof Error ? err.message : 'Failed to load user')
+    } finally {
+      if (!opts?.quiet) setLoading(false)
+    }
+  }
 
   useEffect(() => {
     if (!Number.isFinite(id)) {
@@ -38,24 +69,55 @@ export function AdminUserDetailPage() {
       setLoading(false)
       return
     }
-    const load = async () => {
-      setLoading(true)
-      setError(null)
-      try {
-        setDetail(await adminApi.getUser(id))
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load user')
-      } finally {
-        setLoading(false)
-      }
-    }
-    void load()
+    void loadDetail()
   }, [id])
 
   const projects = detail?.projects ?? []
   const errors = detail?.errors ?? []
+  const loginHistory = detail?.login_history ?? []
   const projectsPagination = useClientPagination(projects)
   const errorsPagination = useClientPagination(errors)
+  const loginPagination = useClientPagination(loginHistory)
+
+  const isSelf = detail != null && currentUser?.id === detail.user.id
+
+  const handleToggleActive = async () => {
+    if (!detail || isSelf) return
+    setBusy(true)
+    setError(null)
+    setMessage(null)
+    try {
+      const nextActive = !detail.user.is_active
+      await adminApi.updateUser(detail.user.id, { is_active: nextActive })
+      setMessage(nextActive ? 'Account reactivated' : 'Account suspended')
+      await loadDetail({ quiet: true })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Update failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!detail || isSelf) return
+    if (
+      !window.confirm(
+        `Delete user "${detail.user.email}"? This permanently removes the account and related projects. This cannot be undone.`,
+      )
+    ) {
+      return
+    }
+    setBusy(true)
+    setError(null)
+    setMessage(null)
+    try {
+      await adminApi.deleteUser(detail.user.id)
+      navigate('/admin/users', { replace: true })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Delete failed')
+      setBusy(false)
+    }
+  }
 
   if (loading) {
     return <p className="text-muted-text">Loading user…</p>
@@ -82,50 +144,75 @@ export function AdminUserDetailPage() {
         All users
       </Link>
 
-      <header className="flex flex-wrap items-start gap-4">
-        {user.avatar_url ? (
-          <img
-            src={user.avatar_url}
-            alt=""
-            className="size-16 rounded-full border border-border object-cover"
-          />
-        ) : (
-          <span className="flex size-16 items-center justify-center rounded-full border border-border bg-surface-muted text-lg font-semibold text-primary">
-            {(user.display_name?.trim() || user.email).slice(0, 2).toUpperCase()}
-          </span>
-        )}
-        <div className="min-w-0 space-y-2">
-          <h1 className="m-0 text-3xl font-semibold tracking-tight text-foreground">
-            {user.display_name?.trim() || user.email}
-          </h1>
-          {user.display_name?.trim() && (
-            <p className="m-0 text-muted-text">{user.email}</p>
-          )}
-          <div className="flex flex-wrap items-center gap-2">
-            {user.is_admin ? (
-              <span className="inline-flex items-center gap-1 rounded-md bg-[color-mix(in_srgb,var(--app-primary)_14%,transparent)] px-2 py-0.5 text-xs font-semibold text-primary">
-                <Shield className="size-3" aria-hidden />
-                Admin
-              </span>
-            ) : (
-              <span className="rounded-md bg-surface-elevated px-2 py-0.5 text-xs font-medium text-muted-text ring-1 ring-border">
-                User
-              </span>
-            )}
-            <span
-              className={`rounded-md px-2 py-0.5 text-xs font-medium ${
-                user.is_active
-                  ? 'bg-[var(--app-status-success-bg)] text-[var(--app-status-success-text)]'
-                  : 'bg-[var(--app-status-warning-bg)] text-[var(--app-status-warning-text)]'
-              }`}
-            >
-              {user.is_active ? 'Active' : 'Inactive'}
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex flex-wrap items-start gap-4">
+          {user.avatar_url ? (
+            <img
+              src={user.avatar_url}
+              alt=""
+              className="size-16 rounded-full border border-border object-cover"
+            />
+          ) : (
+            <span className="flex size-16 items-center justify-center rounded-full border border-border bg-surface-muted text-lg font-semibold text-primary">
+              {(user.display_name?.trim() || user.email).slice(0, 2).toUpperCase()}
             </span>
+          )}
+          <div className="min-w-0 space-y-2">
+            <h1 className="m-0 text-3xl font-semibold tracking-tight text-foreground">
+              {user.display_name?.trim() || user.email}
+            </h1>
+            {user.display_name?.trim() && (
+              <p className="m-0 text-muted-text">{user.email}</p>
+            )}
+            <div className="flex flex-wrap items-center gap-2">
+              {user.is_admin ? (
+                <span className="inline-flex items-center gap-1 rounded-md bg-[color-mix(in_srgb,var(--app-primary)_14%,transparent)] px-2 py-0.5 text-xs font-semibold text-primary">
+                  <Shield className="size-3" aria-hidden />
+                  Admin
+                </span>
+              ) : (
+                <span className="rounded-md bg-surface-elevated px-2 py-0.5 text-xs font-medium text-muted-text ring-1 ring-border">
+                  User
+                </span>
+              )}
+              <span
+                className={`rounded-md px-2 py-0.5 text-xs font-medium ${
+                  user.is_active
+                    ? 'bg-[var(--app-status-success-bg)] text-[var(--app-status-success-text)]'
+                    : 'bg-[var(--app-status-warning-bg)] text-[var(--app-status-warning-text)]'
+                }`}
+              >
+                {user.is_active ? 'Active' : 'Inactive'}
+              </span>
+            </div>
           </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            className={`${btnBase} ${btnCompact}`}
+            disabled={busy || isSelf}
+            title={isSelf ? 'You cannot suspend your own account' : undefined}
+            onClick={() => void handleToggleActive()}
+          >
+            <UserX className="size-3.5" aria-hidden />
+            {user.is_active ? 'Suspend' : 'Reactivate'}
+          </button>
+          <button
+            type="button"
+            className={`${btnBase} ${btnCompact}`}
+            disabled={busy || isSelf}
+            title={isSelf ? 'You cannot delete your own account' : undefined}
+            onClick={() => void handleDelete()}
+          >
+            <Trash2 className="size-3.5" aria-hidden />
+            Delete
+          </button>
         </div>
       </header>
 
       {error && <StatusMessage type="error" message={error} />}
+      {message && <StatusMessage type="success" message={message} />}
 
       <div className={cardPanel}>
         <h2 className="m-0 mb-4 text-lg font-semibold text-foreground">Account</h2>
@@ -189,6 +276,71 @@ export function AdminUserDetailPage() {
             value={user.tutorial_dont_show_again ? 'Hidden permanently' : 'May show on login'}
           />
         </dl>
+      </div>
+
+      <div className={cardPanel}>
+        <h2 className="m-0 mb-4 text-lg font-semibold text-foreground">
+          Login history ({loginHistory.length})
+        </h2>
+        {loginHistory.length === 0 ? (
+          <p className="m-0 text-sm text-muted-text">No login attempts recorded for this user.</p>
+        ) : (
+          <div className="space-y-3">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[720px] border-collapse text-left text-sm">
+                <thead>
+                  <tr className="border-b border-border text-muted-text">
+                    <th className="px-2 py-2 font-medium">When</th>
+                    <th className="px-2 py-2 font-medium">Result</th>
+                    <th className="px-2 py-2 font-medium">IP</th>
+                    <th className="px-2 py-2 font-medium">User agent</th>
+                    <th className="px-2 py-2 font-medium">Failure reason</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loginPagination.pageItems.map((entry) => (
+                    <tr key={entry.id} className="border-b border-border-subtle align-top">
+                      <td className="px-2 py-2 whitespace-nowrap text-muted-text">
+                        {formatWhen(entry.created_at)}
+                      </td>
+                      <td className="px-2 py-2">
+                        <span
+                          className={`rounded-md px-2 py-0.5 text-xs font-medium ${
+                            entry.success
+                              ? 'bg-[var(--app-status-success-bg)] text-[var(--app-status-success-text)]'
+                              : 'bg-[var(--app-status-warning-bg)] text-[var(--app-status-warning-text)]'
+                          }`}
+                        >
+                          {entry.success ? 'Success' : 'Failed'}
+                        </span>
+                      </td>
+                      <td className="px-2 py-2 font-mono text-[0.75rem] text-foreground-secondary">
+                        {entry.ip_address || '—'}
+                      </td>
+                      <td
+                        className="max-w-[16rem] px-2 py-2 text-muted-text"
+                        title={entry.user_agent ?? undefined}
+                      >
+                        {truncateAgent(entry.user_agent)}
+                      </td>
+                      <td className="px-2 py-2 text-muted-text">
+                        {formatFailureReason(entry.failure_reason)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <AdminPagination
+              page={loginPagination.page}
+              totalPages={loginPagination.totalPages}
+              total={loginPagination.total}
+              from={loginPagination.from}
+              to={loginPagination.to}
+              onPageChange={loginPagination.setPage}
+            />
+          </div>
+        )}
       </div>
 
       <div className={cardPanel}>

@@ -319,12 +319,26 @@ def create_user_endpoint(
 def update_user(
     user_id: int,
     request: UpdateUserRequest,
-    _: User = Depends(require_admin),
+    admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> UserOut:
     user = get_user_by_id(db, user_id)
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
+
+    deactivating = request.is_active is False and user.is_active
+    demoting = request.is_admin is False and user.is_admin
+    try:
+        admin_user_service.guard_admin_account_change(
+            db,
+            actor=admin,
+            target=user,
+            deactivating=deactivating,
+            demoting=demoting,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     if request.is_active is not None:
         user.is_active = request.is_active
     if request.is_admin is not None:
@@ -345,6 +359,27 @@ def update_user(
     db.commit()
     db.refresh(user)
     return user_out(user)
+
+
+@router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_user(
+    user_id: int,
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> None:
+    user = get_user_by_id(db, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    try:
+        admin_user_service.guard_admin_account_change(
+            db,
+            actor=admin,
+            target=user,
+            deleting=True,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    admin_user_service.delete_user(db, user)
 
 
 @router.get("/projects", response_model=list[ProjectSummary])

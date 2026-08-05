@@ -181,6 +181,16 @@ export interface UserFeedbackSurveyDetail {
   created_at: string
 }
 
+export interface LoginHistoryEntry {
+  id: number
+  email: string
+  success: boolean
+  ip_address: string | null
+  user_agent: string | null
+  failure_reason: string | null
+  created_at: string
+}
+
 export interface AdminUserDetail {
   user: AuthUser
   allowed_models: string[]
@@ -188,6 +198,7 @@ export interface AdminUserDetail {
   feedback_surveys: UserFeedbackSurveyDetail[]
   projects: ProjectSummary[]
   errors: ErrorEvent[]
+  login_history: LoginHistoryEntry[]
 }
 
 export type ExperienceLevel = 'None' | 'Beginner' | 'Intermediate' | 'Advanced'
