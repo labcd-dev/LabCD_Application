@@ -9,7 +9,7 @@ import {
 } from 'react'
 import { authApi } from '../api/endpoints'
 import { ApiError, clearAuthToken, getAuthToken, setAuthToken } from '../api/client'
-import type { AuthUser } from '../api/types'
+import type { AuthUser, MessageResponse } from '../api/types'
 
 interface AuthContextValue {
   user: AuthUser | null
@@ -17,8 +17,8 @@ interface AuthContextValue {
   loading: boolean
   sessionError: boolean
   login: (email: string, password: string) => Promise<void>
-  register: (email: string, password: string) => Promise<void>
-  logout: () => void
+  register: (email: string, password: string) => Promise<MessageResponse>
+  logout: () => Promise<void>
   hasAction: (code: string) => boolean
   canUsePipeline: (pipeline: 'siloDesign' | 'muloDesign') => boolean
   refreshUser: () => Promise<void>
@@ -114,15 +114,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [applyToken],
   )
 
-  const register = useCallback(
-    async (email: string, password: string) => {
-      const result = await authApi.register({ email, password })
-      await applyToken(result.access_token)
-    },
-    [applyToken],
-  )
+  const register = useCallback(async (email: string, password: string) => {
+    return authApi.register({ email, password })
+  }, [])
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    try {
+      if (getAuthToken()) {
+        await authApi.logout()
+      }
+    } catch {
+      // Still clear local session if the server revoke fails.
+    }
     clearAuthToken()
     setToken(null)
     setUser(null)

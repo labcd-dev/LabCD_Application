@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { Camera, Trash2, User } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { authApi } from '../api/endpoints'
+import type { AuthSessionInfo } from '../api/types'
+import { PasswordStrengthMeter } from '../components/PasswordStrengthMeter'
 import { StatusMessage } from '../components/StatusMessage'
 import { useAuth } from '../context/AuthContext'
 import { useTheme, type ThemeMode } from '../context/ThemeContext'
@@ -14,6 +17,7 @@ import {
   pageSection,
   pageTitle,
 } from '../lib/classes'
+import { passwordMeetsPolicy, passwordPolicyError } from '../lib/passwordStrength'
 
 const THEME_OPTIONS: { value: ThemeMode; label: string; description: string }[] = [
   { value: 'light', label: 'Light', description: 'Always use the light theme' },
@@ -31,7 +35,8 @@ function userInitials(user: { display_name: string | null; email: string }): str
 }
 
 export function ProfilePage() {
-  const { user, refreshUser } = useAuth()
+  const { user, refreshUser, logout } = useAuth()
+  const navigate = useNavigate()
   const { theme, setTheme } = useTheme()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -53,12 +58,25 @@ export function ProfilePage() {
   const [savingProfile, setSavingProfile] = useState(false)
   const [savingPassword, setSavingPassword] = useState(false)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
+  const [sessions, setSessions] = useState<AuthSessionInfo[]>([])
+  const [sessionsError, setSessionsError] = useState<string | null>(null)
+  const [sessionsBusy, setSessionsBusy] = useState(false)
+
+  const loadSessions = async () => {
+    setSessionsError(null)
+    try {
+      setSessions(await authApi.listSessions())
+    } catch (err) {
+      setSessionsError(err instanceof Error ? err.message : 'Failed to load devices')
+    }
+  }
 
   useEffect(() => {
     if (!user) return
     setDisplayName(user.display_name ?? '')
     setEmail(user.email)
     setSelectedTheme(user.theme)
+    void loadSessions()
   }, [user])
 
   if (!user) {
@@ -98,6 +116,17 @@ export function ProfilePage() {
       }
 
       await authApi.updateProfile(body)
+      if (emailChanged) {
+        await logout()
+        navigate('/login', {
+          replace: true,
+          state: {
+            notice:
+              'Email updated. Check your inbox to verify the new address, then sign in.',
+          },
+        })
+        return
+      }
       await refreshUser()
       setTheme(selectedTheme)
       setEmailPassword('')
@@ -118,8 +147,12 @@ export function ProfilePage() {
       setPasswordError('New passwords do not match')
       return
     }
-    if (newPassword.length < 6) {
-      setPasswordError('New password must be at least 6 characters')
+    const policyError = passwordPolicyError(newPassword, {
+      email: user.email,
+      displayName: user.display_name,
+    })
+    if (policyError || !passwordMeetsPolicy(newPassword, { email: user.email, displayName: user.display_name })) {
+      setPasswordError(policyError ?? 'Password does not meet requirements')
       return
     }
 
@@ -167,6 +200,20 @@ export function ProfilePage() {
       setAvatarError(err instanceof Error ? err.message : 'Failed to remove avatar')
     } finally {
       setUploadingAvatar(false)
+    }
+  }
+
+  const handleRevokeSession = async (sessionId: number) => {
+    setSessionsBusy(true)
+    setSessionsError(null)
+    try {
+      await authApi.revokeSession(sessionId)
+      await loadSessions()
+      await refreshUser()
+    } catch (err) {
+      setSessionsError(err instanceof Error ? err.message : 'Failed to log out device')
+    } finally {
+      setSessionsBusy(false)
     }
   }
 
@@ -337,9 +384,14 @@ export function ProfilePage() {
               type="password"
               autoComplete="new-password"
               required
-              minLength={6}
+              minLength={12}
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
+            />
+            <PasswordStrengthMeter
+              password={newPassword}
+              email={user.email}
+              displayName={user.display_name}
             />
           </label>
           <label className={fieldLabel}>
@@ -349,7 +401,7 @@ export function ProfilePage() {
               type="password"
               autoComplete="new-password"
               required
-              minLength={6}
+              minLength={12}
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
             />
@@ -358,6 +410,47 @@ export function ProfilePage() {
             {savingPassword ? 'Updating…' : 'Update password'}
           </button>
         </form>
+      </div>
+
+      <div className={`${cardPanel} space-y-4`}>
+        <h2 className="m-0 text-lg font-semibold text-foreground">Logged-in devices</h2>
+        <p className="m-0 text-sm text-muted-text">
+          Active sessions for your account. Logging out a device revokes its access immediately.
+        </p>
+        {sessionsError && <StatusMessage type="error" message={sessionsError} />}
+        {sessions.length === 0 ? (
+          <p className="m-0 text-sm text-muted-text">No active sessions.</p>
+        ) : (
+          <ul className="m-0 list-none space-y-3 p-0">
+            {sessions.map((session) => (
+              <li
+                key={session.id}
+                className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-border px-3 py-3"
+              >
+                <div className="min-w-0 space-y-1 text-sm">
+                  <p className="m-0 font-medium text-foreground">
+                    {session.is_current ? 'This device' : 'Other device'}
+                    {session.ip_address ? ` · ${session.ip_address}` : ''}
+                  </p>
+                  <p className="m-0 break-all text-muted-text">
+                    {session.user_agent || 'Unknown browser'}
+                  </p>
+                  <p className="m-0 text-xs text-muted-text">
+                    Last seen {new Date(session.last_seen_at).toLocaleString()}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className={btnBase}
+                  disabled={sessionsBusy}
+                  onClick={() => void handleRevokeSession(session.id)}
+                >
+                  Log out
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       <div className={`${cardPanel} text-sm text-muted-text`}>

@@ -7,6 +7,8 @@ from typing import Literal
 
 from pydantic import BaseModel, EmailStr, Field
 
+from backend_api.http.services.password_policy import MIN_PASSWORD_LENGTH
+
 ThemeMode = Literal["light", "dark", "system"]
 
 
@@ -17,7 +19,24 @@ class LoginRequest(BaseModel):
 
 class RegisterRequest(BaseModel):
     email: EmailStr
-    password: str = Field(min_length=6)
+    password: str = Field(min_length=MIN_PASSWORD_LENGTH)
+
+
+class MessageResponse(BaseModel):
+    message: str
+
+
+class EmailOnlyRequest(BaseModel):
+    email: EmailStr
+
+
+class VerifyEmailRequest(BaseModel):
+    token: str = Field(min_length=1)
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(min_length=1)
+    new_password: str = Field(min_length=MIN_PASSWORD_LENGTH)
 
 
 class TokenResponse(BaseModel):
@@ -78,6 +97,7 @@ class UserOut(BaseModel):
     theme: ThemeMode = "system"
     is_admin: bool
     is_active: bool
+    email_verified: bool = True
     plan_id: int | None = None
     plan_name: str | None = None
     actions: list[str]
@@ -100,12 +120,12 @@ class UpdateProfileRequest(BaseModel):
 
 class ChangePasswordRequest(BaseModel):
     current_password: str = Field(min_length=1)
-    new_password: str = Field(min_length=6)
+    new_password: str = Field(min_length=MIN_PASSWORD_LENGTH)
 
 
 class CreateUserRequest(BaseModel):
     email: EmailStr
-    password: str = Field(min_length=6)
+    password: str = Field(min_length=MIN_PASSWORD_LENGTH)
     is_admin: bool = False
     plan_id: int | None = None
 
@@ -113,8 +133,17 @@ class CreateUserRequest(BaseModel):
 class UpdateUserRequest(BaseModel):
     is_active: bool | None = None
     is_admin: bool | None = None
-    password: str | None = Field(default=None, min_length=6)
+    password: str | None = Field(default=None, min_length=MIN_PASSWORD_LENGTH)
     plan_id: int | None = None
+
+
+class SessionOut(BaseModel):
+    id: int
+    ip_address: str | None = None
+    user_agent: str | None = None
+    created_at: datetime
+    last_seen_at: datetime
+    is_current: bool = False
 
 
 class UserProfileSurveyOut(BaseModel):
@@ -158,6 +187,7 @@ class AdminUserDetailOut(BaseModel):
     projects: list["ProjectSummary"]
     errors: list["ErrorEventOut"]
     login_history: list[LoginHistoryOut] = []
+    sessions: list[SessionOut] = []
 
 
 # Avoid circular imports at runtime; populated after sibling schemas load.

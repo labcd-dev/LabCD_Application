@@ -62,7 +62,7 @@ export function Layout() {
 
   const handleLogout = () => {
     setMenuOpen(false)
-    logout()
+    void logout()
     navigate('/login', { replace: true })
   }
 

@@ -44,7 +44,7 @@ export function AdminLayout() {
   }
 
   const handleLogout = () => {
-    logout()
+    void logout()
     navigate('/login', { replace: true })
   }
 

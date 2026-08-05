@@ -20,7 +20,7 @@ from backend_api.http.config import (
     JWT_SECRET,
 )
 
-FailureReason = str  # "invalid_credentials" | "inactive" | "unknown_user"
+FailureReason = str  # "invalid_credentials" | "inactive" | "unknown_user" | "unverified"
 
 # Pipeline modes + module actions available in the system.
 DEFAULT_ACTIONS: list[tuple[str, str]] = [
@@ -107,9 +107,9 @@ def verify_password(password: str, password_hash: str) -> bool:
     return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
 
 
-def create_access_token(user_id: int, email: str) -> str:
+def create_access_token(user_id: int, email: str, *, jti: str) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=JWT_EXPIRE_MINUTES)
-    payload = {"sub": str(user_id), "email": email, "exp": expire}
+    payload = {"sub": str(user_id), "email": email, "jti": jti, "exp": expire}
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
 
@@ -152,24 +152,38 @@ def create_user(
     plan_id: int | None = None,
     is_admin: bool = False,
     assign_default_plan: bool = True,
+    email_verified: bool | None = None,
+    skip_password_policy: bool = False,
 ) -> User:
     from backend_api.http.services import plan_service
+    from backend_api.http.services.password_policy import validate_password
+
+    if not skip_password_policy:
+        validate_password(password, email=email)
 
     resolved_plan_id = plan_id
     if resolved_plan_id is None and assign_default_plan and not is_admin:
         resolved_plan_id = plan_service.get_default_plan_id(db)
+
+    verified = email_verified if email_verified is not None else bool(is_admin)
 
     user = User(
         email=email.lower().strip(),
         password_hash=hash_password(password),
         is_admin=is_admin,
         is_active=True,
+        email_verified=verified,
         plan_id=resolved_plan_id,
     )
     db.add(user)
     db.commit()
     db.refresh(user)
     return user
+
+
+def burn_password_hash_cost() -> None:
+    """Run a dummy bcrypt to reduce register timing enumeration."""
+    bcrypt.hashpw(b"enumeration-padding", bcrypt.gensalt())
 
 
 def authenticate_user(db: Session, email: str, password: str) -> User | None:
@@ -196,6 +210,8 @@ def authenticate_user_with_reason(
         return user, "inactive"
     if not verify_password(password, user.password_hash):
         return user, "invalid_credentials"
+    if not user.email_verified:
+        return user, "unverified"
     return user, None
 
 
@@ -308,8 +324,15 @@ def seed_auth_data(db: Session) -> None:
             plan_id=None,
             is_admin=True,
             assign_default_plan=False,
+            email_verified=True,
+            skip_password_policy=True,
         )
-    elif admin.plan_id is None and not admin.is_admin:
-        admin.plan_id = free_plan.id
-        db.add(admin)
-        db.commit()
+    else:
+        if not admin.email_verified:
+            admin.email_verified = True
+            db.add(admin)
+            db.commit()
+        if admin.plan_id is None and not admin.is_admin:
+            admin.plan_id = free_plan.id
+            db.add(admin)
+            db.commit()

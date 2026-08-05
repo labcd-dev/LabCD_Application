@@ -2,28 +2,62 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from fastapi import Depends, HTTPException, Query, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
-from backend_api.db.models import User
+from backend_api.db.models import AuthSession, User
 from backend_api.db.session import get_db
 from backend_api.http.services.auth_service import decode_access_token, get_user_by_id
 from backend_api.http.services.job_store import Job
+from backend_api.http.services import session_service
 
 bearer_scheme = HTTPBearer(auto_error=False)
+_TOUCH_INTERVAL_SECONDS = 60
 
 
-def _load_user_from_token(token: str, db: Session) -> User:
+def _maybe_touch_session(db: Session, session: AuthSession) -> None:
+    now = datetime.now(timezone.utc)
+    last = session.last_seen_at
+    if last.tzinfo is None:
+        last = last.replace(tzinfo=timezone.utc)
+    if (now - last).total_seconds() >= _TOUCH_INTERVAL_SECONDS:
+        session_service.touch_session(db, session)
+
+
+def _load_user_and_session(
+    token: str,
+    db: Session,
+    *,
+    require_verified: bool = True,
+) -> tuple[User, AuthSession]:
     try:
         payload = decode_access_token(token)
         user_id = int(payload["sub"])
+        jti = str(payload.get("jti") or "")
     except (ValueError, KeyError, TypeError) as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
             headers={"WWW-Authenticate": "Bearer"},
         ) from exc
+
+    if not jti:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    session = session_service.get_active_session_by_jti(db, jti)
+    if session is None or session.user_id != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session expired or revoked",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     user = get_user_by_id(db, user_id)
     if user is None or not user.is_active:
@@ -32,7 +66,25 @@ def _load_user_from_token(token: str, db: Session) -> User:
             detail="User not found or inactive",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    return user
+    if require_verified and not user.email_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Please verify your email before continuing.",
+        )
+
+    _maybe_touch_session(db, session)
+    return user, session
+
+
+def _extract_bearer_token(
+    credentials: HTTPAuthorizationCredentials | None,
+    access_token: str | None,
+) -> str | None:
+    if credentials is not None and credentials.scheme.lower() == "bearer":
+        return credentials.credentials
+    if access_token:
+        return access_token
+    return None
 
 
 def get_current_user(
@@ -41,19 +93,46 @@ def get_current_user(
     db: Session = Depends(get_db),
 ) -> User:
     """Authenticate via Bearer header, or access_token query (for EventSource streams)."""
-    token: str | None = None
-    if credentials is not None and credentials.scheme.lower() == "bearer":
-        token = credentials.credentials
-    elif access_token:
-        token = access_token
-
+    token = _extract_bearer_token(credentials, access_token)
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    return _load_user_from_token(token, db)
+    user, _session = _load_user_and_session(token, db)
+    return user
+
+
+def get_current_user_and_session(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    access_token: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+) -> tuple[User, AuthSession]:
+    token = _extract_bearer_token(credentials, access_token)
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return _load_user_and_session(token, db)
+
+
+def get_current_user_and_session_allow_unverified(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    access_token: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+) -> tuple[User, AuthSession]:
+    """Like get_current_user_and_session but allows unverified accounts (logout)."""
+    token = _extract_bearer_token(credentials, access_token)
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return _load_user_and_session(token, db, require_verified=False)
 
 
 def get_optional_user(
@@ -62,15 +141,12 @@ def get_optional_user(
     db: Session = Depends(get_db),
 ) -> User | None:
     """Return the current user when a valid token is present; otherwise None."""
-    token: str | None = None
-    if credentials is not None and credentials.scheme.lower() == "bearer":
-        token = credentials.credentials
-    elif access_token:
-        token = access_token
+    token = _extract_bearer_token(credentials, access_token)
     if not token:
         return None
     try:
-        return _load_user_from_token(token, db)
+        user, _session = _load_user_and_session(token, db)
+        return user
     except HTTPException:
         return None
 

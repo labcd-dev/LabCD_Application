@@ -15,6 +15,7 @@ from backend_api.http.schemas.auth import (
     PlanCreateRequest,
     PlanOut,
     PlanUpdateRequest,
+    SessionOut,
     SetDefaultPlanRequest,
     UpdateUserRequest,
     UserOut,
@@ -48,6 +49,8 @@ from backend_api.http.services.auth_service import (
     get_user_by_id,
     hash_password,
 )
+from backend_api.http.services.password_policy import validate_password
+from backend_api.http.services import session_service
 from backend_api.http.services.profile_service import user_out
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -304,6 +307,10 @@ def create_user_endpoint(
         raise HTTPException(status_code=400, detail="Email already registered")
     if request.plan_id is not None and plan_service.get_plan(db, request.plan_id) is None:
         raise HTTPException(status_code=400, detail="Plan not found")
+    try:
+        validate_password(request.password, email=request.email)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     user = create_user(
         db,
         email=request.email,
@@ -311,6 +318,7 @@ def create_user_endpoint(
         plan_id=request.plan_id,
         is_admin=request.is_admin,
         assign_default_plan=False,
+        email_verified=True,
     )
     return user_out(user)
 
@@ -344,7 +352,16 @@ def update_user(
     if request.is_admin is not None:
         user.is_admin = request.is_admin
     if request.password is not None:
+        try:
+            validate_password(
+                request.password,
+                email=user.email,
+                display_name=user.display_name,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         user.password_hash = hash_password(request.password)
+        session_service.revoke_all_user_sessions(db, user.id)
     if "plan_id" in request.model_fields_set:
         if request.plan_id is None:
             user.plan_id = None
@@ -359,6 +376,43 @@ def update_user(
     db.commit()
     db.refresh(user)
     return user_out(user)
+
+
+@router.get("/users/{user_id}/sessions", response_model=list[SessionOut])
+def list_user_sessions(
+    user_id: int,
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> list[SessionOut]:
+    user = get_user_by_id(db, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    return [
+        SessionOut(
+            id=row.id,
+            ip_address=row.ip_address,
+            user_agent=row.user_agent,
+            created_at=row.created_at,
+            last_seen_at=row.last_seen_at,
+            is_current=False,
+        )
+        for row in session_service.list_user_sessions(db, user_id)
+    ]
+
+
+@router.delete("/users/{user_id}/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
+def revoke_user_session(
+    user_id: int,
+    session_id: int,
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> None:
+    user = get_user_by_id(db, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    row = session_service.revoke_session_by_id(db, session_id=session_id, user_id=user_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Session not found")
 
 
 @router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)

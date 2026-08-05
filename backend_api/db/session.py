@@ -94,6 +94,14 @@ def _migrate_schema() -> None:
             "ALTER TABLE users ADD COLUMN tutorial_dont_show_again "
             "BOOLEAN NOT NULL DEFAULT FALSE"
         )
+    if "email_verified" not in columns:
+        # Existing rows get verified=True; new registrations set False explicitly.
+        statements.append(
+            "ALTER TABLE users ADD COLUMN email_verified "
+            "BOOLEAN NOT NULL DEFAULT TRUE"
+        )
+    if "locked_until" not in columns:
+        statements.append("ALTER TABLE users ADD COLUMN locked_until TIMESTAMP WITH TIME ZONE")
 
     if statements:
         with engine.begin() as conn:

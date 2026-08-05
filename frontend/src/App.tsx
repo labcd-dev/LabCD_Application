@@ -21,6 +21,7 @@ import { AdminUserDetailPage } from './pages/AdminUserDetailPage'
 import { AdminUsersPage } from './pages/AdminUsersPage'
 import { BlogListPage } from './pages/BlogListPage'
 import { BlogPostPage } from './pages/BlogPostPage'
+import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 import { HomePage } from './pages/HomePage'
 import { LandingPage } from './pages/LandingPage'
 import { LoginPage } from './pages/LoginPage'
@@ -28,10 +29,12 @@ import { ProfilePage } from './pages/ProfilePage'
 import { ProjectDetailPage } from './pages/ProjectDetailPage'
 import { ProjectsPage } from './pages/ProjectsPage'
 import { RegisterPage } from './pages/RegisterPage'
+import { ResetPasswordPage } from './pages/ResetPasswordPage'
 import { MuloPage } from './pages/MuloPage'
 import { RecommenderPage } from './pages/RecommenderPage'
 import { SiloPage } from './pages/SiloPage'
 import { TrimmerPage } from './pages/TrimmerPage'
+import { VerifyEmailPage } from './pages/VerifyEmailPage'
 import './index.css'
 
 export default function App() {
@@ -48,6 +51,9 @@ export default function App() {
               <Route element={<Layout />}>
                 <Route path="login" element={<LoginPage />} />
                 <Route path="register" element={<RegisterPage />} />
+                <Route path="verify-email" element={<VerifyEmailPage />} />
+                <Route path="forgot-password" element={<ForgotPasswordPage />} />
+                <Route path="reset-password" element={<ResetPasswordPage />} />
                 <Route element={<ProtectedRoute />}>
                   <Route path="studio" element={<HomePage />} />
                   <Route path="projects" element={<ProjectsPage />} />
