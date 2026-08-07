@@ -394,6 +394,47 @@ class TutorialVideo(Base):
     )
 
 
+class TutorialDocument(Base):
+    """Admin-managed markdown documentation for the tutorials module."""
+
+    __tablename__ = "tutorial_documents"
+    __table_args__ = (UniqueConstraint("slug", name="uq_tutorial_documents_slug"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    title: Mapped[str] = mapped_column(String(300), nullable=False)
+    slug: Mapped[str] = mapped_column(String(320), nullable=False, index=True)
+    body_markdown: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+
+class ControlDesignTemplate(Base):
+    """Admin-uploaded Control Design Template downloadable by logged-in users."""
+
+    __tablename__ = "control_design_templates"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    file_url: Mapped[str] = mapped_column(String(512), nullable=False)
+    original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+
 class NavMenuItem(Base):
     """Header/footer navigation link managed from the site CMS."""
 

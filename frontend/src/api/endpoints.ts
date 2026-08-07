@@ -7,6 +7,7 @@ import type {
   ApiKeysUpdate,
   AuthUser,
   CaseStudiesResponse,
+  ControlDesignTemplate,
   DefaultPlanInfo,
   ErrorEvent,
   ErrorTrackingSettings,
@@ -35,6 +36,8 @@ import type {
   SurveyStatus,
   TokenResponse,
   TrimmerArtifactsResponse,
+  TutorialDocument,
+  TutorialDocumentSummary,
   TutorialVideo,
   UploadResponse,
   MediaUploadResponse,
@@ -422,26 +425,85 @@ export const adminApi = {
       body: JSON.stringify(body),
     }),
   listSurveyResponses: () => apiFetch<SurveyResponses>('/admin/survey/responses'),
-  listTutorialVideos: () => apiFetch<TutorialVideo[]>('/admin/tutorial-videos'),
-  uploadTutorialVideo: (title: string, file: File) => {
+}
+
+export const tutorialsApi = {
+  listVideos: () => apiFetch<TutorialVideo[]>('/tutorials/videos'),
+  listDocuments: () => apiFetch<TutorialDocumentSummary[]>('/tutorials/documents'),
+  getDocument: (slug: string) =>
+    apiFetch<TutorialDocument>(`/tutorials/documents/${encodeURIComponent(slug)}`),
+  listTemplates: () => apiFetch<ControlDesignTemplate[]>('/tutorials/templates'),
+}
+
+export const adminTutorialsApi = {
+  listVideos: () => apiFetch<TutorialVideo[]>('/admin/tutorials/videos'),
+  uploadVideo: (title: string, file: File) => {
     const form = new FormData()
     form.append('title', title)
     form.append('file', file)
-    return apiFetch<TutorialVideo>('/admin/tutorial-videos', {
+    return apiFetch<TutorialVideo>('/admin/tutorials/videos', {
       method: 'POST',
       body: form,
     })
   },
-  updateTutorialVideo: (
-    videoId: number,
-    body: { title?: string; sort_order?: number },
-  ) =>
-    apiFetch<TutorialVideo>(`/admin/tutorial-videos/${videoId}`, {
+  updateVideo: (videoId: number, body: { title?: string; sort_order?: number }) =>
+    apiFetch<TutorialVideo>(`/admin/tutorials/videos/${videoId}`, {
       method: 'PATCH',
       body: JSON.stringify(body),
     }),
-  deleteTutorialVideo: (videoId: number) =>
-    apiFetch<void>(`/admin/tutorial-videos/${videoId}`, { method: 'DELETE' }),
+  deleteVideo: (videoId: number) =>
+    apiFetch<void>(`/admin/tutorials/videos/${videoId}`, { method: 'DELETE' }),
+
+  listDocuments: () => apiFetch<TutorialDocument[]>('/admin/tutorials/documents'),
+  getDocument: (documentId: number) =>
+    apiFetch<TutorialDocument>(`/admin/tutorials/documents/${documentId}`),
+  createDocument: (body: {
+    title: string
+    slug?: string | null
+    body_markdown?: string
+    sort_order?: number | null
+  }) =>
+    apiFetch<TutorialDocument>('/admin/tutorials/documents', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  updateDocument: (
+    documentId: number,
+    body: {
+      title?: string
+      slug?: string
+      body_markdown?: string
+      sort_order?: number
+    },
+  ) =>
+    apiFetch<TutorialDocument>(`/admin/tutorials/documents/${documentId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+  deleteDocument: (documentId: number) =>
+    apiFetch<void>(`/admin/tutorials/documents/${documentId}`, { method: 'DELETE' }),
+
+  listTemplates: () => apiFetch<ControlDesignTemplate[]>('/admin/tutorials/templates'),
+  uploadTemplate: (title: string, description: string, file: File) => {
+    const form = new FormData()
+    form.append('title', title)
+    form.append('description', description)
+    form.append('file', file)
+    return apiFetch<ControlDesignTemplate>('/admin/tutorials/templates', {
+      method: 'POST',
+      body: form,
+    })
+  },
+  updateTemplate: (
+    templateId: number,
+    body: { title?: string; description?: string; sort_order?: number },
+  ) =>
+    apiFetch<ControlDesignTemplate>(`/admin/tutorials/templates/${templateId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+  deleteTemplate: (templateId: number) =>
+    apiFetch<void>(`/admin/tutorials/templates/${templateId}`, { method: 'DELETE' }),
 }
 
 export const surveyApi = {

@@ -32,6 +32,7 @@ from backend_api.http.routers import (
     sso,
     survey,
     trimmer,
+    tutorials,
     upload,
 )
 from backend_api.http.services import error_tracking_service
@@ -107,6 +108,7 @@ def create_app() -> FastAPI:
     app.include_router(site.router, prefix=API_PREFIX)
     app.include_router(blog.router, prefix=API_PREFIX)
     app.include_router(survey.router, prefix=API_PREFIX)
+    app.include_router(tutorials.router, prefix=API_PREFIX)
     app.include_router(bug_reports.router, prefix=API_PREFIX)
     app.include_router(errors.router, prefix=API_PREFIX)
     app.include_router(projects.router, prefix=API_PREFIX)

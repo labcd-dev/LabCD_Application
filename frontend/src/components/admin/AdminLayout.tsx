@@ -18,6 +18,7 @@ import {
   Package,
   ScrollText,
   Shield,
+  Clapperboard,
   Users,
   X,
 } from 'lucide-react'
@@ -37,6 +38,7 @@ const navItems = [
   { to: '/admin/site', end: false, label: 'Site CMS', icon: Globe, action: 'admin:site' },
   { to: '/admin/blog', end: false, label: 'Blog', icon: Newspaper, action: 'admin:blog' },
   { to: '/admin/survey', end: false, label: 'Survey', icon: ClipboardList, action: 'admin:survey' },
+  { to: '/admin/tutorials', end: false, label: 'Tutorials', icon: Clapperboard, action: 'admin:tutorials' },
   { to: '/admin/bug-reports', end: false, label: 'Bug Reports', icon: Flag, action: 'admin:bug_reports' },
   { to: '/admin/monitoring', end: false, label: 'Monitoring', icon: Activity, action: 'admin:monitoring' },
   { to: '/admin/analytics', end: false, label: 'Analytics', icon: BarChart3, action: 'admin:analytics' },

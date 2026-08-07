@@ -1,4 +1,4 @@
-"""Pydantic schemas for surveys and tutorial videos."""
+"""Pydantic schemas for surveys and tutorial onboarding status."""
 
 from __future__ import annotations
 
@@ -6,6 +6,8 @@ from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
+
+from backend_api.http.schemas.tutorials import TutorialVideoOut
 
 ExperienceLevel = Literal["None", "Beginner", "Intermediate", "Advanced"]
 DegreeLevel = Literal["Bachelor's", "Master's", "PhD", "Other"]
@@ -29,21 +31,6 @@ class SurveySettings(BaseModel):
 
 class SurveySettingsUpdate(BaseModel):
     enabled: bool | None = None
-
-
-class TutorialVideoOut(BaseModel):
-    id: int
-    title: str
-    file_url: str
-    sort_order: int
-    created_at: datetime
-
-    model_config = {"from_attributes": True}
-
-
-class TutorialVideoUpdateRequest(BaseModel):
-    title: str | None = Field(default=None, min_length=1, max_length=200)
-    sort_order: int | None = None
 
 
 class SurveyStatusResponse(BaseModel):

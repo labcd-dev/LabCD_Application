@@ -10,11 +10,8 @@ import {
   User,
   X,
 } from 'lucide-react'
-import { surveyApi } from '../api/endpoints'
-import type { TutorialVideo } from '../api/types'
 import { SupportFabs } from './SupportFabs'
 import { ThemeToggle } from './ThemeToggle'
-import { TutorialSliderModal } from './TutorialSliderModal'
 import { useAuth } from '../context/AuthContext'
 import { btnBase, btnCompact } from '../lib/classes'
 
@@ -39,13 +36,10 @@ export function Layout() {
   const navigate = useNavigate()
   const isHome = location.pathname === '/studio'
   const isProjects = location.pathname.startsWith('/projects')
+  const isTutorials = location.pathname.startsWith('/tutorials')
   const isProfile = location.pathname === '/profile'
   const { user, logout, hasAction } = useAuth()
   const [menuOpen, setMenuOpen] = useState(false)
-  const [tutorialOpen, setTutorialOpen] = useState(false)
-  const [tutorialVideos, setTutorialVideos] = useState<TutorialVideo[]>([])
-  const [tutorialLoading, setTutorialLoading] = useState(false)
-  const [tutorialError, setTutorialError] = useState<string | null>(null)
 
   useEffect(() => {
     setMenuOpen(false)
@@ -64,28 +58,6 @@ export function Layout() {
     setMenuOpen(false)
     void logout()
     navigate('/login', { replace: true })
-  }
-
-  const openTutorials = async () => {
-    setTutorialLoading(true)
-    setTutorialError(null)
-    setMenuOpen(false)
-    try {
-      const status = await surveyApi.status()
-      if (status.videos.length === 0) {
-        setTutorialError('No tutorial videos available yet.')
-        setTutorialVideos([])
-        setTutorialOpen(false)
-        return
-      }
-      setTutorialVideos(status.videos)
-      setTutorialOpen(true)
-    } catch (err) {
-      setTutorialError(err instanceof Error ? err.message : 'Failed to load tutorials')
-      setTutorialOpen(false)
-    } finally {
-      setTutorialLoading(false)
-    }
   }
 
   return (
@@ -118,16 +90,10 @@ export function Layout() {
                 <FolderOpen className="size-4" aria-hidden />
                 Projects
               </Link>
-              <button
-                type="button"
-                className={navLinkClass(false)}
-                disabled={tutorialLoading}
-                onClick={() => void openTutorials()}
-                title="Watch video tutorials"
-              >
+              <Link to="/tutorials" className={navLinkClass(isTutorials)}>
                 <Clapperboard className="size-4" aria-hidden />
-                {tutorialLoading ? 'Loading…' : 'Tutorials'}
-              </button>
+                Tutorials
+              </Link>
               {hasAction('admin:access') && (
                 <Link to="/admin" className={navLinkClass(false)}>
                   <Shield className="size-4" aria-hidden />
@@ -220,15 +186,14 @@ export function Layout() {
                 <FolderOpen className="size-4 shrink-0" aria-hidden />
                 Projects
               </Link>
-              <button
-                type="button"
-                className={mobileNavLinkClass(false)}
-                disabled={tutorialLoading}
-                onClick={() => void openTutorials()}
+              <Link
+                to="/tutorials"
+                className={mobileNavLinkClass(isTutorials)}
+                onClick={() => setMenuOpen(false)}
               >
                 <Clapperboard className="size-4 shrink-0" aria-hidden />
-                {tutorialLoading ? 'Loading…' : 'Tutorials'}
-              </button>
+                Tutorials
+              </Link>
               {hasAction('admin:access') && (
                 <Link
                   to="/admin"
@@ -284,26 +249,11 @@ export function Layout() {
       )}
 
       <main className="mx-auto w-full max-w-[1200px] flex-1 px-4 py-4 sm:px-6 sm:py-6">
-        {tutorialError && (
-          <p className="mb-4 rounded-lg border border-border bg-surface-muted px-3 py-2 text-sm text-muted-text">
-            {tutorialError}
-          </p>
-        )}
         <Outlet />
       </main>
       <footer className="border-t border-border px-4 py-4 text-center text-xs text-muted sm:px-6">
         LabCD Control Design Studio
       </footer>
-      {tutorialOpen && (
-        <TutorialSliderModal
-          videos={tutorialVideos}
-          mode="browse"
-          onClosed={() => {
-            setTutorialOpen(false)
-            setTutorialError(null)
-          }}
-        />
-      )}
       {user && <SupportFabs />}
     </div>
   )

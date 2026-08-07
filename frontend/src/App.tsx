@@ -22,6 +22,7 @@ import { AdminProjectDetailPage } from './pages/AdminProjectDetailPage'
 import { AdminProjectsPage } from './pages/AdminProjectsPage'
 import { AdminSitePage } from './pages/AdminSitePage'
 import { AdminSurveyPage } from './pages/AdminSurveyPage'
+import { AdminTutorialsPage } from './pages/AdminTutorialsPage'
 import { AdminUserDetailPage } from './pages/AdminUserDetailPage'
 import { AdminUsersPage } from './pages/AdminUsersPage'
 import { BlogListPage } from './pages/BlogListPage'
@@ -40,6 +41,7 @@ import { MuloPage } from './pages/MuloPage'
 import { RecommenderPage } from './pages/RecommenderPage'
 import { SiloPage } from './pages/SiloPage'
 import { TrimmerPage } from './pages/TrimmerPage'
+import { TutorialsPage } from './pages/TutorialsPage'
 import { VerifyEmailPage } from './pages/VerifyEmailPage'
 import './index.css'
 
@@ -69,6 +71,7 @@ export default function App() {
                   <Route path="trimmer" element={<TrimmerPage />} />
                   <Route path="silo" element={<SiloPage />} />
                   <Route path="mulo" element={<MuloPage />} />
+                  <Route path="tutorials" element={<TutorialsPage />} />
                   <Route path="profile" element={<ProfilePage />} />
                   <Route path="*" element={<Navigate to="/studio" replace />} />
                 </Route>
@@ -93,6 +96,7 @@ export default function App() {
                   <Route path="projects" element={<AdminProjectsPage />} />
                   <Route path="projects/:projectId" element={<AdminProjectDetailPage />} />
                   <Route path="survey" element={<AdminSurveyPage />} />
+                  <Route path="tutorials" element={<AdminTutorialsPage />} />
                 </Route>
               </Route>
             </Routes>

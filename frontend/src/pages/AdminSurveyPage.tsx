@@ -1,12 +1,11 @@
 import { Navigate } from 'react-router-dom'
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
-import { ClipboardList, RefreshCw, Trash2, Upload } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import { ClipboardList, RefreshCw } from 'lucide-react'
 import { adminApi } from '../api/endpoints'
 import type {
   FeedbackSurveyResponseRow,
   ProfileSurveyResponseRow,
   SurveySettings,
-  TutorialVideo,
 } from '../api/types'
 import { AdminDownloadCsvButton } from '../components/admin/AdminDownloadCsvButton'
 import { AdminPagination } from '../components/admin/AdminPagination'
@@ -17,11 +16,8 @@ import { downloadCsv } from '../lib/downloadCsv'
 import {
   btnBase,
   btnCompact,
-  btnPrimary,
   cardPanel,
   fieldCheckbox,
-  fieldInput,
-  fieldLabel,
   pageIntro,
   pageSection,
   pageTitle,
@@ -38,28 +34,22 @@ export function AdminSurveyPage() {
   const { hasAction } = useAuth()
   const canManage = hasAction('admin:survey')
   const [settings, setSettings] = useState<SurveySettings>({ enabled: true })
-  const [videos, setVideos] = useState<TutorialVideo[]>([])
   const [profileRows, setProfileRows] = useState<ProfileSurveyResponseRow[]>([])
   const [feedbackRows, setFeedbackRows] = useState<FeedbackSurveyResponseRow[]>([])
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [uploadTitle, setUploadTitle] = useState('')
-  const [uploading, setUploading] = useState(false)
-  const fileRef = useRef<HTMLInputElement>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const [nextSettings, nextVideos, responses] = await Promise.all([
+      const [nextSettings, responses] = await Promise.all([
         adminApi.getSurveySettings(),
-        adminApi.listTutorialVideos(),
         adminApi.listSurveyResponses(),
       ])
       setSettings(nextSettings)
-      setVideos(nextVideos)
       setProfileRows(responses.profile)
       setFeedbackRows(responses.feedback)
     } catch (err) {
@@ -74,7 +64,6 @@ export function AdminSurveyPage() {
     void load()
   }, [canManage, load])
 
-  const videoPagination = useClientPagination(videos)
   const profilePagination = useClientPagination(profileRows)
   const feedbackPagination = useClientPagination(feedbackRows)
 
@@ -101,56 +90,6 @@ export function AdminSurveyPage() {
     }
   }
 
-  const handleUpload = async (event: FormEvent) => {
-    event.preventDefault()
-    const file = fileRef.current?.files?.[0]
-    if (!file) {
-      setError('Choose a video file to upload.')
-      return
-    }
-    if (!uploadTitle.trim()) {
-      setError('Enter a title for the video.')
-      return
-    }
-    setUploading(true)
-    setError(null)
-    setMessage(null)
-    try {
-      await adminApi.uploadTutorialVideo(uploadTitle.trim(), file)
-      setUploadTitle('')
-      if (fileRef.current) fileRef.current.value = ''
-      setMessage('Tutorial video uploaded.')
-      await load()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to upload video')
-    } finally {
-      setUploading(false)
-    }
-  }
-
-  const handleDeleteVideo = async (video: TutorialVideo) => {
-    if (!window.confirm(`Delete tutorial video “${video.title}”?`)) return
-    setError(null)
-    try {
-      await adminApi.deleteTutorialVideo(video.id)
-      setMessage('Video deleted.')
-      await load()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete video')
-    }
-  }
-
-  const handleTitleBlur = async (video: TutorialVideo, title: string) => {
-    const trimmed = title.trim()
-    if (!trimmed || trimmed === video.title) return
-    try {
-      await adminApi.updateTutorialVideo(video.id, { title: trimmed })
-      await load()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update title')
-    }
-  }
-
   return (
     <section className={pageSection}>
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -158,12 +97,10 @@ export function AdminSurveyPage() {
           <h1 className={pageTitle}>
             <span className="inline-flex items-center gap-2">
               <ClipboardList className="size-6 text-primary" aria-hidden />
-              Survey & tutorials
+              Survey
             </span>
           </h1>
-          <p className={pageIntro}>
-            Toggle the survey module, manage how-to videos, and review responses.
-          </p>
+          <p className={pageIntro}>Toggle the survey module and review responses.</p>
         </div>
         <button
           type="button"
@@ -194,88 +131,6 @@ export function AdminSurveyPage() {
           />
           <span>Survey module enabled</span>
         </label>
-      </div>
-
-      <div className={cardPanel}>
-        <h2 className="mt-0 text-base font-semibold text-foreground">Tutorial videos</h2>
-        <p className="mb-4 text-sm text-muted-text">
-          Uploaded clips appear in the first-login slider (MP4, WebM, or MOV, up to 100 MB).
-        </p>
-
-        <form className="mb-6 grid gap-3 sm:grid-cols-[1fr_auto_auto]" onSubmit={(e) => void handleUpload(e)}>
-          <label className={`${fieldLabel} mb-0`}>
-            <span>Title</span>
-            <input
-              className={fieldInput}
-              value={uploadTitle}
-              onChange={(e) => setUploadTitle(e.target.value)}
-              maxLength={200}
-              placeholder="How LabCD works"
-            />
-          </label>
-          <label className={`${fieldLabel} mb-0`}>
-            <span>File</span>
-            <input
-              ref={fileRef}
-              type="file"
-              accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov"
-              className={fieldInput}
-            />
-          </label>
-          <div className="flex items-end">
-            <button type="submit" className={btnPrimary} disabled={uploading}>
-              <Upload className="size-4" />
-              {uploading ? 'Uploading…' : 'Upload'}
-            </button>
-          </div>
-        </form>
-
-        {videos.length === 0 ? (
-          <p className="text-sm text-muted-text">No tutorial videos yet.</p>
-        ) : (
-          <div className="space-y-3">
-            <ul className="m-0 list-none space-y-3 p-0">
-              {videoPagination.pageItems.map((video, index) => (
-                <li
-                  key={video.id}
-                  className="flex flex-col gap-3 rounded-xl border border-border-subtle p-3 sm:flex-row sm:items-center"
-                >
-                  <span className="text-xs font-medium text-muted">
-                    {videoPagination.from + index}
-                  </span>
-                  <input
-                    className={`${fieldInput} flex-1`}
-                    defaultValue={video.title}
-                    onBlur={(e) => void handleTitleBlur(video, e.target.value)}
-                    aria-label={`Title for video ${video.id}`}
-                  />
-                  <video
-                    className="h-16 w-28 shrink-0 rounded-md bg-black object-cover"
-                    src={video.file_url}
-                    muted
-                    playsInline
-                  />
-                  <button
-                    type="button"
-                    className={`${btnBase} ${btnCompact} text-[var(--app-status-error-text)]`}
-                    onClick={() => void handleDeleteVideo(video)}
-                  >
-                    <Trash2 className="size-3.5" />
-                    Delete
-                  </button>
-                </li>
-              ))}
-            </ul>
-            <AdminPagination
-              page={videoPagination.page}
-              totalPages={videoPagination.totalPages}
-              total={videoPagination.total}
-              from={videoPagination.from}
-              to={videoPagination.to}
-              onPageChange={videoPagination.setPage}
-            />
-          </div>
-        )}
       </div>
 
       <div className={cardPanel}>

@@ -243,6 +243,29 @@ export interface TutorialVideo {
   created_at: string
 }
 
+export interface TutorialDocumentSummary {
+  id: number
+  title: string
+  slug: string
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
+
+export interface TutorialDocument extends TutorialDocumentSummary {
+  body_markdown: string
+}
+
+export interface ControlDesignTemplate {
+  id: number
+  title: string
+  description: string
+  file_url: string
+  original_filename: string
+  sort_order: number
+  created_at: string
+}
+
 export interface SurveyStatus {
   enabled: boolean
   needs_profile_survey: boolean
