@@ -413,6 +413,25 @@ export interface ErrorTrackingSettings {
   api: boolean
 }
 
+export type ApiKeyName =
+  | 'OPENAI_API_KEY'
+  | 'NVIDIA_API_KEY'
+  | 'GROQ_API_KEY'
+  | 'CEREBRAS_API_KEY'
+  | 'TAVILY_API_KEY'
+
+export interface ApiKeyStatus {
+  name: ApiKeyName | string
+  configured: boolean
+  masked_value: string
+}
+
+export interface ApiKeysResponse {
+  keys: ApiKeyStatus[]
+}
+
+export type ApiKeysUpdate = Partial<Record<ApiKeyName, string>>
+
 export type ErrorEventSource = 'frontend' | 'backend' | 'api'
 
 export interface ErrorEvent {

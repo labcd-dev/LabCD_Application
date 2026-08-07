@@ -33,6 +33,7 @@ from backend_api.http.services.admin_csv_service import (
     export_projects_csv,
     export_users_csv,
 )
+from backend_api.http.schemas.api_keys import ApiKeysOut, ApiKeysUpdate, ApiKeyStatusOut
 from backend_api.http.schemas.error_tracking import (
     ErrorEventOut,
     ErrorTrackingSettings,
@@ -42,6 +43,7 @@ from backend_api.http.schemas.audit import AuditLogOut
 from backend_api.http.schemas.monitoring import MonitoringResponse
 from backend_api.http.schemas.projects import ProjectDetail, ProjectSummary, ProjectUpdateRequest
 from backend_api.http.services import (
+    api_key_service,
     audit_service,
     error_tracking_service,
     monitoring_service,
@@ -64,6 +66,38 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 
 def _plan_out(plan) -> PlanOut:
     return PlanOut(**plan_service.plan_out_dict(plan))
+
+
+@router.get("/api-keys", response_model=ApiKeysOut)
+def get_api_keys(_: User = Depends(require_action("admin:api_keys"))) -> ApiKeysOut:
+    return ApiKeysOut(keys=[ApiKeyStatusOut(**row) for row in api_key_service.list_keys()])
+
+
+@router.put("/api-keys", response_model=ApiKeysOut)
+def update_api_keys(
+    request: ApiKeysUpdate,
+    http_request: Request,
+    admin: User = Depends(require_action("admin:api_keys")),
+    db: Session = Depends(get_db),
+) -> ApiKeysOut:
+    updates = request.model_dump(exclude_unset=True)
+    try:
+        changed = api_key_service.update_keys(updates)
+    except api_key_service.ApiKeyError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    if changed:
+        audit_service.record_from_request(
+            db,
+            http_request,
+            action="admin.api_keys.update",
+            category="admin",
+            actor=admin,
+            resource_type="api_keys",
+            success=True,
+            details={"changed_keys": changed},
+        )
+    return ApiKeysOut(keys=[ApiKeyStatusOut(**row) for row in api_key_service.list_keys()])
 
 
 @router.get("/monitoring", response_model=MonitoringResponse)

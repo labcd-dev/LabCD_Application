@@ -13,6 +13,7 @@ import { AdminOverviewPage } from './pages/AdminOverviewPage'
 import { AdminMonitoringPage } from './pages/AdminMonitoringPage'
 import { AdminErrorsPage } from './pages/AdminErrorsPage'
 import { AdminAuditLogPage } from './pages/AdminAuditLogPage'
+import { AdminApiKeysPage } from './pages/AdminApiKeysPage'
 import { AdminPlansPage } from './pages/AdminPlansPage'
 import { AdminRolesPage } from './pages/AdminRolesPage'
 import { AdminProjectDetailPage } from './pages/AdminProjectDetailPage'
@@ -77,6 +78,7 @@ export default function App() {
                   <Route path="monitoring" element={<AdminMonitoringPage />} />
                   <Route path="errors" element={<AdminErrorsPage />} />
                   <Route path="audit-log" element={<AdminAuditLogPage />} />
+                  <Route path="api-keys" element={<AdminApiKeysPage />} />
                   <Route path="bug-reports" element={<AdminBugReportsPage />} />
                   <Route path="plans" element={<AdminPlansPage />} />
                   <Route path="roles" element={<AdminRolesPage />} />

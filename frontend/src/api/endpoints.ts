@@ -3,6 +3,8 @@ import type {
   ActionInfo,
   ArtifactResponse,
   AdminUserDetail,
+  ApiKeysResponse,
+  ApiKeysUpdate,
   AuthUser,
   CaseStudiesResponse,
   DefaultPlanInfo,
@@ -292,6 +294,12 @@ export const adminApi = {
     }),
   deleteProject: (projectId: number) =>
     apiFetch<void>(`/admin/projects/${projectId}`, { method: 'DELETE' }),
+  getApiKeys: () => apiFetch<ApiKeysResponse>('/admin/api-keys'),
+  updateApiKeys: (body: ApiKeysUpdate) =>
+    apiFetch<ApiKeysResponse>('/admin/api-keys', {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
   getErrorTrackingSettings: () =>
     apiFetch<ErrorTrackingSettings>('/admin/errors/settings'),
   updateErrorTrackingSettings: (body: Partial<ErrorTrackingSettings>) =>

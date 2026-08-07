@@ -27,6 +27,7 @@ services:
     volumes:
       - ./results:/app/results
       - ./uploads:/app/uploads
+      - ./.env:/app/.env
     depends_on:
       db:
         condition: service_healthy
