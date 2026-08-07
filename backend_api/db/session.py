@@ -145,6 +145,26 @@ def _migrate_schema() -> None:
     _migrate_project_llm_model()
     _migrate_project_file_url()
     _migrate_feedback_survey_pipeline()
+    _migrate_password_hash_nullable()
+
+
+def _migrate_password_hash_nullable() -> None:
+    """Allow SSO-only users without a local password."""
+    from sqlalchemy import inspect
+
+    inspector = inspect(engine)
+    if "users" not in inspector.get_table_names():
+        return
+
+    password_hash_col = next(
+        (col for col in inspector.get_columns("users") if col["name"] == "password_hash"),
+        None,
+    )
+    if password_hash_col is None or password_hash_col.get("nullable", True):
+        return
+
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL"))
 
 
 def _migrate_project_file_url() -> None:

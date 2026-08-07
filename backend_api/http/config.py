@@ -38,6 +38,8 @@ ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")
 
 # Public app URL used in auth email links (verify / reset password).
 APP_PUBLIC_URL = os.getenv("APP_PUBLIC_URL", "http://localhost:5173").rstrip("/")
+# Public API origin used to build OAuth redirect URIs (no trailing /api/v1).
+API_PUBLIC_URL = os.getenv("API_PUBLIC_URL", "http://localhost:8000").rstrip("/")
 
 # SMTP — when SMTP_HOST is empty, emails are logged to the console (dev fallback).
 SMTP_HOST = os.getenv("SMTP_HOST", "").strip()

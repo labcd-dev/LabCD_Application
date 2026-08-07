@@ -1,9 +1,10 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { authApi } from '../api/endpoints'
+import type { SsoProviderPublic } from '../api/types'
 import { StatusMessage } from '../components/StatusMessage'
 import { useAuth } from '../context/AuthContext'
-import { btnPrimary, btnWide, cardPanel, fieldInput, fieldLabel, pageIntro } from '../lib/classes'
+import { btnBase, btnPrimary, btnWide, cardPanel, fieldInput, fieldLabel, pageIntro } from '../lib/classes'
 
 export function LoginPage() {
   const { user, loading, login } = useAuth()
@@ -15,9 +16,25 @@ export function LoginPage() {
   const [info, setInfo] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [resending, setResending] = useState(false)
+  const [ssoProviders, setSsoProviders] = useState<SsoProviderPublic[]>([])
 
   const from = (location.state as { from?: string; notice?: string } | null)?.from ?? '/studio'
   const notice = (location.state as { notice?: string } | null)?.notice
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const providers = await authApi.listSsoProviders()
+        if (!cancelled) setSsoProviders(providers)
+      } catch {
+        if (!cancelled) setSsoProviders([])
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   if (!loading && user) {
     return <Navigate to={from} replace />
@@ -56,6 +73,10 @@ export function LoginPage() {
     }
   }
 
+  const startSso = (provider: string) => {
+    window.location.href = authApi.ssoStartUrl(provider, from)
+  }
+
   return (
     <section className="mx-auto flex min-h-[70vh] max-w-md flex-col justify-center px-1">
       <div className={`${cardPanel} space-y-4`}>
@@ -68,6 +89,27 @@ export function LoginPage() {
 
         {error && <StatusMessage type="error" message={error} />}
         {(info || notice) && <StatusMessage type="success" message={info || notice || ''} />}
+
+        {ssoProviders.length > 0 && (
+          <div className="space-y-2">
+            {ssoProviders.map((provider) => (
+              <button
+                key={provider.id}
+                type="button"
+                className={`${btnBase} ${btnWide} border border-border bg-surface-elevated`}
+                onClick={() => startSso(provider.provider)}
+              >
+                Continue with {provider.display_name}
+              </button>
+            ))}
+            <div className="relative py-2 text-center text-xs uppercase tracking-[0.14em] text-muted-text">
+              <span className="relative z-10 bg-[var(--app-surface-elevated,var(--app-surface))] px-2">
+                or
+              </span>
+              <span className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-border" />
+            </div>
+          </div>
+        )}
 
         <form onSubmit={(e) => void handleSubmit(e)} className="space-y-1">
           <label className={fieldLabel}>

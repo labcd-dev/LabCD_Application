@@ -34,6 +34,11 @@ from backend_api.http.services.admin_csv_service import (
     export_users_csv,
 )
 from backend_api.http.schemas.api_keys import ApiKeysOut, ApiKeysUpdate, ApiKeyStatusOut
+from backend_api.http.schemas.sso import (
+    SsoProviderAdminOut,
+    SsoProviderCreate,
+    SsoProviderUpdate,
+)
 from backend_api.http.schemas.error_tracking import (
     ErrorEventOut,
     ErrorTrackingSettings,
@@ -50,6 +55,7 @@ from backend_api.http.services import (
     plan_service,
     project_service,
     role_service,
+    sso_service,
 )
 from backend_api.http.services.auth_service import (
     create_user,
@@ -98,6 +104,113 @@ def update_api_keys(
             details={"changed_keys": changed},
         )
     return ApiKeysOut(keys=[ApiKeyStatusOut(**row) for row in api_key_service.list_keys()])
+
+
+def _sso_provider_out(row) -> SsoProviderAdminOut:
+    return SsoProviderAdminOut(**sso_service.provider_admin_dict(row))
+
+
+@router.get("/sso-providers", response_model=list[SsoProviderAdminOut])
+def list_sso_providers(
+    _: User = Depends(require_action("admin:sso")),
+    db: Session = Depends(get_db),
+) -> list[SsoProviderAdminOut]:
+    return [_sso_provider_out(row) for row in sso_service.list_all_providers(db)]
+
+
+@router.post(
+    "/sso-providers",
+    response_model=SsoProviderAdminOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_sso_provider(
+    request: SsoProviderCreate,
+    http_request: Request,
+    admin: User = Depends(require_action("admin:sso")),
+    db: Session = Depends(get_db),
+) -> SsoProviderAdminOut:
+    try:
+        row = sso_service.create_provider(
+            db,
+            provider=request.provider,
+            display_name=request.display_name,
+            client_id=request.client_id,
+            client_secret=request.client_secret,
+            enabled=request.enabled,
+        )
+    except sso_service.SsoError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    audit_service.record_from_request(
+        db,
+        http_request,
+        action="admin.sso.create",
+        category="admin",
+        actor=admin,
+        resource_type="sso_provider",
+        resource_id=row.id,
+        success=True,
+        details={"provider": row.provider},
+    )
+    return _sso_provider_out(row)
+
+
+@router.patch("/sso-providers/{provider_id}", response_model=SsoProviderAdminOut)
+def update_sso_provider(
+    provider_id: int,
+    request: SsoProviderUpdate,
+    http_request: Request,
+    admin: User = Depends(require_action("admin:sso")),
+    db: Session = Depends(get_db),
+) -> SsoProviderAdminOut:
+    row = sso_service.get_provider_by_id(db, provider_id)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="SSO provider not found")
+
+    data = request.model_dump(exclude_unset=True)
+    try:
+        row = sso_service.update_provider(db, row, **data)
+    except sso_service.SsoError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    audit_service.record_from_request(
+        db,
+        http_request,
+        action="admin.sso.update",
+        category="admin",
+        actor=admin,
+        resource_type="sso_provider",
+        resource_id=row.id,
+        success=True,
+        details={"provider": row.provider, "fields": sorted(data.keys())},
+    )
+    return _sso_provider_out(row)
+
+
+@router.delete("/sso-providers/{provider_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_sso_provider(
+    provider_id: int,
+    http_request: Request,
+    admin: User = Depends(require_action("admin:sso")),
+    db: Session = Depends(get_db),
+) -> None:
+    row = sso_service.get_provider_by_id(db, provider_id)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="SSO provider not found")
+
+    provider_key = row.provider
+    sso_service.delete_provider(db, row)
+    audit_service.record_from_request(
+        db,
+        http_request,
+        action="admin.sso.delete",
+        category="admin",
+        actor=admin,
+        resource_type="sso_provider",
+        resource_id=provider_id,
+        success=True,
+        details={"provider": provider_key},
+    )
 
 
 @router.get("/monitoring", response_model=MonitoringResponse)

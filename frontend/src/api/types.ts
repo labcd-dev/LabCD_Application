@@ -432,6 +432,41 @@ export interface ApiKeysResponse {
 
 export type ApiKeysUpdate = Partial<Record<ApiKeyName, string>>
 
+export type SsoProviderKey = 'google' | 'github'
+
+export interface SsoProviderPublic {
+  id: number
+  provider: SsoProviderKey
+  display_name: string
+}
+
+export interface SsoProviderAdmin {
+  id: number
+  provider: SsoProviderKey
+  display_name: string
+  client_id: string
+  client_secret_configured: boolean
+  client_secret_masked: string
+  enabled: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface SsoProviderCreate {
+  provider: SsoProviderKey
+  display_name: string
+  client_id: string
+  client_secret: string
+  enabled?: boolean
+}
+
+export interface SsoProviderUpdate {
+  display_name?: string
+  client_id?: string
+  client_secret?: string
+  enabled?: boolean
+}
+
 export type ErrorEventSource = 'frontend' | 'backend' | 'api'
 
 export interface ErrorEvent {

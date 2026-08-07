@@ -46,6 +46,7 @@ DEFAULT_ACTIONS: list[tuple[str, str]] = [
     ("admin:errors", "Manage error tracking"),
     ("admin:audit", "View audit log"),
     ("admin:api_keys", "Manage LLM and search API keys"),
+    ("admin:sso", "Manage SSO providers"),
 ]
 
 PIPELINE_ACTIONS = {
@@ -161,7 +162,7 @@ def create_user(
     db: Session,
     *,
     email: str,
-    password: str,
+    password: str | None = None,
     plan_id: int | None = None,
     role_id: int | None = None,
     is_admin: bool = False,
@@ -169,11 +170,13 @@ def create_user(
     assign_default_role: bool = True,
     email_verified: bool | None = None,
     skip_password_policy: bool = False,
+    display_name: str | None = None,
+    avatar_url: str | None = None,
 ) -> User:
     from backend_api.http.services import plan_service, role_service
     from backend_api.http.services.password_policy import validate_password
 
-    if not skip_password_policy:
+    if password is not None and not skip_password_policy:
         validate_password(password, email=email)
 
     resolved_plan_id = plan_id
@@ -198,12 +201,14 @@ def create_user(
 
     user = User(
         email=email.lower().strip(),
-        password_hash=hash_password(password),
+        password_hash=hash_password(password) if password is not None else None,
         is_admin=False,
         is_active=True,
         email_verified=verified,
         plan_id=resolved_plan_id,
         role_id=resolved_role.id if resolved_role is not None else None,
+        display_name=display_name,
+        avatar_url=avatar_url,
     )
     if resolved_role is not None:
         user.role = resolved_role
@@ -241,6 +246,8 @@ def authenticate_user_with_reason(
         return None, "unknown_user"
     if not user.is_active:
         return user, "inactive"
+    if not user.password_hash:
+        return user, "invalid_credentials"
     if not verify_password(password, user.password_hash):
         return user, "invalid_credentials"
     if not user.email_verified:

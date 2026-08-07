@@ -46,6 +46,10 @@ import type {
   BugReportSettings,
   AuthSessionInfo,
   MessageResponse,
+  SsoProviderAdmin,
+  SsoProviderCreate,
+  SsoProviderPublic,
+  SsoProviderUpdate,
 } from './types'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '/api/v1'
@@ -167,6 +171,14 @@ export const authApi = {
     return apiFetch<AuthUser>('/auth/me/avatar', { method: 'POST', body: form })
   },
   removeAvatar: () => apiFetch<AuthUser>('/auth/me/avatar', { method: 'DELETE' }),
+  listSsoProviders: () =>
+    apiFetch<SsoProviderPublic[]>('/auth/sso/providers', {}, AUTH_TIMEOUT_MS),
+  ssoStartUrl: (provider: string, redirectTo?: string) => {
+    const query = redirectTo
+      ? `?redirect_to=${encodeURIComponent(redirectTo)}`
+      : ''
+    return `${API_BASE}/auth/sso/${encodeURIComponent(provider)}/start${query}`
+  },
 }
 
 export const adminApi = {
@@ -300,6 +312,19 @@ export const adminApi = {
       method: 'PUT',
       body: JSON.stringify(body),
     }),
+  listSsoProviders: () => apiFetch<SsoProviderAdmin[]>('/admin/sso-providers'),
+  createSsoProvider: (body: SsoProviderCreate) =>
+    apiFetch<SsoProviderAdmin>('/admin/sso-providers', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  updateSsoProvider: (providerId: number, body: SsoProviderUpdate) =>
+    apiFetch<SsoProviderAdmin>(`/admin/sso-providers/${providerId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+  deleteSsoProvider: (providerId: number) =>
+    apiFetch<void>(`/admin/sso-providers/${providerId}`, { method: 'DELETE' }),
   getErrorTrackingSettings: () =>
     apiFetch<ErrorTrackingSettings>('/admin/errors/settings'),
   updateErrorTrackingSettings: (body: Partial<ErrorTrackingSettings>) =>

@@ -14,6 +14,7 @@ import { AdminMonitoringPage } from './pages/AdminMonitoringPage'
 import { AdminErrorsPage } from './pages/AdminErrorsPage'
 import { AdminAuditLogPage } from './pages/AdminAuditLogPage'
 import { AdminApiKeysPage } from './pages/AdminApiKeysPage'
+import { AdminSsoPage } from './pages/AdminSsoPage'
 import { AdminPlansPage } from './pages/AdminPlansPage'
 import { AdminRolesPage } from './pages/AdminRolesPage'
 import { AdminProjectDetailPage } from './pages/AdminProjectDetailPage'
@@ -28,6 +29,7 @@ import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 import { HomePage } from './pages/HomePage'
 import { LandingPage } from './pages/LandingPage'
 import { LoginPage } from './pages/LoginPage'
+import { LoginSsoPage } from './pages/LoginSsoPage'
 import { ProfilePage } from './pages/ProfilePage'
 import { ProjectDetailPage } from './pages/ProjectDetailPage'
 import { ProjectsPage } from './pages/ProjectsPage'
@@ -53,6 +55,7 @@ export default function App() {
               <Route path="/blog/:slug" element={<BlogPostPage />} />
               <Route element={<Layout />}>
                 <Route path="login" element={<LoginPage />} />
+                <Route path="login/sso" element={<LoginSsoPage />} />
                 <Route path="register" element={<RegisterPage />} />
                 <Route path="verify-email" element={<VerifyEmailPage />} />
                 <Route path="forgot-password" element={<ForgotPasswordPage />} />
@@ -79,6 +82,7 @@ export default function App() {
                   <Route path="errors" element={<AdminErrorsPage />} />
                   <Route path="audit-log" element={<AdminAuditLogPage />} />
                   <Route path="api-keys" element={<AdminApiKeysPage />} />
+                  <Route path="sso" element={<AdminSsoPage />} />
                   <Route path="bug-reports" element={<AdminBugReportsPage />} />
                   <Route path="plans" element={<AdminPlansPage />} />
                   <Route path="roles" element={<AdminRolesPage />} />

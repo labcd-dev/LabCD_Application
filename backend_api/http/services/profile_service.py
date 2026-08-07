@@ -62,6 +62,8 @@ def update_profile(db: Session, user: User, request: UpdateProfileRequest) -> Us
     if request.email is not None:
         normalized = request.email.lower().strip()
         if normalized != user.email:
+            if not user.password_hash:
+                raise ValueError("This account uses SSO login; email cannot be changed here")
             if not request.current_password:
                 raise ValueError("Current password is required to change email")
             if not verify_password(request.current_password, user.password_hash):
@@ -90,6 +92,8 @@ def update_profile(db: Session, user: User, request: UpdateProfileRequest) -> Us
 def change_password(db: Session, user: User, request: ChangePasswordRequest) -> None:
     from backend_api.http.services.password_policy import validate_password
 
+    if not user.password_hash:
+        raise ValueError("This account uses SSO login and has no password set")
     if not verify_password(request.current_password, user.password_hash):
         raise ValueError("Current password is incorrect")
     validate_password(

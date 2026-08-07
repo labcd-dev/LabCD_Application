@@ -16,6 +16,7 @@ import {
   Newspaper,
   Package,
   ScrollText,
+  Shield,
   Users,
   X,
 } from 'lucide-react'
@@ -31,6 +32,7 @@ const navItems = [
   { to: '/admin/plans', end: false, label: 'Plans', icon: Package, action: 'admin:plans' },
   { to: '/admin/roles', end: false, label: 'Roles', icon: KeyRound, action: 'admin:roles' },
   { to: '/admin/api-keys', end: false, label: 'API Keys', icon: Key, action: 'admin:api_keys' },
+  { to: '/admin/sso', end: false, label: 'SSO', icon: Shield, action: 'admin:sso' },
   { to: '/admin/site', end: false, label: 'Site CMS', icon: Globe, action: 'admin:site' },
   { to: '/admin/blog', end: false, label: 'Blog', icon: Newspaper, action: 'admin:blog' },
   { to: '/admin/survey', end: false, label: 'Survey', icon: ClipboardList, action: 'admin:survey' },

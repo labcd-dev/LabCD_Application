@@ -17,6 +17,7 @@ interface AuthContextValue {
   loading: boolean
   sessionError: boolean
   login: (email: string, password: string) => Promise<void>
+  loginWithToken: (accessToken: string) => Promise<void>
   register: (email: string, password: string) => Promise<MessageResponse>
   logout: () => Promise<void>
   hasAction: (code: string) => boolean
@@ -114,6 +115,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [applyToken],
   )
 
+  const loginWithToken = useCallback(
+    async (accessToken: string) => {
+      await applyToken(accessToken)
+    },
+    [applyToken],
+  )
+
   const register = useCallback(async (email: string, password: string) => {
     return authApi.register({ email, password })
   }, [])
@@ -152,6 +160,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loading,
       sessionError,
       login,
+      loginWithToken,
       register,
       logout,
       hasAction,
@@ -164,6 +173,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loading,
       sessionError,
       login,
+      loginWithToken,
       register,
       logout,
       hasAction,
