@@ -12,7 +12,7 @@ import {
   X,
 } from 'lucide-react'
 import { adminApi } from '../api/endpoints'
-import type { AuthUser, PlanInfo } from '../api/types'
+import type { AuthUser, PlanInfo, RoleInfo } from '../api/types'
 import { AdminDownloadCsvButton } from '../components/admin/AdminDownloadCsvButton'
 import { AdminPagination } from '../components/admin/AdminPagination'
 import { PasswordStrengthMeter } from '../components/PasswordStrengthMeter'
@@ -32,9 +32,10 @@ import {
 import { passwordMeetsPolicy, passwordPolicyError } from '../lib/passwordStrength'
 
 export function AdminUsersPage() {
-  const { user: currentUser } = useAuth()
+  const { user: currentUser, hasAction } = useAuth()
   const [users, setUsers] = useState<AuthUser[]>([])
   const [plans, setPlans] = useState<PlanInfo[]>([])
+  const [roles, setRoles] = useState<RoleInfo[]>([])
   const [defaultPlanId, setDefaultPlanId] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
@@ -44,38 +45,49 @@ export function AdminUsersPage() {
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [isAdmin, setIsAdmin] = useState(false)
+  const [roleId, setRoleId] = useState<number | ''>('')
   const [isActive, setIsActive] = useState(true)
   const [planId, setPlanId] = useState<number | ''>('')
   const [editingUserId, setEditingUserId] = useState<number | null>(null)
+
+  const canManage = hasAction('admin:users')
 
   const activePlans = useMemo(
     () => plans.filter((plan) => plan.is_active),
     [plans],
   )
 
+  const activeRoles = useMemo(
+    () => roles.filter((role) => role.is_active || role.is_system),
+    [roles],
+  )
+
   const refreshUsers = async () => {
-    const [userList, planList] = await Promise.all([
+    const [userList, planList, roleList] = await Promise.all([
       adminApi.listUsers(),
       adminApi.listPlans(),
+      adminApi.listRoles(),
     ])
     setUsers(userList)
     setPlans(planList)
+    setRoles(roleList)
   }
 
   useEffect(() => {
-    if (!currentUser?.is_admin) return
+    if (!canManage) return
     const load = async () => {
       setLoading(true)
       setError(null)
       try {
-        const [userList, planList, defaultPlan] = await Promise.all([
+        const [userList, planList, roleList, defaultPlan] = await Promise.all([
           adminApi.listUsers(),
           adminApi.listPlans(),
+          adminApi.listRoles(),
           adminApi.getDefaultPlan(),
         ])
         setUsers(userList)
         setPlans(planList)
+        setRoles(roleList)
         setDefaultPlanId(defaultPlan.plan_id)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load users')
@@ -84,7 +96,7 @@ export function AdminUsersPage() {
       }
     }
     void load()
-  }, [currentUser?.is_admin])
+  }, [canManage])
 
   const filteredUsers = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -93,23 +105,27 @@ export function AdminUsersPage() {
       (u) =>
         u.email.toLowerCase().includes(q) ||
         (u.plan_name?.toLowerCase().includes(q) ?? false) ||
+        (u.role_name?.toLowerCase().includes(q) ?? false) ||
         u.actions.some((a) => a.toLowerCase().includes(q)),
     )
   }, [users, query])
 
   const pagination = useClientPagination(filteredUsers, { resetKey: query })
 
-  if (!currentUser?.is_admin) {
-    return <Navigate to="/studio" replace />
+  if (!canManage) {
+    return <Navigate to="/admin" replace />
   }
 
-  const isSelf = (user: AuthUser) => user.id === currentUser.id
+  const defaultUserRoleId =
+    roles.find((r) => r.name === 'User')?.id ?? activeRoles[0]?.id ?? ''
+
+  const isSelf = (user: AuthUser) => user.id === currentUser!.id
 
   const openCreate = () => {
     setEditingUserId(null)
     setEmail('')
     setPassword('')
-    setIsAdmin(false)
+    setRoleId(defaultUserRoleId)
     setIsActive(true)
     setPlanId(defaultPlanId ?? activePlans[0]?.id ?? '')
     setMessage(null)
@@ -121,7 +137,7 @@ export function AdminUsersPage() {
     setEditingUserId(user.id)
     setEmail(user.email)
     setPassword('')
-    setIsAdmin(user.is_admin)
+    setRoleId(user.role_id ?? '')
     setIsActive(user.is_active)
     setPlanId(user.plan_id ?? '')
     setMessage(null)
@@ -134,7 +150,7 @@ export function AdminUsersPage() {
     setEditingUserId(null)
     setEmail('')
     setPassword('')
-    setIsAdmin(false)
+    setRoleId('')
     setIsActive(true)
     setPlanId('')
   }
@@ -151,18 +167,19 @@ export function AdminUsersPage() {
       }
     }
     const resolvedPlanId = planId === '' ? null : Number(planId)
+    const resolvedRoleId = roleId === '' ? null : Number(roleId)
     try {
       if (editingUserId == null) {
         await adminApi.createUser({
           email,
           password,
-          is_admin: isAdmin,
+          role_id: resolvedRoleId,
           plan_id: resolvedPlanId,
         })
         setMessage(`Created user ${email}`)
       } else {
         await adminApi.updateUser(editingUserId, {
-          is_admin: isAdmin,
+          role_id: resolvedRoleId,
           is_active: isActive,
           plan_id: resolvedPlanId,
           ...(password ? { password } : {}),
@@ -219,6 +236,17 @@ export function AdminUsersPage() {
     }
     return options.length > 0 ? options : plans
   }, [plans, activePlans, planId])
+
+  const roleOptions = useMemo(() => {
+    const options = [...activeRoles]
+    if (roleId !== '') {
+      const current = roles.find((role) => role.id === roleId)
+      if (current && !options.some((role) => role.id === current.id)) {
+        options.push(current)
+      }
+    }
+    return options.length > 0 ? options : roles
+  }, [roles, activeRoles, roleId])
 
   return (
     <div className="admin-fade-in space-y-6">
@@ -326,15 +354,19 @@ export function AdminUsersPage() {
                         </Link>
                       </td>
                       <td className="px-4 py-3">
-                        {user.is_admin ? (
-                          <span className="inline-flex items-center gap-1 rounded-md bg-[color-mix(in_srgb,var(--app-primary)_14%,transparent)] px-2 py-0.5 text-xs font-semibold text-primary">
-                            <Shield className="size-3" aria-hidden />
-                            Admin
+                        {user.role_name || (user.is_admin ? 'Admin' : 'User') ? (
+                          <span
+                            className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold ${
+                              user.is_admin
+                                ? 'bg-[color-mix(in_srgb,var(--app-primary)_14%,transparent)] text-primary'
+                                : 'bg-surface-elevated font-medium text-muted-text ring-1 ring-border'
+                            }`}
+                          >
+                            {user.is_admin ? <Shield className="size-3" aria-hidden /> : null}
+                            {user.role_name || (user.is_admin ? 'Admin' : 'User')}
                           </span>
                         ) : (
-                          <span className="rounded-md bg-surface-elevated px-2 py-0.5 text-xs font-medium text-muted-text ring-1 ring-border">
-                            User
-                          </span>
+                          <span className="text-muted-text">None</span>
                         )}
                       </td>
                       <td className="px-4 py-3">
@@ -495,20 +527,31 @@ export function AdminUsersPage() {
                   />
                   {password ? <PasswordStrengthMeter password={password} email={email} /> : null}
                 </label>
-                <label className={fieldCheckbox}>
-                  <input
-                    type="checkbox"
-                    checked={isAdmin}
-                    onChange={(e) => setIsAdmin(e.target.checked)}
-                  />
-                  <span>Admin privileges</span>
+                <label className={fieldLabel}>
+                  <span>Role</span>
+                  <select
+                    className={fieldInput}
+                    value={roleId === '' ? '' : String(roleId)}
+                    onChange={(e) =>
+                      setRoleId(e.target.value ? Number(e.target.value) : '')
+                    }
+                  >
+                    <option value="">No role</option>
+                    {roleOptions.map((role) => (
+                      <option key={role.id} value={role.id}>
+                        {role.name}
+                        {role.is_system ? ' (system)' : ''}
+                        {!role.is_active ? ' — inactive' : ''}
+                      </option>
+                    ))}
+                  </select>
                 </label>
                 {editingUserId != null && (
                   <label className={fieldCheckbox}>
                     <input
                       type="checkbox"
                       checked={isActive}
-                      disabled={editingUserId === currentUser.id}
+                      disabled={editingUserId === currentUser!.id}
                       onChange={(e) => setIsActive(e.target.checked)}
                     />
                     <span>Account active</span>

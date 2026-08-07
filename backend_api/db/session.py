@@ -69,6 +69,8 @@ def _migrate_schema() -> None:
         )
     if "plan_id" not in columns:
         statements.append("ALTER TABLE users ADD COLUMN plan_id INTEGER")
+    if "role_id" not in columns:
+        statements.append("ALTER TABLE users ADD COLUMN role_id INTEGER")
     if "university" not in columns:
         statements.append("ALTER TABLE users ADD COLUMN university VARCHAR(200)")
     if "degree" not in columns:
@@ -109,7 +111,8 @@ def _migrate_schema() -> None:
                 conn.execute(text(statement))
 
     # Add FK after column exists (idempotent enough for Postgres).
-    if "plan_id" not in columns and "plans" in set(inspect(engine).get_table_names()):
+    table_names_after = set(inspect(engine).get_table_names())
+    if "plan_id" not in columns and "plans" in table_names_after:
         with engine.begin() as conn:
             conn.execute(
                 text(
@@ -120,6 +123,20 @@ def _migrate_schema() -> None:
                 text(
                     "ALTER TABLE users ADD CONSTRAINT users_plan_id_fkey "
                     "FOREIGN KEY (plan_id) REFERENCES plans(id) ON DELETE SET NULL"
+                )
+            )
+
+    if "role_id" not in columns and "roles" in table_names_after:
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_id_fkey"
+                )
+            )
+            conn.execute(
+                text(
+                    "ALTER TABLE users ADD CONSTRAINT users_role_id_fkey "
+                    "FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE SET NULL"
                 )
             )
 

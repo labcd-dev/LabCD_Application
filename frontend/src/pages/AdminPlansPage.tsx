@@ -28,7 +28,8 @@ import {
 } from '../lib/classes'
 
 export function AdminPlansPage() {
-  const { user: currentUser } = useAuth()
+  const { hasAction } = useAuth()
+  const canManage = hasAction('admin:plans')
   const [plans, setPlans] = useState<PlanInfo[]>([])
   const [actions, setActions] = useState<ActionInfo[]>([])
   const [catalogModels, setCatalogModels] = useState<string[]>([])
@@ -61,7 +62,7 @@ export function AdminPlansPage() {
   }
 
   useEffect(() => {
-    if (!currentUser?.is_admin) return
+    if (!canManage) return
     const load = async () => {
       setLoading(true)
       setError(null)
@@ -74,7 +75,7 @@ export function AdminPlansPage() {
       }
     }
     void load()
-  }, [currentUser?.is_admin])
+  }, [canManage])
 
   const filteredPlans = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -90,8 +91,8 @@ export function AdminPlansPage() {
 
   const pagination = useClientPagination(filteredPlans, { resetKey: query })
 
-  if (!currentUser?.is_admin) {
-    return <Navigate to="/studio" replace />
+  if (!canManage) {
+    return <Navigate to="/admin" replace />
   }
 
   const toggleAction = (code: string) => {

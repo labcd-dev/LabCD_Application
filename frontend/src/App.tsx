@@ -13,6 +13,7 @@ import { AdminOverviewPage } from './pages/AdminOverviewPage'
 import { AdminMonitoringPage } from './pages/AdminMonitoringPage'
 import { AdminErrorsPage } from './pages/AdminErrorsPage'
 import { AdminPlansPage } from './pages/AdminPlansPage'
+import { AdminRolesPage } from './pages/AdminRolesPage'
 import { AdminProjectDetailPage } from './pages/AdminProjectDetailPage'
 import { AdminProjectsPage } from './pages/AdminProjectsPage'
 import { AdminSitePage } from './pages/AdminSitePage'
@@ -76,6 +77,7 @@ export default function App() {
                   <Route path="errors" element={<AdminErrorsPage />} />
                   <Route path="bug-reports" element={<AdminBugReportsPage />} />
                   <Route path="plans" element={<AdminPlansPage />} />
+                  <Route path="roles" element={<AdminRolesPage />} />
                   <Route path="users" element={<AdminUsersPage />} />
                   <Route path="users/:userId" element={<AdminUserDetailPage />} />
                   <Route path="projects" element={<AdminProjectsPage />} />

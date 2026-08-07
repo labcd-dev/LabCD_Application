@@ -152,6 +152,8 @@ export interface AuthUser {
   email_verified?: boolean
   plan_id: number | null
   plan_name: string | null
+  role_id: number | null
+  role_name: string | null
   actions: string[]
   created_at: string
   profile_survey_completed?: boolean
@@ -313,6 +315,16 @@ export interface PlanInfo {
   is_active: boolean
   actions: string[]
   models: string[]
+  created_at: string
+}
+
+export interface RoleInfo {
+  id: number
+  name: string
+  description: string
+  is_system: boolean
+  is_active: boolean
+  actions: string[]
   created_at: string
 }
 

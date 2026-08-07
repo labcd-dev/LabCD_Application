@@ -221,7 +221,9 @@ def delete_project(db: Session, project: Project) -> None:
 
 
 def assert_project_access(project: Project, user: User) -> None:
-    if user.is_admin:
+    if user.role is not None and user.role.is_system:
+        return
+    if user.has_action("admin:projects"):
         return
     if project.user_id != user.id:
         raise ProjectAccessDenied("Project access denied")

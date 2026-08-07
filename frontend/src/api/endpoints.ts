@@ -23,6 +23,7 @@ import type {
   RagStatusResponse,
   RecommenderHandoffResponse,
   RegularizeResponse,
+  RoleInfo,
   SiloSimulateResponse,
   StandardizeResponse,
   SurveyResponses,
@@ -203,6 +204,37 @@ export const adminApi = {
     }),
   deletePlan: (planId: number) =>
     apiFetch<void>(`/admin/plans/${planId}`, { method: 'DELETE' }),
+  listRoles: (params?: { active_only?: boolean }) => {
+    const query = new URLSearchParams()
+    if (params?.active_only) query.set('active_only', 'true')
+    const suffix = query.toString() ? `?${query}` : ''
+    return apiFetch<RoleInfo[]>(`/admin/roles${suffix}`)
+  },
+  createRole: (body: {
+    name: string
+    description?: string
+    actions?: string[]
+    is_active?: boolean
+  }) =>
+    apiFetch<RoleInfo>('/admin/roles', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  updateRole: (
+    roleId: number,
+    body: {
+      name?: string
+      description?: string
+      actions?: string[]
+      is_active?: boolean
+    },
+  ) =>
+    apiFetch<RoleInfo>(`/admin/roles/${roleId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+  deleteRole: (roleId: number) =>
+    apiFetch<void>(`/admin/roles/${roleId}`, { method: 'DELETE' }),
   getDefaultPlan: () => apiFetch<DefaultPlanInfo>('/admin/settings/default-plan'),
   setDefaultPlan: (planId: number) =>
     apiFetch<DefaultPlanInfo>('/admin/settings/default-plan', {
@@ -216,7 +248,7 @@ export const adminApi = {
   createUser: (body: {
     email: string
     password: string
-    is_admin?: boolean
+    role_id?: number | null
     plan_id?: number | null
   }) =>
     apiFetch<AuthUser>('/admin/users', {
@@ -227,7 +259,7 @@ export const adminApi = {
     userId: number,
     body: {
       is_active?: boolean
-      is_admin?: boolean
+      role_id?: number | null
       password?: string
       plan_id?: number | null
     },

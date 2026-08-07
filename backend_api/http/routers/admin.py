@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from backend_api.db.models import Action, User
 from backend_api.db.session import get_db
-from backend_api.http.dependencies import require_admin
+from backend_api.http.dependencies import require_action, get_current_user
 from backend_api.http.schemas.auth import (
     ActionOut,
     AdminUserDetailOut,
@@ -15,6 +15,9 @@ from backend_api.http.schemas.auth import (
     PlanCreateRequest,
     PlanOut,
     PlanUpdateRequest,
+    RoleCreateRequest,
+    RoleOut,
+    RoleUpdateRequest,
     SessionOut,
     SetDefaultPlanRequest,
     UpdateUserRequest,
@@ -42,6 +45,7 @@ from backend_api.http.services import (
     monitoring_service,
     plan_service,
     project_service,
+    role_service,
 )
 from backend_api.http.services.auth_service import (
     create_user,
@@ -61,18 +65,18 @@ def _plan_out(plan) -> PlanOut:
 
 
 @router.get("/monitoring", response_model=MonitoringResponse)
-def get_monitoring(_: User = Depends(require_admin)) -> MonitoringResponse:
+def get_monitoring(_: User = Depends(require_action("admin:monitoring"))) -> MonitoringResponse:
     return MonitoringResponse(**monitoring_service.collect_snapshot())
 
 
 @router.get("/monitoring/export.csv")
-def export_monitoring_csv_endpoint(_: User = Depends(require_admin)) -> StreamingResponse:
+def export_monitoring_csv_endpoint(_: User = Depends(require_action("admin:monitoring"))) -> StreamingResponse:
     return csv_response(export_monitoring_csv(), "monitoring_history.csv")
 
 
 @router.get("/overview/export.xlsx")
 def export_overview_xlsx_endpoint(
-    _: User = Depends(require_admin),
+    _: User = Depends(require_action("admin:access")),
     db: Session = Depends(get_db),
 ) -> StreamingResponse:
     return xlsx_response(export_overview_xlsx(db), "admin_all_data.xlsx")
@@ -80,7 +84,7 @@ def export_overview_xlsx_endpoint(
 
 @router.get("/errors/settings", response_model=ErrorTrackingSettings)
 def get_error_tracking_settings(
-    _: User = Depends(require_admin),
+    _: User = Depends(require_action("admin:errors")),
     db: Session = Depends(get_db),
 ) -> ErrorTrackingSettings:
     cfg = error_tracking_service.refresh_config_cache(db)
@@ -95,7 +99,7 @@ def get_error_tracking_settings(
 @router.patch("/errors/settings", response_model=ErrorTrackingSettings)
 def update_error_tracking_settings(
     request: ErrorTrackingSettingsUpdate,
-    _: User = Depends(require_admin),
+    _: User = Depends(require_action("admin:errors")),
     db: Session = Depends(get_db),
 ) -> ErrorTrackingSettings:
     cfg = error_tracking_service.update_settings(
@@ -115,7 +119,7 @@ def update_error_tracking_settings(
 
 @router.get("/errors", response_model=list[ErrorEventOut])
 def list_error_events(
-    _: User = Depends(require_admin),
+    _: User = Depends(require_action("admin:errors")),
     db: Session = Depends(get_db),
     user_id: int | None = Query(default=None),
     source: str | None = Query(default=None),
@@ -136,7 +140,7 @@ def list_error_events(
 
 @router.get("/errors/export.csv")
 def export_error_events_csv(
-    _: User = Depends(require_admin),
+    _: User = Depends(require_action("admin:errors")),
     db: Session = Depends(get_db),
     user_id: int | None = Query(default=None),
     source: str | None = Query(default=None),
@@ -157,7 +161,7 @@ def export_error_events_csv(
 
 @router.get("/plans/export.csv")
 def export_plans_csv_endpoint(
-    _: User = Depends(require_admin),
+    _: User = Depends(require_action("admin:plans")),
     db: Session = Depends(get_db),
 ) -> StreamingResponse:
     return csv_response(export_plans_csv(db), "plans.csv")
@@ -165,7 +169,7 @@ def export_plans_csv_endpoint(
 
 @router.get("/actions", response_model=list[ActionOut])
 def list_actions(
-    _: User = Depends(require_admin),
+    _: User = Depends(require_action("admin:access")),
     db: Session = Depends(get_db),
 ) -> list[ActionOut]:
     actions = db.query(Action).order_by(Action.code).all()
@@ -174,17 +178,19 @@ def list_actions(
 
 @router.get("/plans", response_model=list[PlanOut])
 def list_plans(
-    _: User = Depends(require_admin),
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
     active_only: bool = Query(default=False),
 ) -> list[PlanOut]:
+    if not (user.has_action("admin:plans") or user.has_action("admin:users")):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Missing required action: admin:plans")
     return [_plan_out(plan) for plan in plan_service.list_plans(db, active_only=active_only)]
 
 
 @router.post("/plans", response_model=PlanOut, status_code=status.HTTP_201_CREATED)
 def create_plan(
     request: PlanCreateRequest,
-    _: User = Depends(require_admin),
+    _: User = Depends(require_action("admin:plans")),
     db: Session = Depends(get_db),
 ) -> PlanOut:
     try:
@@ -206,7 +212,7 @@ def create_plan(
 def update_plan(
     plan_id: int,
     request: PlanUpdateRequest,
-    _: User = Depends(require_admin),
+    _: User = Depends(require_action("admin:plans")),
     db: Session = Depends(get_db),
 ) -> PlanOut:
     plan = plan_service.get_plan(db, plan_id)
@@ -231,7 +237,7 @@ def update_plan(
 @router.delete("/plans/{plan_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_plan(
     plan_id: int,
-    _: User = Depends(require_admin),
+    _: User = Depends(require_action("admin:plans")),
     db: Session = Depends(get_db),
 ) -> None:
     plan = plan_service.get_plan(db, plan_id)
@@ -245,9 +251,11 @@ def delete_plan(
 
 @router.get("/settings/default-plan", response_model=DefaultPlanOut)
 def get_default_plan(
-    _: User = Depends(require_admin),
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> DefaultPlanOut:
+    if not (user.has_action("admin:plans") or user.has_action("admin:users")):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Missing required action: admin:plans")
     plan = plan_service.get_default_plan(db)
     return DefaultPlanOut(
         plan_id=plan.id if plan else None,
@@ -258,7 +266,7 @@ def get_default_plan(
 @router.put("/settings/default-plan", response_model=DefaultPlanOut)
 def set_default_plan(
     request: SetDefaultPlanRequest,
-    _: User = Depends(require_admin),
+    _: User = Depends(require_action("admin:plans")),
     db: Session = Depends(get_db),
 ) -> DefaultPlanOut:
     try:
@@ -268,9 +276,83 @@ def set_default_plan(
     return DefaultPlanOut(plan_id=plan.id, plan=_plan_out(plan))
 
 
+
+def _role_out(role) -> RoleOut:
+    return RoleOut(**role_service.role_out_dict(role))
+
+
+@router.get("/roles", response_model=list[RoleOut])
+def list_roles(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    active_only: bool = Query(default=False),
+) -> list[RoleOut]:
+    if not (user.has_action("admin:roles") or user.has_action("admin:users")):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Missing required action: admin:roles")
+    return [_role_out(role) for role in role_service.list_roles(db, active_only=active_only)]
+
+
+@router.post("/roles", response_model=RoleOut, status_code=status.HTTP_201_CREATED)
+def create_role(
+    request: RoleCreateRequest,
+    _: User = Depends(require_action("admin:roles")),
+    db: Session = Depends(get_db),
+) -> RoleOut:
+    try:
+        role = role_service.create_role(
+            db,
+            name=request.name,
+            description=request.description,
+            action_codes=request.actions,
+            is_active=request.is_active,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _role_out(role)
+
+
+@router.patch("/roles/{role_id}", response_model=RoleOut)
+def update_role(
+    role_id: int,
+    request: RoleUpdateRequest,
+    _: User = Depends(require_action("admin:roles")),
+    db: Session = Depends(get_db),
+) -> RoleOut:
+    role = role_service.get_role(db, role_id)
+    if role is None:
+        raise HTTPException(status_code=404, detail="Role not found")
+    try:
+        role = role_service.update_role(
+            db,
+            role,
+            name=request.name,
+            description=request.description,
+            action_codes=request.actions,
+            is_active=request.is_active,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _role_out(role)
+
+
+@router.delete("/roles/{role_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_role(
+    role_id: int,
+    _: User = Depends(require_action("admin:roles")),
+    db: Session = Depends(get_db),
+) -> None:
+    role = role_service.get_role(db, role_id)
+    if role is None:
+        raise HTTPException(status_code=404, detail="Role not found")
+    try:
+        role_service.delete_role(db, role)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @router.get("/users", response_model=list[UserOut])
 def list_users(
-    _: User = Depends(require_admin),
+    _: User = Depends(require_action("admin:users")),
     db: Session = Depends(get_db),
 ) -> list[UserOut]:
     users = db.query(User).order_by(User.email).all()
@@ -279,7 +361,7 @@ def list_users(
 
 @router.get("/users/export.csv")
 def export_users_csv_endpoint(
-    _: User = Depends(require_admin),
+    _: User = Depends(require_action("admin:users")),
     db: Session = Depends(get_db),
 ) -> StreamingResponse:
     return csv_response(export_users_csv(db), "users.csv")
@@ -288,7 +370,7 @@ def export_users_csv_endpoint(
 @router.get("/users/{user_id}", response_model=AdminUserDetailOut)
 def get_user_detail(
     user_id: int,
-    _: User = Depends(require_admin),
+    _: User = Depends(require_action("admin:users")),
     db: Session = Depends(get_db),
 ) -> AdminUserDetailOut:
     detail = admin_user_service.get_user_detail(db, user_id)
@@ -300,7 +382,7 @@ def get_user_detail(
 @router.post("/users", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 def create_user_endpoint(
     request: CreateUserRequest,
-    _: User = Depends(require_admin),
+    _: User = Depends(require_action("admin:users")),
     db: Session = Depends(get_db),
 ) -> UserOut:
     if get_user_by_email(db, request.email) is not None:
@@ -311,15 +393,21 @@ def create_user_endpoint(
         validate_password(request.password, email=request.email)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    user = create_user(
-        db,
-        email=request.email,
-        password=request.password,
-        plan_id=request.plan_id,
-        is_admin=request.is_admin,
-        assign_default_plan=False,
-        email_verified=True,
-    )
+    if request.role_id is not None and role_service.get_role(db, request.role_id) is None:
+        raise HTTPException(status_code=400, detail="Role not found")
+    try:
+        user = create_user(
+            db,
+            email=request.email,
+            password=request.password,
+            plan_id=request.plan_id,
+            role_id=request.role_id,
+            assign_default_plan=False,
+            assign_default_role=request.role_id is None,
+            email_verified=True,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return user_out(user)
 
 
@@ -327,7 +415,7 @@ def create_user_endpoint(
 def update_user(
     user_id: int,
     request: UpdateUserRequest,
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_action("admin:users")),
     db: Session = Depends(get_db),
 ) -> UserOut:
     user = get_user_by_id(db, user_id)
@@ -335,7 +423,16 @@ def update_user(
         raise HTTPException(status_code=404, detail="User not found")
 
     deactivating = request.is_active is False and user.is_active
-    demoting = request.is_admin is False and user.is_admin
+    demoting = False
+    if "role_id" in request.model_fields_set:
+        current_is_admin = user.role is not None and user.role.is_system
+        if request.role_id is None:
+            demoting = current_is_admin
+        else:
+            new_role = role_service.get_role(db, request.role_id)
+            if new_role is None:
+                raise HTTPException(status_code=400, detail="Role not found")
+            demoting = current_is_admin and not new_role.is_system
     try:
         admin_user_service.guard_admin_account_change(
             db,
@@ -349,8 +446,17 @@ def update_user(
 
     if request.is_active is not None:
         user.is_active = request.is_active
-    if request.is_admin is not None:
-        user.is_admin = request.is_admin
+    if "role_id" in request.model_fields_set:
+        if request.role_id is None:
+            role_service.assign_role(db, user, None, commit=False)
+        else:
+            new_role = role_service.get_role(db, request.role_id)
+            if new_role is None:
+                raise HTTPException(status_code=400, detail="Role not found")
+            try:
+                role_service.assign_role(db, user, new_role, commit=False)
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
     if request.password is not None:
         try:
             validate_password(
@@ -381,7 +487,7 @@ def update_user(
 @router.get("/users/{user_id}/sessions", response_model=list[SessionOut])
 def list_user_sessions(
     user_id: int,
-    _: User = Depends(require_admin),
+    _: User = Depends(require_action("admin:users")),
     db: Session = Depends(get_db),
 ) -> list[SessionOut]:
     user = get_user_by_id(db, user_id)
@@ -404,7 +510,7 @@ def list_user_sessions(
 def revoke_user_session(
     user_id: int,
     session_id: int,
-    _: User = Depends(require_admin),
+    _: User = Depends(require_action("admin:users")),
     db: Session = Depends(get_db),
 ) -> None:
     user = get_user_by_id(db, user_id)
@@ -418,7 +524,7 @@ def revoke_user_session(
 @router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_user(
     user_id: int,
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_action("admin:users")),
     db: Session = Depends(get_db),
 ) -> None:
     user = get_user_by_id(db, user_id)
@@ -438,7 +544,7 @@ def delete_user(
 
 @router.get("/projects", response_model=list[ProjectSummary])
 def list_all_projects(
-    _: User = Depends(require_admin),
+    _: User = Depends(require_action("admin:projects")),
     db: Session = Depends(get_db),
     user_id: int | None = Query(default=None),
     pipeline_type: str | None = Query(default=None),
@@ -456,7 +562,7 @@ def list_all_projects(
 
 @router.get("/projects/export.csv")
 def export_projects_csv_endpoint(
-    _: User = Depends(require_admin),
+    _: User = Depends(require_action("admin:projects")),
     db: Session = Depends(get_db),
     user_id: int | None = Query(default=None),
     pipeline_type: str | None = Query(default=None),
@@ -471,7 +577,7 @@ def export_projects_csv_endpoint(
 
 @router.get("/projects/profiling/export.csv")
 def export_projects_profiling_csv_endpoint(
-    _: User = Depends(require_admin),
+    _: User = Depends(require_action("admin:projects")),
     db: Session = Depends(get_db),
     user_id: int | None = Query(default=None),
     pipeline_type: str | None = Query(default=None),
@@ -487,7 +593,7 @@ def export_projects_profiling_csv_endpoint(
 @router.get("/projects/{project_id}", response_model=ProjectDetail)
 def get_any_project(
     project_id: int,
-    _: User = Depends(require_admin),
+    _: User = Depends(require_action("admin:projects")),
     db: Session = Depends(get_db),
 ) -> ProjectDetail:
     project = project_service.get_project(db, project_id)
@@ -501,7 +607,7 @@ def get_any_project(
 def update_any_project(
     project_id: int,
     request: ProjectUpdateRequest,
-    _: User = Depends(require_admin),
+    _: User = Depends(require_action("admin:projects")),
     db: Session = Depends(get_db),
 ) -> ProjectDetail:
     project = project_service.get_project(db, project_id)
@@ -529,7 +635,7 @@ def update_any_project(
 def download_any_project_artifact(
     project_id: int,
     filename: str,
-    _: User = Depends(require_admin),
+    _: User = Depends(require_action("admin:projects")),
     db: Session = Depends(get_db),
 ):
     project = project_service.get_project(db, project_id)
@@ -547,7 +653,7 @@ def download_any_project_artifact(
 @router.delete("/projects/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_any_project(
     project_id: int,
-    _: User = Depends(require_admin),
+    _: User = Depends(require_action("admin:projects")),
     db: Session = Depends(get_db),
 ) -> None:
     project = project_service.get_project(db, project_id)

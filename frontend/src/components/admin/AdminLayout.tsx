@@ -8,6 +8,7 @@ import {
   FolderKanban,
   Flag,
   Globe,
+  KeyRound,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -22,26 +23,29 @@ import { useAuth } from '../../context/AuthContext'
 import { btnBase, btnCompact } from '../../lib/classes'
 
 const navItems = [
-  { to: '/admin', end: true, label: 'Overview', icon: LayoutDashboard },
-  { to: '/admin/users', end: false, label: 'Users', icon: Users },
-  { to: '/admin/projects', end: false, label: 'Projects', icon: FolderKanban },
-  { to: '/admin/plans', end: false, label: 'Plans', icon: Package },
-  { to: '/admin/site', end: false, label: 'Site CMS', icon: Globe },
-  { to: '/admin/blog', end: false, label: 'Blog', icon: Newspaper },
-  { to: '/admin/survey', end: false, label: 'Survey', icon: ClipboardList },
-  { to: '/admin/bug-reports', end: false, label: 'Bug Reports', icon: Flag },
-  { to: '/admin/monitoring', end: false, label: 'Monitoring', icon: Activity },
-  { to: '/admin/errors', end: false, label: 'Error Tracking', icon: Bug },
+  { to: '/admin', end: true, label: 'Overview', icon: LayoutDashboard, action: 'admin:access' },
+  { to: '/admin/users', end: false, label: 'Users', icon: Users, action: 'admin:users' },
+  { to: '/admin/projects', end: false, label: 'Projects', icon: FolderKanban, action: 'admin:projects' },
+  { to: '/admin/plans', end: false, label: 'Plans', icon: Package, action: 'admin:plans' },
+  { to: '/admin/roles', end: false, label: 'Roles', icon: KeyRound, action: 'admin:roles' },
+  { to: '/admin/site', end: false, label: 'Site CMS', icon: Globe, action: 'admin:site' },
+  { to: '/admin/blog', end: false, label: 'Blog', icon: Newspaper, action: 'admin:blog' },
+  { to: '/admin/survey', end: false, label: 'Survey', icon: ClipboardList, action: 'admin:survey' },
+  { to: '/admin/bug-reports', end: false, label: 'Bug Reports', icon: Flag, action: 'admin:bug_reports' },
+  { to: '/admin/monitoring', end: false, label: 'Monitoring', icon: Activity, action: 'admin:monitoring' },
+  { to: '/admin/errors', end: false, label: 'Error Tracking', icon: Bug, action: 'admin:errors' },
 ] as const
 
 export function AdminLayout() {
-  const { user, logout } = useAuth()
+  const { user, logout, hasAction } = useAuth()
   const navigate = useNavigate()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
-  if (!user?.is_admin) {
+  if (!user || !hasAction('admin:access')) {
     return <Navigate to="/studio" replace />
   }
+
+  const visibleNav = navItems.filter((item) => hasAction(item.action))
 
   const handleLogout = () => {
     void logout()
@@ -95,7 +99,7 @@ export function AdminLayout() {
         </div>
 
         <nav className="flex flex-1 flex-col gap-1 p-3">
-          {navItems.map(({ to, end, label, icon: Icon }) => (
+          {visibleNav.map(({ to, end, label, icon: Icon }) => (
             <NavLink
               key={to}
               to={to}
@@ -127,7 +131,7 @@ export function AdminLayout() {
           <div className="rounded-xl border border-border-subtle bg-surface-muted px-3 py-2.5">
             <div className="truncate text-sm font-medium text-foreground">{user.email}</div>
             <div className="mt-0.5 text-[0.7rem] uppercase tracking-wide text-muted">
-              Administrator
+              {user.role_name || (user.is_admin ? 'Administrator' : 'Staff')}
             </div>
           </div>
           <div className="flex items-center gap-2">

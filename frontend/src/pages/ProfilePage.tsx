@@ -629,7 +629,7 @@ export function ProfilePage() {
                     Role
                   </dt>
                   <dd className="mt-1 mb-0 text-sm font-medium text-foreground">
-                    {user.is_admin ? 'Administrator' : 'User'}
+                    {user.role_name || (user.is_admin ? 'Administrator' : 'User')}
                   </dd>
                 </div>
                 <div className="rounded-xl border border-border bg-surface-muted/40 px-4 py-3">

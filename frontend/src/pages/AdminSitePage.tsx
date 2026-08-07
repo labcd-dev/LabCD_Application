@@ -97,7 +97,8 @@ function ColorField({
 }
 
 export function AdminSitePage() {
-  const { user: currentUser } = useAuth()
+  const { hasAction } = useAuth()
+  const canManage = hasAction('admin:site')
   const [tab, setTab] = useState<Tab>('brand')
   const [brand, setBrand] = useState<SiteBrand | null>(null)
   const [landing, setLanding] = useState<Record<string, unknown>>({})
@@ -129,15 +130,15 @@ export function AdminSitePage() {
   }, [])
 
   useEffect(() => {
-    if (!currentUser?.is_admin) return
+    if (!canManage) return
     void load()
-  }, [currentUser?.is_admin, load])
+  }, [canManage, load])
 
   const filteredMenus = menus.filter((m) => m.location === menuLocation)
   const menuPagination = useClientPagination(filteredMenus, { resetKey: menuLocation })
 
-  if (!currentUser?.is_admin) {
-    return <Navigate to="/studio" replace />
+  if (!canManage) {
+    return <Navigate to="/admin" replace />
   }
 
   const saveBrand = async (event: FormEvent) => {

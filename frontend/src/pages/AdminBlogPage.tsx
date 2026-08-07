@@ -10,7 +10,8 @@ import { useClientPagination } from '../hooks/useClientPagination'
 import { btnBase, btnPrimary, pageIntro, pageSection, pageTitle } from '../lib/classes'
 
 export function AdminBlogPage() {
-  const { user: currentUser } = useAuth()
+  const { hasAction } = useAuth()
+  const canManage = hasAction('admin:blog')
   const [posts, setPosts] = useState<BlogPostListItem[]>([])
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
@@ -29,14 +30,14 @@ export function AdminBlogPage() {
   }, [])
 
   useEffect(() => {
-    if (!currentUser?.is_admin) return
+    if (!canManage) return
     void load()
-  }, [currentUser?.is_admin, load])
+  }, [canManage, load])
 
   const pagination = useClientPagination(posts)
 
-  if (!currentUser?.is_admin) {
-    return <Navigate to="/studio" replace />
+  if (!canManage) {
+    return <Navigate to="/admin" replace />
   }
 
   const handleDelete = async (postId: number) => {

@@ -35,7 +35,8 @@ function formatWhen(iso: string | null): string {
 }
 
 export function AdminSurveyPage() {
-  const { user: currentUser } = useAuth()
+  const { hasAction } = useAuth()
+  const canManage = hasAction('admin:survey')
   const [settings, setSettings] = useState<SurveySettings>({ enabled: true })
   const [videos, setVideos] = useState<TutorialVideo[]>([])
   const [profileRows, setProfileRows] = useState<ProfileSurveyResponseRow[]>([])
@@ -69,16 +70,16 @@ export function AdminSurveyPage() {
   }, [])
 
   useEffect(() => {
-    if (!currentUser?.is_admin) return
+    if (!canManage) return
     void load()
-  }, [currentUser?.is_admin, load])
+  }, [canManage, load])
 
   const videoPagination = useClientPagination(videos)
   const profilePagination = useClientPagination(profileRows)
   const feedbackPagination = useClientPagination(feedbackRows)
 
-  if (!currentUser?.is_admin) {
-    return <Navigate to="/studio" replace />
+  if (!canManage) {
+    return <Navigate to="/admin" replace />
   }
 
   const toggleEnabled = async (enabled: boolean) => {

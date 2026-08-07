@@ -40,7 +40,7 @@ export function Layout() {
   const isHome = location.pathname === '/studio'
   const isProjects = location.pathname.startsWith('/projects')
   const isProfile = location.pathname === '/profile'
-  const { user, logout } = useAuth()
+  const { user, logout, hasAction } = useAuth()
   const [menuOpen, setMenuOpen] = useState(false)
   const [tutorialOpen, setTutorialOpen] = useState(false)
   const [tutorialVideos, setTutorialVideos] = useState<TutorialVideo[]>([])
@@ -128,7 +128,7 @@ export function Layout() {
                 <Clapperboard className="size-4" aria-hidden />
                 {tutorialLoading ? 'Loading…' : 'Tutorials'}
               </button>
-              {user.is_admin && (
+              {hasAction('admin:access') && (
                 <Link to="/admin" className={navLinkClass(false)}>
                   <Shield className="size-4" aria-hidden />
                   Admin
@@ -229,7 +229,7 @@ export function Layout() {
                 <Clapperboard className="size-4 shrink-0" aria-hidden />
                 {tutorialLoading ? 'Loading…' : 'Tutorials'}
               </button>
-              {user.is_admin && (
+              {hasAction('admin:access') && (
                 <Link
                   to="/admin"
                   className={mobileNavLinkClass(false)}

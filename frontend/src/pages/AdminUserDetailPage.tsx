@@ -184,16 +184,16 @@ export function AdminUserDetailPage() {
               <p className="m-0 text-muted-text">{user.email}</p>
             )}
             <div className="flex flex-wrap items-center gap-2">
-              {user.is_admin ? (
-                <span className="inline-flex items-center gap-1 rounded-md bg-[color-mix(in_srgb,var(--app-primary)_14%,transparent)] px-2 py-0.5 text-xs font-semibold text-primary">
-                  <Shield className="size-3" aria-hidden />
-                  Admin
-                </span>
-              ) : (
-                <span className="rounded-md bg-surface-elevated px-2 py-0.5 text-xs font-medium text-muted-text ring-1 ring-border">
-                  User
-                </span>
-              )}
+              <span
+                className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold ${
+                  user.is_admin
+                    ? 'bg-[color-mix(in_srgb,var(--app-primary)_14%,transparent)] text-primary'
+                    : 'bg-surface-elevated font-medium text-muted-text ring-1 ring-border'
+                }`}
+              >
+                {user.is_admin ? <Shield className="size-3" aria-hidden /> : null}
+                {user.role_name || (user.is_admin ? 'Admin' : 'User')}
+              </span>
               <span
                 className={`rounded-md px-2 py-0.5 text-xs font-medium ${
                   user.is_active

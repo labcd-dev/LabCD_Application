@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from backend_api.common.csv_utils import csv_response
 from backend_api.db.models import User
 from backend_api.db.session import get_db
-from backend_api.http.dependencies import get_current_user, require_admin
+from backend_api.http.dependencies import get_current_user, require_action
 from backend_api.http.schemas.auth import UserOut
 from backend_api.http.schemas.survey import (
     FeedbackSurveyRequest,
@@ -111,7 +111,7 @@ def dismiss_tutorial(
 
 @router.get("/admin/survey/settings", response_model=SurveySettings)
 def get_survey_settings(
-    _: User = Depends(require_admin),
+    _: User = Depends(require_action("admin:survey")),
     db: Session = Depends(get_db),
 ) -> SurveySettings:
     return survey_service.get_settings(db)
@@ -120,7 +120,7 @@ def get_survey_settings(
 @router.patch("/admin/survey/settings", response_model=SurveySettings)
 def update_survey_settings(
     request: SurveySettingsUpdate,
-    _: User = Depends(require_admin),
+    _: User = Depends(require_action("admin:survey")),
     db: Session = Depends(get_db),
 ) -> SurveySettings:
     return survey_service.update_settings(db, enabled=request.enabled)
@@ -128,7 +128,7 @@ def update_survey_settings(
 
 @router.get("/admin/survey/responses", response_model=SurveyResponsesOut)
 def list_survey_responses(
-    _: User = Depends(require_admin),
+    _: User = Depends(require_action("admin:survey")),
     db: Session = Depends(get_db),
 ) -> SurveyResponsesOut:
     profile_users = survey_service.list_profile_responses(db)
@@ -168,7 +168,7 @@ def list_survey_responses(
 
 @router.get("/admin/survey/responses/profile/export.csv")
 def export_profile_survey_csv_endpoint(
-    _: User = Depends(require_admin),
+    _: User = Depends(require_action("admin:survey")),
     db: Session = Depends(get_db),
 ) -> StreamingResponse:
     return csv_response(export_profile_survey_csv(db), "profile_survey_responses.csv")
@@ -176,7 +176,7 @@ def export_profile_survey_csv_endpoint(
 
 @router.get("/admin/survey/responses/feedback/export.csv")
 def export_feedback_survey_csv_endpoint(
-    _: User = Depends(require_admin),
+    _: User = Depends(require_action("admin:survey")),
     db: Session = Depends(get_db),
 ) -> StreamingResponse:
     return csv_response(export_feedback_survey_csv(db), "feedback_survey_responses.csv")
@@ -184,7 +184,7 @@ def export_feedback_survey_csv_endpoint(
 
 @router.get("/admin/tutorial-videos", response_model=list[TutorialVideoOut])
 def list_tutorial_videos(
-    _: User = Depends(require_admin),
+    _: User = Depends(require_action("admin:survey")),
     db: Session = Depends(get_db),
 ) -> list[TutorialVideoOut]:
     return [TutorialVideoOut.model_validate(v) for v in survey_service.list_videos(db)]
@@ -194,7 +194,7 @@ def list_tutorial_videos(
 async def upload_tutorial_video(
     title: str = Form(..., min_length=1, max_length=200),
     file: UploadFile = File(...),
-    _: User = Depends(require_admin),
+    _: User = Depends(require_action("admin:survey")),
     db: Session = Depends(get_db),
 ) -> TutorialVideoOut:
     try:
@@ -208,7 +208,7 @@ async def upload_tutorial_video(
 def update_tutorial_video(
     video_id: int,
     request: TutorialVideoUpdateRequest,
-    _: User = Depends(require_admin),
+    _: User = Depends(require_action("admin:survey")),
     db: Session = Depends(get_db),
 ) -> TutorialVideoOut:
     video = survey_service.get_video(db, video_id)
@@ -226,7 +226,7 @@ def update_tutorial_video(
 @router.delete("/admin/tutorial-videos/{video_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_tutorial_video(
     video_id: int,
-    _: User = Depends(require_admin),
+    _: User = Depends(require_action("admin:survey")),
     db: Session = Depends(get_db),
 ) -> None:
     video = survey_service.get_video(db, video_id)

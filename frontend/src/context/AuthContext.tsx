@@ -135,7 +135,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const hasAction = useCallback(
     (code: string) => {
       if (!user) return false
-      if (user.is_admin) return true
       return user.actions.includes(code)
     },
     [user],

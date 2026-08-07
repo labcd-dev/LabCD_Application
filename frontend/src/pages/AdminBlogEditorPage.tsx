@@ -20,7 +20,8 @@ export function AdminBlogEditorPage() {
   const { id } = useParams<{ id: string }>()
   const isNew = id === 'new'
   const navigate = useNavigate()
-  const { user: currentUser } = useAuth()
+  const { hasAction } = useAuth()
+  const canManage = hasAction('admin:blog')
   const [title, setTitle] = useState('')
   const [slug, setSlug] = useState('')
   const [excerpt, setExcerpt] = useState('')
@@ -55,12 +56,12 @@ export function AdminBlogEditorPage() {
   }, [id, isNew])
 
   useEffect(() => {
-    if (!currentUser?.is_admin) return
+    if (!canManage) return
     void load()
-  }, [currentUser?.is_admin, load])
+  }, [canManage, load])
 
-  if (!currentUser?.is_admin) {
-    return <Navigate to="/studio" replace />
+  if (!canManage) {
+    return <Navigate to="/admin" replace />
   }
 
   const handleSubmit = async (event: FormEvent) => {

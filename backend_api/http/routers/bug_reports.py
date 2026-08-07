@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from backend_api.common.csv_utils import csv_response
 from backend_api.db.models import User
 from backend_api.db.session import get_db
-from backend_api.http.dependencies import get_current_user, require_admin
+from backend_api.http.dependencies import get_current_user, require_action
 from backend_api.http.schemas.bug_reports import (
     BugReportOut,
     BugReportSettings,
@@ -70,7 +70,7 @@ async def create_bug_report(
 
 @router.get("/admin/bug-reports/settings", response_model=BugReportSettings)
 def admin_get_bug_report_settings(
-    _: User = Depends(require_admin),
+    _: User = Depends(require_action("admin:bug_reports")),
     db: Session = Depends(get_db),
 ) -> BugReportSettings:
     return bug_report_service.get_settings(db)
@@ -79,7 +79,7 @@ def admin_get_bug_report_settings(
 @router.patch("/admin/bug-reports/settings", response_model=BugReportSettings)
 def admin_update_bug_report_settings(
     body: BugReportSettingsUpdate,
-    _: User = Depends(require_admin),
+    _: User = Depends(require_action("admin:bug_reports")),
     db: Session = Depends(get_db),
 ) -> BugReportSettings:
     return bug_report_service.update_settings(db, enabled=body.enabled)
@@ -88,7 +88,7 @@ def admin_update_bug_report_settings(
 @router.get("/admin/bug-reports/export.csv")
 def admin_export_bug_reports_csv(
     report_status: str | None = Query(None, alias="status", pattern="^(open|fixed|all)$"),
-    _: User = Depends(require_admin),
+    _: User = Depends(require_action("admin:bug_reports")),
     db: Session = Depends(get_db),
 ) -> StreamingResponse:
     content = bug_report_service.export_csv(db, status=report_status)
@@ -98,7 +98,7 @@ def admin_export_bug_reports_csv(
 @router.get("/admin/bug-reports", response_model=list[BugReportOut])
 def admin_list_bug_reports(
     report_status: str | None = Query(None, alias="status", pattern="^(open|fixed|all)$"),
-    _: User = Depends(require_admin),
+    _: User = Depends(require_action("admin:bug_reports")),
     db: Session = Depends(get_db),
 ) -> list[BugReportOut]:
     rows = bug_report_service.list_reports(db, status=report_status)
@@ -108,7 +108,7 @@ def admin_list_bug_reports(
 @router.get("/admin/bug-reports/{report_id}", response_model=BugReportOut)
 def admin_get_bug_report(
     report_id: int,
-    _: User = Depends(require_admin),
+    _: User = Depends(require_action("admin:bug_reports")),
     db: Session = Depends(get_db),
 ) -> BugReportOut:
     row = bug_report_service.get_report(db, report_id)
@@ -121,7 +121,7 @@ def admin_get_bug_report(
 def admin_update_bug_report(
     report_id: int,
     body: BugReportStatusUpdate,
-    _: User = Depends(require_admin),
+    _: User = Depends(require_action("admin:bug_reports")),
     db: Session = Depends(get_db),
 ) -> BugReportOut:
     row = bug_report_service.get_report(db, report_id)

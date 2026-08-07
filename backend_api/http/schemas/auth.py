@@ -89,6 +89,32 @@ class SetDefaultPlanRequest(BaseModel):
     plan_id: int
 
 
+class RoleOut(BaseModel):
+    id: int
+    name: str
+    description: str
+    is_system: bool
+    is_active: bool
+    actions: list[str]
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class RoleCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    description: str = ""
+    actions: list[str] = Field(default_factory=list)
+    is_active: bool = True
+
+
+class RoleUpdateRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    description: str | None = None
+    actions: list[str] | None = None
+    is_active: bool | None = None
+
+
 class UserOut(BaseModel):
     id: int
     email: EmailStr
@@ -100,6 +126,8 @@ class UserOut(BaseModel):
     email_verified: bool = True
     plan_id: int | None = None
     plan_name: str | None = None
+    role_id: int | None = None
+    role_name: str | None = None
     actions: list[str]
     created_at: datetime
     profile_survey_completed: bool = False
@@ -126,13 +154,13 @@ class ChangePasswordRequest(BaseModel):
 class CreateUserRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=MIN_PASSWORD_LENGTH)
-    is_admin: bool = False
+    role_id: int | None = None
     plan_id: int | None = None
 
 
 class UpdateUserRequest(BaseModel):
     is_active: bool | None = None
-    is_admin: bool | None = None
+    role_id: int | None = None
     password: str | None = Field(default=None, min_length=MIN_PASSWORD_LENGTH)
     plan_id: int | None = None
 

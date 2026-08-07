@@ -50,7 +50,7 @@ def update_settings(db: Session, *, enabled: bool | None) -> SurveySettings:
 
 
 def needs_profile_survey(db: Session, user: User) -> bool:
-    if user.is_admin:
+    if user.role is not None and user.role.is_system:
         return False
     if not is_survey_enabled(db):
         return False

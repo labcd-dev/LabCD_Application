@@ -31,6 +31,13 @@ plan_actions = Table(
     Column("action_id", ForeignKey("actions.id", ondelete="CASCADE"), primary_key=True),
 )
 
+role_actions = Table(
+    "role_actions",
+    Base.metadata,
+    Column("role_id", ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True),
+    Column("action_id", ForeignKey("actions.id", ondelete="CASCADE"), primary_key=True),
+)
+
 # JSONB on PostgreSQL; plain JSON elsewhere (e.g. local SQLite tests).
 JsonDict = JSON().with_variant(JSONB(), "postgresql")
 
@@ -73,6 +80,39 @@ class Plan(Base):
         return [str(item) for item in raw if str(item).strip()]
 
 
+class Role(Base):
+    """Named permission bundle assignable to users (admin + module/pipeline actions)."""
+
+    __tablename__ = "roles"
+    __table_args__ = (UniqueConstraint("name", name="uq_roles_name"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    description: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    is_system: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    actions: Mapped[list[Action]] = relationship(
+        "Action",
+        secondary=role_actions,
+        back_populates="roles",
+        lazy="selectin",
+    )
+    users: Mapped[list[User]] = relationship(
+        "User",
+        back_populates="role",
+        lazy="noload",
+    )
+
+    def action_codes(self) -> list[str]:
+        return sorted(action.code for action in self.actions)
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -88,6 +128,11 @@ class User(Base):
     theme: Mapped[str] = mapped_column(String(20), default="system", nullable=False)
     plan_id: Mapped[int | None] = mapped_column(
         ForeignKey("plans.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    role_id: Mapped[int | None] = mapped_column(
+        ForeignKey("roles.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
@@ -120,6 +165,11 @@ class User(Base):
         back_populates="users",
         lazy="selectin",
     )
+    role: Mapped[Role | None] = relationship(
+        "Role",
+        back_populates="users",
+        lazy="selectin",
+    )
     projects: Mapped[list[Project]] = relationship(
         "Project",
         back_populates="owner",
@@ -138,14 +188,19 @@ class User(Base):
         lazy="noload",
     )
 
+    def sync_is_admin_flag(self) -> None:
+        """Keep is_admin derived from the system Admin role for legacy fields."""
+        self.is_admin = bool(self.role is not None and self.role.is_system)
+
     def action_codes(self) -> list[str]:
-        if self.plan is None:
-            return []
-        return self.plan.action_codes()
+        codes: set[str] = set()
+        if self.role is not None:
+            codes.update(self.role.action_codes())
+        if self.plan is not None:
+            codes.update(self.plan.action_codes())
+        return sorted(codes)
 
     def has_action(self, code: str) -> bool:
-        if self.is_admin:
-            return True
         return code in self.action_codes()
 
     def model_ids(self) -> list[str]:
@@ -154,7 +209,7 @@ class User(Base):
         return self.plan.model_ids()
 
     def has_model(self, model: str) -> bool:
-        if self.is_admin:
+        if self.role is not None and self.role.is_system:
             return True
         return model in self.model_ids()
 
@@ -167,10 +222,16 @@ class Action(Base):
     code: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     description: Mapped[str] = mapped_column(Text, default="", nullable=False)
 
-    # noload: avoid loading every Plan for every Action on each /auth/me.
+    # noload: avoid loading every Plan/Role for every Action on each /auth/me.
     plans: Mapped[list[Plan]] = relationship(
         "Plan",
         secondary=plan_actions,
+        back_populates="actions",
+        lazy="noload",
+    )
+    roles: Mapped[list[Role]] = relationship(
+        "Role",
+        secondary=role_actions,
         back_populates="actions",
         lazy="noload",
     )

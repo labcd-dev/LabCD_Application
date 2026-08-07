@@ -42,7 +42,8 @@ function truncate(text: string, max = 120): string {
 }
 
 export function AdminBugReportsPage() {
-  const { user: currentUser } = useAuth()
+  const { hasAction } = useAuth()
+  const canManage = hasAction('admin:bug_reports')
   const [settings, setSettings] = useState<BugReportSettings>({ enabled: true })
   const [reports, setReports] = useState<BugReport[]>([])
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('open')
@@ -72,14 +73,14 @@ export function AdminBugReportsPage() {
   }, [statusFilter])
 
   useEffect(() => {
-    if (!currentUser?.is_admin) return
+    if (!canManage) return
     void load()
-  }, [currentUser?.is_admin, load])
+  }, [canManage, load])
 
   const pagination = useClientPagination(reports, { resetKey: statusFilter })
 
-  if (!currentUser?.is_admin) {
-    return <Navigate to="/studio" replace />
+  if (!canManage) {
+    return <Navigate to="/admin" replace />
   }
 
   const selected = reports.find((r) => r.id === selectedId) ?? null

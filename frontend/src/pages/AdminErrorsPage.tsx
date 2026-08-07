@@ -40,7 +40,8 @@ function formatWhen(iso: string | null): string {
 }
 
 export function AdminErrorsPage() {
-  const { user: currentUser } = useAuth()
+  const { hasAction } = useAuth()
+  const canManage = hasAction('admin:errors')
   const [settings, setSettings] = useState<ErrorTrackingSettings>(emptySettings)
   const [events, setEvents] = useState<ErrorEvent[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -79,9 +80,9 @@ export function AdminErrorsPage() {
   }, [query, source, statusCode])
 
   useEffect(() => {
-    if (!currentUser?.is_admin) return
+    if (!canManage) return
     void load()
-  }, [currentUser?.is_admin, load])
+  }, [canManage, load])
 
   const filteredHint = useMemo(() => {
     const parts: string[] = []
@@ -95,8 +96,8 @@ export function AdminErrorsPage() {
     resetKey: `${source}|${statusCode}|${query}`,
   })
 
-  if (!currentUser?.is_admin) {
-    return <Navigate to="/studio" replace />
+  if (!canManage) {
+    return <Navigate to="/admin" replace />
   }
 
   const updateToggle = async (patch: Partial<ErrorTrackingSettings>) => {

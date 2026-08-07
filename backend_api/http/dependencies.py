@@ -152,7 +152,8 @@ def get_optional_user(
 
 
 def require_admin(user: User = Depends(get_current_user)) -> User:
-    if not user.is_admin:
+    """Require admin-area access (any user with admin:access)."""
+    if not user.has_action("admin:access"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
     return user
 
@@ -183,7 +184,9 @@ def assert_model_allowed(user: User, model: str | None) -> None:
 
 
 def assert_job_access(job: Job, user: User) -> None:
-    if user.is_admin:
+    if user.role is not None and user.role.is_system:
+        return
+    if user.has_action("admin:projects"):
         return
     if job.user_id is None or job.user_id != user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Job access denied")

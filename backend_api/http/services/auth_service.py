@@ -10,7 +10,7 @@ from fastapi import Request
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 
-from backend_api.db.models import Action, LoginHistory, Plan, User
+from backend_api.db.models import Action, LoginHistory, Plan, Role, User
 from backend_api.http.config import (
     ADMIN_EMAIL,
     ADMIN_PASSWORD,
@@ -33,6 +33,17 @@ DEFAULT_ACTIONS: list[tuple[str, str]] = [
     ("module:silo", "Run SiloDesigner jobs"),
     ("module:mulo", "Run MuloDesigner jobs"),
     ("module:case_studies", "Load and use case studies"),
+    ("admin:access", "Enter the admin area"),
+    ("admin:users", "Manage users"),
+    ("admin:projects", "Manage all projects"),
+    ("admin:plans", "Manage subscription plans"),
+    ("admin:roles", "Manage roles and permissions"),
+    ("admin:site", "Manage site CMS"),
+    ("admin:blog", "Manage blog"),
+    ("admin:survey", "Manage surveys and tutorials"),
+    ("admin:bug_reports", "Moderate bug reports"),
+    ("admin:monitoring", "View system monitoring"),
+    ("admin:errors", "Manage error tracking"),
 ]
 
 PIPELINE_ACTIONS = {
@@ -150,12 +161,14 @@ def create_user(
     email: str,
     password: str,
     plan_id: int | None = None,
+    role_id: int | None = None,
     is_admin: bool = False,
     assign_default_plan: bool = True,
+    assign_default_role: bool = True,
     email_verified: bool | None = None,
     skip_password_policy: bool = False,
 ) -> User:
-    from backend_api.http.services import plan_service
+    from backend_api.http.services import plan_service, role_service
     from backend_api.http.services.password_policy import validate_password
 
     if not skip_password_policy:
@@ -165,16 +178,34 @@ def create_user(
     if resolved_plan_id is None and assign_default_plan and not is_admin:
         resolved_plan_id = plan_service.get_default_plan_id(db)
 
-    verified = email_verified if email_verified is not None else bool(is_admin)
+    resolved_role: Role | None = None
+    if role_id is not None:
+        resolved_role = role_service.get_role(db, role_id)
+        if resolved_role is None:
+            raise ValueError("Role not found")
+        if not resolved_role.is_active and not resolved_role.is_system:
+            raise ValueError("Cannot assign an inactive role")
+    elif is_admin:
+        resolved_role = role_service.get_admin_role(db)
+    elif assign_default_role:
+        resolved_role = role_service.get_user_role(db)
+
+    verified = email_verified if email_verified is not None else bool(
+        resolved_role is not None and resolved_role.is_system
+    )
 
     user = User(
         email=email.lower().strip(),
         password_hash=hash_password(password),
-        is_admin=is_admin,
+        is_admin=False,
         is_active=True,
         email_verified=verified,
         plan_id=resolved_plan_id,
+        role_id=resolved_role.id if resolved_role is not None else None,
     )
+    if resolved_role is not None:
+        user.role = resolved_role
+        user.sync_is_admin_flag()
     db.add(user)
     db.commit()
     db.refresh(user)
@@ -242,13 +273,15 @@ def record_login_attempt(
 def count_active_admins(db: Session) -> int:
     return (
         db.query(User)
-        .filter(User.is_admin.is_(True), User.is_active.is_(True))
+        .join(Role, User.role_id == Role.id)
+        .filter(Role.is_system.is_(True), User.is_active.is_(True))
         .count()
     )
 
 
 def is_last_active_admin(db: Session, user: User) -> bool:
-    return bool(user.is_admin and user.is_active and count_active_admins(db) <= 1)
+    on_admin_role = bool(user.role is not None and user.role.is_system)
+    return bool(on_admin_role and user.is_active and count_active_admins(db) <= 1)
 
 
 def client_ip_from_request(request: Request) -> str | None:
@@ -297,6 +330,8 @@ def _ensure_default_plans(db: Session) -> Plan:
 
 
 def seed_auth_data(db: Session) -> None:
+    from backend_api.http.services import role_service
+
     for code, description in DEFAULT_ACTIONS:
         action = db.query(Action).filter(Action.code == code).first()
         if action is None:
@@ -306,6 +341,9 @@ def seed_auth_data(db: Session) -> None:
     db.commit()
 
     free_plan = _ensure_default_plans(db)
+
+    all_codes = [code for code, _desc in DEFAULT_ACTIONS]
+    admin_role, user_role = role_service.ensure_default_roles(db, all_codes)
 
     # Rename legacy reserved-domain admin if present (email-validator rejects .local).
     legacy_admin = get_user_by_email(db, "admin@labcd.local")
@@ -322,8 +360,10 @@ def seed_auth_data(db: Session) -> None:
             email=ADMIN_EMAIL,
             password=ADMIN_PASSWORD,
             plan_id=None,
+            role_id=admin_role.id,
             is_admin=True,
             assign_default_plan=False,
+            assign_default_role=False,
             email_verified=True,
             skip_password_policy=True,
         )
@@ -332,7 +372,11 @@ def seed_auth_data(db: Session) -> None:
             admin.email_verified = True
             db.add(admin)
             db.commit()
-        if admin.plan_id is None and not admin.is_admin:
+        if admin.plan_id is None and not (
+            admin.role is not None and admin.role.is_system
+        ) and not admin.is_admin:
             admin.plan_id = free_plan.id
             db.add(admin)
             db.commit()
+
+    role_service.migrate_users_to_roles(db, admin_role, user_role)

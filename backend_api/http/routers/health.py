@@ -20,7 +20,7 @@ def list_models(user: User | None = Depends(get_optional_user)) -> ModelsRespons
     """Return LLM/RAG model catalogs, filtered by the caller's plan when authenticated."""
     if user is None:
         llm_models = list(DEFAULT_LLM_MODELS)
-    elif user.is_admin:
+    elif user.role is not None and user.role.is_system:
         llm_models = list(DEFAULT_LLM_MODELS)
     else:
         allowed = set(user.model_ids())

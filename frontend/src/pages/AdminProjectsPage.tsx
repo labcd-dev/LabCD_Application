@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import { FolderKanban, Search, Trash2 } from 'lucide-react'
 import { adminApi } from '../api/endpoints'
 import type { AuthUser, ProjectSummary } from '../api/types'
 import { AdminDownloadCsvButton } from '../components/admin/AdminDownloadCsvButton'
 import { AdminPagination } from '../components/admin/AdminPagination'
 import { StatusMessage } from '../components/StatusMessage'
+import { useAuth } from '../context/AuthContext'
 import { useClientPagination } from '../hooks/useClientPagination'
 import { downloadCsv } from '../lib/downloadCsv'
 import {
@@ -18,6 +19,8 @@ import {
 import { pipelineLabel, statusBadgeClass } from '../lib/projectLabels'
 
 export function AdminProjectsPage() {
+  const { hasAction } = useAuth()
+  const canManage = hasAction('admin:projects')
   const [projects, setProjects] = useState<ProjectSummary[]>([])
   const [users, setUsers] = useState<AuthUser[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -30,15 +33,16 @@ export function AdminProjectsPage() {
     setLoading(true)
     setError(null)
     try {
-      const [projectList, userList] = await Promise.all([
-        adminApi.listProjects({
-          user_id: userId ? Number(userId) : undefined,
-          pipeline_type: pipelineFilter || undefined,
-        }),
-        adminApi.listUsers(),
-      ])
+      const projectList = await adminApi.listProjects({
+        user_id: userId ? Number(userId) : undefined,
+        pipeline_type: pipelineFilter || undefined,
+      })
       setProjects(projectList)
-      setUsers(userList)
+      try {
+        setUsers(await adminApi.listUsers())
+      } catch {
+        setUsers([])
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load projects')
     } finally {
@@ -47,8 +51,9 @@ export function AdminProjectsPage() {
   }
 
   useEffect(() => {
+    if (!canManage) return
     void load()
-  }, [userId, pipelineFilter])
+  }, [userId, pipelineFilter, canManage])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -65,6 +70,10 @@ export function AdminProjectsPage() {
   const pagination = useClientPagination(filtered, {
     resetKey: `${query}|${userId}|${pipelineFilter}`,
   })
+
+  if (!canManage) {
+    return <Navigate to="/admin" replace />
+  }
 
   const handleDelete = async (projectId: number) => {
     if (!window.confirm('Delete this user project? This cannot be undone.')) return

@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from backend_api.db.models import User
 from backend_api.db.session import get_db
-from backend_api.http.dependencies import require_admin
+from backend_api.http.dependencies import require_action
 from backend_api.http.schemas.blog import (
     BlogPostCreate,
     BlogPostListItem,
@@ -34,7 +34,7 @@ def get_published_post(slug: str, db: Session = Depends(get_db)) -> BlogPostOut:
 
 @router.get("/admin/blog", response_model=list[BlogPostListItem])
 def admin_list_posts(
-    _: User = Depends(require_admin),
+    _: User = Depends(require_action("admin:blog")),
     db: Session = Depends(get_db),
 ) -> list[BlogPostListItem]:
     return [BlogPostListItem.model_validate(p) for p in blog_service.list_posts(db)]
@@ -43,7 +43,7 @@ def admin_list_posts(
 @router.get("/admin/blog/{post_id}", response_model=BlogPostOut)
 def admin_get_post(
     post_id: int,
-    _: User = Depends(require_admin),
+    _: User = Depends(require_action("admin:blog")),
     db: Session = Depends(get_db),
 ) -> BlogPostOut:
     post = blog_service.get_post(db, post_id)
@@ -55,7 +55,7 @@ def admin_get_post(
 @router.post("/admin/blog", response_model=BlogPostOut, status_code=status.HTTP_201_CREATED)
 def admin_create_post(
     body: BlogPostCreate,
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_action("admin:blog")),
     db: Session = Depends(get_db),
 ) -> BlogPostOut:
     row = blog_service.create_post(
@@ -75,7 +75,7 @@ def admin_create_post(
 def admin_update_post(
     post_id: int,
     body: BlogPostUpdate,
-    _: User = Depends(require_admin),
+    _: User = Depends(require_action("admin:blog")),
     db: Session = Depends(get_db),
 ) -> BlogPostOut:
     post = blog_service.get_post(db, post_id)
@@ -98,7 +98,7 @@ def admin_update_post(
 @router.delete("/admin/blog/{post_id}", status_code=status.HTTP_204_NO_CONTENT)
 def admin_delete_post(
     post_id: int,
-    _: User = Depends(require_admin),
+    _: User = Depends(require_action("admin:blog")),
     db: Session = Depends(get_db),
 ) -> None:
     post = blog_service.get_post(db, post_id)

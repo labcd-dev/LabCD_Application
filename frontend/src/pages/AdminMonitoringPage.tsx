@@ -15,8 +15,10 @@ import type { MonitoringResponse, MonitoringSnapshot } from '../api/types'
 import { AdminDownloadCsvButton } from '../components/admin/AdminDownloadCsvButton'
 import { PlotlyChart } from '../components/PlotlyChart'
 import { StatusMessage } from '../components/StatusMessage'
+import { useAuth } from '../context/AuthContext'
 import { downloadCsv } from '../lib/downloadCsv'
 import { btnBase, btnCompact, cardPanel } from '../lib/classes'
+import { Navigate } from 'react-router-dom'
 
 const POLL_MS = 5000
 
@@ -99,6 +101,8 @@ const sparkLayout = {
 }
 
 export function AdminMonitoringPage() {
+  const { hasAction } = useAuth()
+  const canManage = hasAction('admin:monitoring')
   const [data, setData] = useState<MonitoringResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -122,15 +126,20 @@ export function AdminMonitoringPage() {
   }, [])
 
   useEffect(() => {
+    if (!canManage) return
     void load()
     const poll = window.setInterval(() => void load(), POLL_MS)
     return () => window.clearInterval(poll)
-  }, [load])
+  }, [load, canManage])
 
   useEffect(() => {
     const id = window.setInterval(() => setTick((n) => n + 1), 1000)
     return () => window.clearInterval(id)
   }, [])
+
+  if (!canManage) {
+    return <Navigate to="/admin" replace />
+  }
 
   const current = data?.current
   const history = data?.history ?? []

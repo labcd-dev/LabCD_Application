@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from backend_api.db.models import User
 from backend_api.db.session import get_db
-from backend_api.http.dependencies import require_admin
+from backend_api.http.dependencies import require_action
 from backend_api.http.schemas.common import MediaUploadResponse
 from backend_api.http.schemas.site import (
     LandingPayload,
@@ -40,7 +40,7 @@ def get_landing(db: Session = Depends(get_db)) -> LandingPayload:
 async def admin_upload_media(
     file: UploadFile = File(...),
     prefix: str = Form("image"),
-    _: User = Depends(require_admin),
+    _: User = Depends(require_action("admin:site")),
 ) -> MediaUploadResponse:
     try:
         url = await media_service.save_admin_image(file, prefix=prefix)
@@ -51,7 +51,7 @@ async def admin_upload_media(
 
 @router.get("/admin/site/brand", response_model=SiteBrand)
 def admin_get_brand(
-    _: User = Depends(require_admin),
+    _: User = Depends(require_action("admin:site")),
     db: Session = Depends(get_db),
 ) -> SiteBrand:
     return site_service.get_brand(db)
@@ -60,7 +60,7 @@ def admin_get_brand(
 @router.put("/admin/site/brand", response_model=SiteBrand)
 def admin_put_brand(
     body: SiteBrand,
-    _: User = Depends(require_admin),
+    _: User = Depends(require_action("admin:site")),
     db: Session = Depends(get_db),
 ) -> SiteBrand:
     return site_service.set_brand(db, body)
@@ -68,7 +68,7 @@ def admin_put_brand(
 
 @router.get("/admin/site/landing")
 def admin_get_landing(
-    _: User = Depends(require_admin),
+    _: User = Depends(require_action("admin:site")),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     return site_service.get_landing_content(db)
@@ -77,7 +77,7 @@ def admin_get_landing(
 @router.put("/admin/site/landing")
 def admin_put_landing(
     body: dict[str, Any],
-    _: User = Depends(require_admin),
+    _: User = Depends(require_action("admin:site")),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     return site_service.set_landing_content(db, body)
@@ -86,7 +86,7 @@ def admin_put_landing(
 @router.get("/admin/site/menus", response_model=list[NavMenuItemOut])
 def admin_list_menus(
     location: str | None = None,
-    _: User = Depends(require_admin),
+    _: User = Depends(require_action("admin:site")),
     db: Session = Depends(get_db),
 ) -> list[NavMenuItemOut]:
     return [NavMenuItemOut.model_validate(m) for m in site_service.list_menus(db, location)]
@@ -95,7 +95,7 @@ def admin_list_menus(
 @router.post("/admin/site/menus", response_model=NavMenuItemOut, status_code=status.HTTP_201_CREATED)
 def admin_create_menu(
     body: NavMenuItemCreate,
-    _: User = Depends(require_admin),
+    _: User = Depends(require_action("admin:site")),
     db: Session = Depends(get_db),
 ) -> NavMenuItemOut:
     try:
@@ -116,7 +116,7 @@ def admin_create_menu(
 def admin_update_menu(
     menu_id: int,
     body: NavMenuItemUpdate,
-    _: User = Depends(require_admin),
+    _: User = Depends(require_action("admin:site")),
     db: Session = Depends(get_db),
 ) -> NavMenuItemOut:
     row = site_service.get_menu(db, menu_id)
@@ -140,7 +140,7 @@ def admin_update_menu(
 @router.delete("/admin/site/menus/{menu_id}", status_code=status.HTTP_204_NO_CONTENT)
 def admin_delete_menu(
     menu_id: int,
-    _: User = Depends(require_admin),
+    _: User = Depends(require_action("admin:site")),
     db: Session = Depends(get_db),
 ) -> None:
     row = site_service.get_menu(db, menu_id)
