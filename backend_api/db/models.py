@@ -11,6 +11,7 @@ from sqlalchemy import (
     Column,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
@@ -471,6 +472,33 @@ class BugReport(Base):
     fixed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     user: Mapped[User | None] = relationship("User", back_populates="bug_reports")
+
+
+class AnalyticsEvent(Base):
+    """Durable product-analytics event (daily activity or module run)."""
+
+    __tablename__ = "analytics_events"
+    __table_args__ = (
+        Index("ix_analytics_events_type_created", "event_type", "created_at"),
+        Index("ix_analytics_events_type_module_created", "event_type", "module", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    event_type: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    module: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+        index=True,
+    )
+
+    user: Mapped[User] = relationship("User")
 
 
 class LoginHistory(Base):

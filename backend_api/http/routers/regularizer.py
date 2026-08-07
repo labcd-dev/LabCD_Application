@@ -10,6 +10,7 @@ from backend_api.http.schemas.regularizer import (
     StandardizeRequest,
     StandardizeResponse,
 )
+from backend_api.http.services.analytics_service import record_module_use
 from backend_api.http.services.regularizer_service import run_regularize, run_standardize
 
 router = APIRouter(prefix="/regularize", tags=["regularizer"])
@@ -21,6 +22,7 @@ def regularize_file(
     user: User = Depends(require_action("module:regularize")),
 ) -> RegularizeResponse:
     assert_model_allowed(user, request.model)
+    record_module_use(user.id, "regularize")
     result = run_regularize(
         request.file_content,
         request.file_name,
@@ -40,5 +42,6 @@ def standardize_file(
     user: User = Depends(require_action("module:regularize")),
 ) -> StandardizeResponse:
     assert_model_allowed(user, request.model)
+    record_module_use(user.id, "regularize")
     result = run_standardize(request.file_content, request.model, request.silo_pipeline)
     return StandardizeResponse(file_content=result["file_content"])

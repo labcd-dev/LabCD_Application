@@ -263,6 +263,9 @@ def start_trimmer_job(
         metadata=metadata,
         user_id=user_id,
     )
+    from backend_api.http.services.analytics_service import record_module_use
+
+    record_module_use(user_id, "trimmer")
     linked_project_id = link_or_create_for_job(
         user_id=user_id,
         project_id=project_id,

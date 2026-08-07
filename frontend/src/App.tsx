@@ -11,6 +11,7 @@ import { AdminBlogPage } from './pages/AdminBlogPage'
 import { AdminBugReportsPage } from './pages/AdminBugReportsPage'
 import { AdminOverviewPage } from './pages/AdminOverviewPage'
 import { AdminMonitoringPage } from './pages/AdminMonitoringPage'
+import { AdminAnalyticsPage } from './pages/AdminAnalyticsPage'
 import { AdminErrorsPage } from './pages/AdminErrorsPage'
 import { AdminAuditLogPage } from './pages/AdminAuditLogPage'
 import { AdminApiKeysPage } from './pages/AdminApiKeysPage'
@@ -79,6 +80,7 @@ export default function App() {
                   <Route path="blog" element={<AdminBlogPage />} />
                   <Route path="blog/:id" element={<AdminBlogEditorPage />} />
                   <Route path="monitoring" element={<AdminMonitoringPage />} />
+                  <Route path="analytics" element={<AdminAnalyticsPage />} />
                   <Route path="errors" element={<AdminErrorsPage />} />
                   <Route path="audit-log" element={<AdminAuditLogPage />} />
                   <Route path="api-keys" element={<AdminApiKeysPage />} />

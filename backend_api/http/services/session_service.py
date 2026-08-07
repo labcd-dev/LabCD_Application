@@ -33,6 +33,9 @@ def create_session(
     db.add(row)
     db.commit()
     db.refresh(row)
+    from backend_api.http.services.analytics_service import record_active_day
+
+    record_active_day(db, user_id)
     return row
 
 

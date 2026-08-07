@@ -25,6 +25,9 @@ def _maybe_touch_session(db: Session, session: AuthSession) -> None:
         last = last.replace(tzinfo=timezone.utc)
     if (now - last).total_seconds() >= _TOUCH_INTERVAL_SECONDS:
         session_service.touch_session(db, session)
+        from backend_api.http.services import analytics_service
+
+        analytics_service.record_active_day(db, session.user_id)
 
 
 def _load_user_and_session(

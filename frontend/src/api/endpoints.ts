@@ -17,6 +17,7 @@ import type {
   JobStatusResponse,
   ModelsResponse,
   MonitoringResponse,
+  AnalyticsResponse,
   MuloDesignerStateResponse,
   MuloSimulateResponse,
   PlanInfo,
@@ -183,6 +184,8 @@ export const authApi = {
 
 export const adminApi = {
   getMonitoring: () => apiFetch<MonitoringResponse>('/admin/monitoring'),
+  getAnalytics: (days = 30) =>
+    apiFetch<AnalyticsResponse>(`/admin/analytics?days=${encodeURIComponent(String(days))}`),
   listActions: () => apiFetch<ActionInfo[]>('/admin/actions'),
   listPlans: (params?: { active_only?: boolean }) => {
     const query = new URLSearchParams()

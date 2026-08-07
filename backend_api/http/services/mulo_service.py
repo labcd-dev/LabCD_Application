@@ -230,6 +230,9 @@ def init_mulo_designer(
         },
         user_id=user_id,
     )
+    from backend_api.http.services.analytics_service import record_module_use
+
+    record_module_use(user_id, "mulo")
     case_name = str(normalized_run_config.get("case_study_file") or file_name or "mulo")
     linked_project_id = link_or_create_for_job(
         user_id=user_id,

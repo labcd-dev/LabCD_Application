@@ -45,9 +45,11 @@ from backend_api.http.schemas.error_tracking import (
     ErrorTrackingSettingsUpdate,
 )
 from backend_api.http.schemas.audit import AuditLogOut
+from backend_api.http.schemas.analytics import AnalyticsResponse
 from backend_api.http.schemas.monitoring import MonitoringResponse
 from backend_api.http.schemas.projects import ProjectDetail, ProjectSummary, ProjectUpdateRequest
 from backend_api.http.services import (
+    analytics_service,
     api_key_service,
     audit_service,
     error_tracking_service,
@@ -216,6 +218,15 @@ def delete_sso_provider(
 @router.get("/monitoring", response_model=MonitoringResponse)
 def get_monitoring(_: User = Depends(require_action("admin:monitoring"))) -> MonitoringResponse:
     return MonitoringResponse(**monitoring_service.collect_snapshot())
+
+
+@router.get("/analytics", response_model=AnalyticsResponse)
+def get_analytics(
+    days: int = Query(default=30, ge=1, le=90),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_action("admin:analytics")),
+) -> AnalyticsResponse:
+    return AnalyticsResponse(**analytics_service.get_analytics(db, days=days))
 
 
 @router.get("/monitoring/export.csv")

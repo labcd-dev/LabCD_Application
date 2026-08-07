@@ -3,6 +3,7 @@ import { Link, Navigate, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import {
   Activity,
   ArrowLeft,
+  BarChart3,
   Bug,
   ClipboardList,
   FolderKanban,
@@ -38,6 +39,7 @@ const navItems = [
   { to: '/admin/survey', end: false, label: 'Survey', icon: ClipboardList, action: 'admin:survey' },
   { to: '/admin/bug-reports', end: false, label: 'Bug Reports', icon: Flag, action: 'admin:bug_reports' },
   { to: '/admin/monitoring', end: false, label: 'Monitoring', icon: Activity, action: 'admin:monitoring' },
+  { to: '/admin/analytics', end: false, label: 'Analytics', icon: BarChart3, action: 'admin:analytics' },
   { to: '/admin/errors', end: false, label: 'Error Tracking', icon: Bug, action: 'admin:errors' },
   { to: '/admin/audit-log', end: false, label: 'Audit Log', icon: ScrollText, action: 'admin:audit' },
 ] as const

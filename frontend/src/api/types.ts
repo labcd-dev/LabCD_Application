@@ -406,6 +406,27 @@ export interface MonitoringResponse {
   history: MonitoringSnapshot[]
 }
 
+export interface AnalyticsSeriesPoint {
+  date: string
+  count: number
+}
+
+export interface AnalyticsModuleCount {
+  module: string
+  count: number
+}
+
+export interface AnalyticsResponse {
+  days: number
+  dau_today: number
+  mau: number
+  retention_d7: number | null
+  retention_d30: number | null
+  dau_series: AnalyticsSeriesPoint[]
+  mau_series: AnalyticsSeriesPoint[]
+  modules: AnalyticsModuleCount[]
+}
+
 export interface ErrorTrackingSettings {
   enabled: boolean
   frontend: boolean
