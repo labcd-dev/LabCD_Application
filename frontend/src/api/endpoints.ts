@@ -8,6 +8,7 @@ import type {
   DefaultPlanInfo,
   ErrorEvent,
   ErrorTrackingSettings,
+  AuditLogEntry,
   FeedbackSurveyRequest,
   FeedbackSurveyResponseRow,
   JobResponse,
@@ -47,7 +48,7 @@ import type {
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '/api/v1'
 
-function buildQuery(params?: Record<string, string | number | undefined | null>): string {
+function buildQuery(params?: Record<string, string | number | boolean | undefined | null>): string {
   const query = new URLSearchParams()
   if (!params) return ''
   for (const [key, value] of Object.entries(params)) {
@@ -69,7 +70,7 @@ export function triggerBlobDownload(blob: Blob, filename: string): void {
 
 export async function downloadAdminCsv(
   path: string,
-  params?: Record<string, string | number | undefined | null>,
+  params?: Record<string, string | number | boolean | undefined | null>,
 ): Promise<Blob> {
   const token = getAuthToken()
   const suffix = buildQuery(params)
@@ -325,6 +326,40 @@ export const adminApi = {
       user_id: params?.user_id,
       source: params?.source,
       status_code: params?.status_code,
+      q: params?.q,
+      limit: params?.limit,
+    }),
+  listAuditLog: (params?: {
+    category?: string
+    action?: string
+    actor_user_id?: number
+    success?: boolean
+    q?: string
+    limit?: number
+  }) =>
+    apiFetch<AuditLogEntry[]>(
+      `/admin/audit-log${buildQuery({
+        category: params?.category,
+        action: params?.action,
+        actor_user_id: params?.actor_user_id,
+        success: params?.success,
+        q: params?.q,
+        limit: params?.limit,
+      })}`,
+    ),
+  downloadAuditLogCsv: (params?: {
+    category?: string
+    action?: string
+    actor_user_id?: number
+    success?: boolean
+    q?: string
+    limit?: number
+  }) =>
+    downloadAdminCsv('/admin/audit-log/export.csv', {
+      category: params?.category,
+      action: params?.action,
+      actor_user_id: params?.actor_user_id,
+      success: params?.success,
       q: params?.q,
       limit: params?.limit,
     }),

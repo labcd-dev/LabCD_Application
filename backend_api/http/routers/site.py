@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
 from sqlalchemy.orm import Session
 
 from backend_api.db.models import User
@@ -18,7 +18,7 @@ from backend_api.http.schemas.site import (
     NavMenuItemUpdate,
     SiteBrand,
 )
-from backend_api.http.services import media_service, site_service
+from backend_api.http.services import audit_service, media_service, site_service
 
 router = APIRouter(tags=["site"])
 
@@ -38,14 +38,26 @@ def get_landing(db: Session = Depends(get_db)) -> LandingPayload:
 
 @router.post("/admin/media", response_model=MediaUploadResponse)
 async def admin_upload_media(
+    http_request: Request,
     file: UploadFile = File(...),
     prefix: str = Form("image"),
-    _: User = Depends(require_action("admin:site")),
+    admin: User = Depends(require_action("admin:site")),
+    db: Session = Depends(get_db),
 ) -> MediaUploadResponse:
     try:
         url = await media_service.save_admin_image(file, prefix=prefix)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    audit_service.record_from_request(
+        db,
+        http_request,
+        action="admin.media.upload",
+        category="admin",
+        actor=admin,
+        resource_type="media",
+        success=True,
+        details={"prefix": prefix},
+    )
     return MediaUploadResponse(url=url)
 
 
@@ -60,10 +72,21 @@ def admin_get_brand(
 @router.put("/admin/site/brand", response_model=SiteBrand)
 def admin_put_brand(
     body: SiteBrand,
-    _: User = Depends(require_action("admin:site")),
+    http_request: Request,
+    admin: User = Depends(require_action("admin:site")),
     db: Session = Depends(get_db),
 ) -> SiteBrand:
-    return site_service.set_brand(db, body)
+    result = site_service.set_brand(db, body)
+    audit_service.record_from_request(
+        db,
+        http_request,
+        action="admin.site.brand.update",
+        category="admin",
+        actor=admin,
+        resource_type="site_brand",
+        success=True,
+    )
+    return result
 
 
 @router.get("/admin/site/landing")
@@ -77,10 +100,22 @@ def admin_get_landing(
 @router.put("/admin/site/landing")
 def admin_put_landing(
     body: dict[str, Any],
-    _: User = Depends(require_action("admin:site")),
+    http_request: Request,
+    admin: User = Depends(require_action("admin:site")),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
-    return site_service.set_landing_content(db, body)
+    result = site_service.set_landing_content(db, body)
+    audit_service.record_from_request(
+        db,
+        http_request,
+        action="admin.site.landing.update",
+        category="admin",
+        actor=admin,
+        resource_type="site_landing",
+        success=True,
+        details={"keys": sorted(body.keys())},
+    )
+    return result
 
 
 @router.get("/admin/site/menus", response_model=list[NavMenuItemOut])
@@ -95,7 +130,8 @@ def admin_list_menus(
 @router.post("/admin/site/menus", response_model=NavMenuItemOut, status_code=status.HTTP_201_CREATED)
 def admin_create_menu(
     body: NavMenuItemCreate,
-    _: User = Depends(require_action("admin:site")),
+    http_request: Request,
+    admin: User = Depends(require_action("admin:site")),
     db: Session = Depends(get_db),
 ) -> NavMenuItemOut:
     try:
@@ -109,6 +145,17 @@ def admin_create_menu(
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    audit_service.record_from_request(
+        db,
+        http_request,
+        action="admin.site.menu.create",
+        category="admin",
+        actor=admin,
+        resource_type="nav_menu",
+        resource_id=row.id,
+        success=True,
+        details={"location": row.location, "label": row.label},
+    )
     return NavMenuItemOut.model_validate(row)
 
 
@@ -116,7 +163,8 @@ def admin_create_menu(
 def admin_update_menu(
     menu_id: int,
     body: NavMenuItemUpdate,
-    _: User = Depends(require_action("admin:site")),
+    http_request: Request,
+    admin: User = Depends(require_action("admin:site")),
     db: Session = Depends(get_db),
 ) -> NavMenuItemOut:
     row = site_service.get_menu(db, menu_id)
@@ -134,16 +182,40 @@ def admin_update_menu(
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    audit_service.record_from_request(
+        db,
+        http_request,
+        action="admin.site.menu.update",
+        category="admin",
+        actor=admin,
+        resource_type="nav_menu",
+        resource_id=updated.id,
+        success=True,
+        details={"fields": sorted(body.model_fields_set)},
+    )
     return NavMenuItemOut.model_validate(updated)
 
 
 @router.delete("/admin/site/menus/{menu_id}", status_code=status.HTTP_204_NO_CONTENT)
 def admin_delete_menu(
     menu_id: int,
-    _: User = Depends(require_action("admin:site")),
+    http_request: Request,
+    admin: User = Depends(require_action("admin:site")),
     db: Session = Depends(get_db),
 ) -> None:
     row = site_service.get_menu(db, menu_id)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Menu item not found")
+    label = row.label
     site_service.delete_menu(db, row)
+    audit_service.record_from_request(
+        db,
+        http_request,
+        action="admin.site.menu.delete",
+        category="admin",
+        actor=admin,
+        resource_type="nav_menu",
+        resource_id=menu_id,
+        success=True,
+        details={"label": label},
+    )

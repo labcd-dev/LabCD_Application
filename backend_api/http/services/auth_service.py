@@ -44,6 +44,7 @@ DEFAULT_ACTIONS: list[tuple[str, str]] = [
     ("admin:bug_reports", "Moderate bug reports"),
     ("admin:monitoring", "View system monitoring"),
     ("admin:errors", "Manage error tracking"),
+    ("admin:audit", "View audit log"),
 ]
 
 PIPELINE_ACTIONS = {

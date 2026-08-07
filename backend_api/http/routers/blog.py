@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from backend_api.db.models import User
@@ -14,7 +14,7 @@ from backend_api.http.schemas.blog import (
     BlogPostOut,
     BlogPostUpdate,
 )
-from backend_api.http.services import blog_service
+from backend_api.http.services import audit_service, blog_service
 
 router = APIRouter(tags=["blog"])
 
@@ -55,6 +55,7 @@ def admin_get_post(
 @router.post("/admin/blog", response_model=BlogPostOut, status_code=status.HTTP_201_CREATED)
 def admin_create_post(
     body: BlogPostCreate,
+    http_request: Request,
     admin: User = Depends(require_action("admin:blog")),
     db: Session = Depends(get_db),
 ) -> BlogPostOut:
@@ -68,6 +69,17 @@ def admin_create_post(
         status=body.status,
         author_id=admin.id,
     )
+    audit_service.record_from_request(
+        db,
+        http_request,
+        action="admin.blog.create",
+        category="admin",
+        actor=admin,
+        resource_type="blog_post",
+        resource_id=row.id,
+        success=True,
+        details={"slug": row.slug, "status": row.status},
+    )
     return BlogPostOut.model_validate(row)
 
 
@@ -75,7 +87,8 @@ def admin_create_post(
 def admin_update_post(
     post_id: int,
     body: BlogPostUpdate,
-    _: User = Depends(require_action("admin:blog")),
+    http_request: Request,
+    admin: User = Depends(require_action("admin:blog")),
     db: Session = Depends(get_db),
 ) -> BlogPostOut:
     post = blog_service.get_post(db, post_id)
@@ -92,16 +105,40 @@ def admin_update_post(
         update_cover="cover_image_url" in body.model_fields_set,
         status=body.status,
     )
+    audit_service.record_from_request(
+        db,
+        http_request,
+        action="admin.blog.update",
+        category="admin",
+        actor=admin,
+        resource_type="blog_post",
+        resource_id=updated.id,
+        success=True,
+        details={"fields": sorted(body.model_fields_set)},
+    )
     return BlogPostOut.model_validate(updated)
 
 
 @router.delete("/admin/blog/{post_id}", status_code=status.HTTP_204_NO_CONTENT)
 def admin_delete_post(
     post_id: int,
-    _: User = Depends(require_action("admin:blog")),
+    http_request: Request,
+    admin: User = Depends(require_action("admin:blog")),
     db: Session = Depends(get_db),
 ) -> None:
     post = blog_service.get_post(db, post_id)
     if post is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
+    slug = post.slug
     blog_service.delete_post(db, post)
+    audit_service.record_from_request(
+        db,
+        http_request,
+        action="admin.blog.delete",
+        category="admin",
+        actor=admin,
+        resource_type="blog_post",
+        resource_id=post_id,
+        success=True,
+        details={"slug": slug},
+    )

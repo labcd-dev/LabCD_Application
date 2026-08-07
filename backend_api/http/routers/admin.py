@@ -1,6 +1,6 @@
 """Admin routes for managing users, plans, actions, and projects."""
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -38,9 +38,11 @@ from backend_api.http.schemas.error_tracking import (
     ErrorTrackingSettings,
     ErrorTrackingSettingsUpdate,
 )
+from backend_api.http.schemas.audit import AuditLogOut
 from backend_api.http.schemas.monitoring import MonitoringResponse
 from backend_api.http.schemas.projects import ProjectDetail, ProjectSummary, ProjectUpdateRequest
 from backend_api.http.services import (
+    audit_service,
     error_tracking_service,
     monitoring_service,
     plan_service,
@@ -99,7 +101,8 @@ def get_error_tracking_settings(
 @router.patch("/errors/settings", response_model=ErrorTrackingSettings)
 def update_error_tracking_settings(
     request: ErrorTrackingSettingsUpdate,
-    _: User = Depends(require_action("admin:errors")),
+    http_request: Request,
+    admin: User = Depends(require_action("admin:errors")),
     db: Session = Depends(get_db),
 ) -> ErrorTrackingSettings:
     cfg = error_tracking_service.update_settings(
@@ -108,6 +111,16 @@ def update_error_tracking_settings(
         frontend=request.frontend,
         backend=request.backend,
         api=request.api,
+    )
+    audit_service.record_from_request(
+        db,
+        http_request,
+        action="admin.errors.settings.update",
+        category="admin",
+        actor=admin,
+        resource_type="error_tracking_settings",
+        success=True,
+        details=request.model_dump(exclude_unset=True),
     )
     return ErrorTrackingSettings(
         enabled=cfg.enabled,
@@ -159,6 +172,52 @@ def export_error_events_csv(
     return csv_response(content, "error_events.csv")
 
 
+@router.get("/audit-log", response_model=list[AuditLogOut])
+def list_audit_log(
+    _: User = Depends(require_action("admin:audit")),
+    db: Session = Depends(get_db),
+    category: str | None = Query(default=None),
+    action: str | None = Query(default=None),
+    actor_user_id: int | None = Query(default=None),
+    success: bool | None = Query(default=None),
+    q: str | None = Query(default=None),
+    limit: int = Query(default=200, ge=1, le=1000),
+) -> list[AuditLogOut]:
+    entries = audit_service.list_audits(
+        db,
+        category=category,
+        action=action,
+        actor_user_id=actor_user_id,
+        success=success,
+        q=q,
+        limit=limit,
+    )
+    return [AuditLogOut(**audit_service.entry_to_dict(e)) for e in entries]
+
+
+@router.get("/audit-log/export.csv")
+def export_audit_log_csv(
+    _: User = Depends(require_action("admin:audit")),
+    db: Session = Depends(get_db),
+    category: str | None = Query(default=None),
+    action: str | None = Query(default=None),
+    actor_user_id: int | None = Query(default=None),
+    success: bool | None = Query(default=None),
+    q: str | None = Query(default=None),
+    limit: int = Query(default=5000, ge=1, le=10000),
+) -> StreamingResponse:
+    content = audit_service.export_csv(
+        db,
+        category=category,
+        action=action,
+        actor_user_id=actor_user_id,
+        success=success,
+        q=q,
+        limit=limit,
+    )
+    return csv_response(content, "audit_log.csv")
+
+
 @router.get("/plans/export.csv")
 def export_plans_csv_endpoint(
     _: User = Depends(require_action("admin:plans")),
@@ -190,7 +249,8 @@ def list_plans(
 @router.post("/plans", response_model=PlanOut, status_code=status.HTTP_201_CREATED)
 def create_plan(
     request: PlanCreateRequest,
-    _: User = Depends(require_action("admin:plans")),
+    http_request: Request,
+    admin: User = Depends(require_action("admin:plans")),
     db: Session = Depends(get_db),
 ) -> PlanOut:
     try:
@@ -205,6 +265,17 @@ def create_plan(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    audit_service.record_from_request(
+        db,
+        http_request,
+        action="admin.plan.create",
+        category="admin",
+        actor=admin,
+        resource_type="plan",
+        resource_id=plan.id,
+        success=True,
+        details={"name": plan.name},
+    )
     return _plan_out(plan)
 
 
@@ -212,7 +283,8 @@ def create_plan(
 def update_plan(
     plan_id: int,
     request: PlanUpdateRequest,
-    _: User = Depends(require_action("admin:plans")),
+    http_request: Request,
+    admin: User = Depends(require_action("admin:plans")),
     db: Session = Depends(get_db),
 ) -> PlanOut:
     plan = plan_service.get_plan(db, plan_id)
@@ -231,23 +303,46 @@ def update_plan(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    audit_service.record_from_request(
+        db,
+        http_request,
+        action="admin.plan.update",
+        category="admin",
+        actor=admin,
+        resource_type="plan",
+        resource_id=plan.id,
+        success=True,
+        details={"fields": sorted(request.model_fields_set)},
+    )
     return _plan_out(plan)
 
 
 @router.delete("/plans/{plan_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_plan(
     plan_id: int,
-    _: User = Depends(require_action("admin:plans")),
+    http_request: Request,
+    admin: User = Depends(require_action("admin:plans")),
     db: Session = Depends(get_db),
 ) -> None:
     plan = plan_service.get_plan(db, plan_id)
     if plan is None:
         raise HTTPException(status_code=404, detail="Plan not found")
+    plan_name = plan.name
     try:
         plan_service.delete_plan(db, plan)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-
+    audit_service.record_from_request(
+        db,
+        http_request,
+        action="admin.plan.delete",
+        category="admin",
+        actor=admin,
+        resource_type="plan",
+        resource_id=plan_id,
+        success=True,
+        details={"name": plan_name},
+    )
 
 @router.get("/settings/default-plan", response_model=DefaultPlanOut)
 def get_default_plan(
@@ -266,15 +361,25 @@ def get_default_plan(
 @router.put("/settings/default-plan", response_model=DefaultPlanOut)
 def set_default_plan(
     request: SetDefaultPlanRequest,
-    _: User = Depends(require_action("admin:plans")),
+    http_request: Request,
+    admin: User = Depends(require_action("admin:plans")),
     db: Session = Depends(get_db),
 ) -> DefaultPlanOut:
     try:
         plan = plan_service.set_default_plan(db, request.plan_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    audit_service.record_from_request(
+        db,
+        http_request,
+        action="admin.default_plan.set",
+        category="admin",
+        actor=admin,
+        resource_type="plan",
+        resource_id=plan.id,
+        success=True,
+    )
     return DefaultPlanOut(plan_id=plan.id, plan=_plan_out(plan))
-
 
 
 def _role_out(role) -> RoleOut:
@@ -295,7 +400,8 @@ def list_roles(
 @router.post("/roles", response_model=RoleOut, status_code=status.HTTP_201_CREATED)
 def create_role(
     request: RoleCreateRequest,
-    _: User = Depends(require_action("admin:roles")),
+    http_request: Request,
+    admin: User = Depends(require_action("admin:roles")),
     db: Session = Depends(get_db),
 ) -> RoleOut:
     try:
@@ -308,6 +414,17 @@ def create_role(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    audit_service.record_from_request(
+        db,
+        http_request,
+        action="admin.role.create",
+        category="admin",
+        actor=admin,
+        resource_type="role",
+        resource_id=role.id,
+        success=True,
+        details={"name": role.name},
+    )
     return _role_out(role)
 
 
@@ -315,7 +432,8 @@ def create_role(
 def update_role(
     role_id: int,
     request: RoleUpdateRequest,
-    _: User = Depends(require_action("admin:roles")),
+    http_request: Request,
+    admin: User = Depends(require_action("admin:roles")),
     db: Session = Depends(get_db),
 ) -> RoleOut:
     role = role_service.get_role(db, role_id)
@@ -332,23 +450,46 @@ def update_role(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    audit_service.record_from_request(
+        db,
+        http_request,
+        action="admin.role.update",
+        category="admin",
+        actor=admin,
+        resource_type="role",
+        resource_id=role.id,
+        success=True,
+        details={"fields": sorted(request.model_fields_set)},
+    )
     return _role_out(role)
 
 
 @router.delete("/roles/{role_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_role(
     role_id: int,
-    _: User = Depends(require_action("admin:roles")),
+    http_request: Request,
+    admin: User = Depends(require_action("admin:roles")),
     db: Session = Depends(get_db),
 ) -> None:
     role = role_service.get_role(db, role_id)
     if role is None:
         raise HTTPException(status_code=404, detail="Role not found")
+    role_name = role.name
     try:
         role_service.delete_role(db, role)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-
+    audit_service.record_from_request(
+        db,
+        http_request,
+        action="admin.role.delete",
+        category="admin",
+        actor=admin,
+        resource_type="role",
+        resource_id=role_id,
+        success=True,
+        details={"name": role_name},
+    )
 
 @router.get("/users", response_model=list[UserOut])
 def list_users(
@@ -382,7 +523,8 @@ def get_user_detail(
 @router.post("/users", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 def create_user_endpoint(
     request: CreateUserRequest,
-    _: User = Depends(require_action("admin:users")),
+    http_request: Request,
+    admin: User = Depends(require_action("admin:users")),
     db: Session = Depends(get_db),
 ) -> UserOut:
     if get_user_by_email(db, request.email) is not None:
@@ -408,6 +550,17 @@ def create_user_endpoint(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    audit_service.record_from_request(
+        db,
+        http_request,
+        action="admin.user.create",
+        category="admin",
+        actor=admin,
+        resource_type="user",
+        resource_id=user.id,
+        success=True,
+        details={"email": user.email},
+    )
     return user_out(user)
 
 
@@ -415,6 +568,7 @@ def create_user_endpoint(
 def update_user(
     user_id: int,
     request: UpdateUserRequest,
+    http_request: Request,
     admin: User = Depends(require_action("admin:users")),
     db: Session = Depends(get_db),
 ) -> UserOut:
@@ -481,8 +635,21 @@ def update_user(
     db.add(user)
     db.commit()
     db.refresh(user)
+    fields = sorted(request.model_fields_set)
+    # Never record password values — only that password was changed.
+    details_fields = ["password" if f == "password" else f for f in fields]
+    audit_service.record_from_request(
+        db,
+        http_request,
+        action="admin.user.update",
+        category="admin",
+        actor=admin,
+        resource_type="user",
+        resource_id=user.id,
+        success=True,
+        details={"fields": details_fields, "email": user.email},
+    )
     return user_out(user)
-
 
 @router.get("/users/{user_id}/sessions", response_model=list[SessionOut])
 def list_user_sessions(
@@ -510,7 +677,8 @@ def list_user_sessions(
 def revoke_user_session(
     user_id: int,
     session_id: int,
-    _: User = Depends(require_action("admin:users")),
+    http_request: Request,
+    admin: User = Depends(require_action("admin:users")),
     db: Session = Depends(get_db),
 ) -> None:
     user = get_user_by_id(db, user_id)
@@ -519,17 +687,30 @@ def revoke_user_session(
     row = session_service.revoke_session_by_id(db, session_id=session_id, user_id=user_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Session not found")
+    audit_service.record_from_request(
+        db,
+        http_request,
+        action="admin.user.session.revoke",
+        category="admin",
+        actor=admin,
+        resource_type="session",
+        resource_id=session_id,
+        success=True,
+        details={"user_id": user_id},
+    )
 
 
 @router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_user(
     user_id: int,
+    http_request: Request,
     admin: User = Depends(require_action("admin:users")),
     db: Session = Depends(get_db),
 ) -> None:
     user = get_user_by_id(db, user_id)
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
+    email = user.email
     try:
         admin_user_service.guard_admin_account_change(
             db,
@@ -540,7 +721,17 @@ def delete_user(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     admin_user_service.delete_user(db, user)
-
+    audit_service.record_from_request(
+        db,
+        http_request,
+        action="admin.user.delete",
+        category="admin",
+        actor=admin,
+        resource_type="user",
+        resource_id=user_id,
+        success=True,
+        details={"email": email},
+    )
 
 @router.get("/projects", response_model=list[ProjectSummary])
 def list_all_projects(
@@ -607,7 +798,8 @@ def get_any_project(
 def update_any_project(
     project_id: int,
     request: ProjectUpdateRequest,
-    _: User = Depends(require_action("admin:projects")),
+    http_request: Request,
+    admin: User = Depends(require_action("admin:projects")),
     db: Session = Depends(get_db),
 ) -> ProjectDetail:
     project = project_service.get_project(db, project_id)
@@ -628,6 +820,20 @@ def update_any_project(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    fields = sorted(f for f in request.model_fields_set if f != "file_content")
+    if "file_content" in request.model_fields_set:
+        fields.append("file_content")
+    audit_service.record_from_request(
+        db,
+        http_request,
+        action="admin.project.update",
+        category="admin",
+        actor=admin,
+        resource_type="project",
+        resource_id=project.id,
+        success=True,
+        details={"fields": fields},
+    )
     return ProjectDetail(**project_service.project_to_detail(project, include_owner=True))
 
 
@@ -653,10 +859,23 @@ def download_any_project_artifact(
 @router.delete("/projects/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_any_project(
     project_id: int,
-    _: User = Depends(require_action("admin:projects")),
+    http_request: Request,
+    admin: User = Depends(require_action("admin:projects")),
     db: Session = Depends(get_db),
 ) -> None:
     project = project_service.get_project(db, project_id)
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
+    title = project.title
     project_service.delete_project(db, project)
+    audit_service.record_from_request(
+        db,
+        http_request,
+        action="admin.project.delete",
+        category="admin",
+        actor=admin,
+        resource_type="project",
+        resource_id=project_id,
+        success=True,
+        details={"title": title},
+    )

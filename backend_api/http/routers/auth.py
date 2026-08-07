@@ -23,6 +23,7 @@ from backend_api.http.schemas.auth import (
     UserOut,
     VerifyEmailRequest,
 )
+from backend_api.http.services import audit_service
 from backend_api.http.services.auth_service import (
     authenticate_user_with_reason,
     burn_password_hash_cost,
@@ -96,6 +97,16 @@ def login(
             user_agent=user_agent,
             failure_reason="locked",
         )
+        audit_service.record_from_request(
+            db,
+            http_request,
+            action="auth.login",
+            category="auth",
+            actor=existing,
+            actor_email=request.email,
+            success=False,
+            details={"reason": "locked"},
+        )
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=LOCKOUT_DETAIL)
 
     user, failure_reason = authenticate_user_with_reason(db, request.email, request.password)
@@ -109,6 +120,16 @@ def login(
             ip_address=ip,
             user_agent=user_agent,
             failure_reason=failure_reason,
+        )
+        audit_service.record_from_request(
+            db,
+            http_request,
+            action="auth.login",
+            category="auth",
+            actor=user,
+            actor_email=request.email,
+            success=False,
+            details={"reason": failure_reason},
         )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -125,12 +146,33 @@ def login(
             user_agent=user_agent,
             failure_reason=failure_reason,
         )
-        apply_failure_lockouts(
+        lock_result = apply_failure_lockouts(
             db,
             user=user if user is not None else existing,
             email=request.email,
             ip_address=ip,
         )
+        audit_service.record_from_request(
+            db,
+            http_request,
+            action="auth.login",
+            category="auth",
+            actor=user if user is not None else existing,
+            actor_email=request.email,
+            success=False,
+            details={"reason": failure_reason or "unknown"},
+        )
+        if lock_result.get("user_locked") or lock_result.get("ip_locked"):
+            audit_service.record_from_request(
+                db,
+                http_request,
+                action="auth.lockout",
+                category="auth",
+                actor=user if user is not None else existing,
+                actor_email=request.email,
+                success=True,
+                details=lock_result,
+            )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
@@ -152,12 +194,24 @@ def login(
         user_agent=user_agent,
         failure_reason=None,
     )
+    audit_service.record_from_request(
+        db,
+        http_request,
+        action="auth.login",
+        category="auth",
+        actor=user,
+        success=True,
+    )
     token = create_access_token(user.id, user.email, jti=auth_session.jti)
     return TokenResponse(access_token=token)
 
 
 @router.post("/register", response_model=MessageResponse, status_code=status.HTTP_201_CREATED)
-def register(request: RegisterRequest, db: Session = Depends(get_db)) -> MessageResponse:
+def register(
+    request: RegisterRequest,
+    http_request: Request,
+    db: Session = Depends(get_db),
+) -> MessageResponse:
     try:
         validate_password(request.password, email=request.email)
     except ValueError as exc:
@@ -178,23 +232,53 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)) -> Message
     )
     raw_token = token_service.create_email_verify_token(db, user)
     send_verification_email(to=user.email, token=raw_token)
+    audit_service.record_from_request(
+        db,
+        http_request,
+        action="auth.register",
+        category="auth",
+        actor=user,
+        resource_type="user",
+        resource_id=user.id,
+        success=True,
+    )
     return MessageResponse(message=REGISTER_MESSAGE)
 
 
 @router.post("/verify-email", response_model=MessageResponse)
-def verify_email(request: VerifyEmailRequest, db: Session = Depends(get_db)) -> MessageResponse:
+def verify_email(
+    request: VerifyEmailRequest,
+    http_request: Request,
+    db: Session = Depends(get_db),
+) -> MessageResponse:
     row = token_service.consume_auth_token(
         db,
         raw_token=request.token,
         purpose=token_service.PURPOSE_EMAIL_VERIFY,
     )
     if row is None:
+        audit_service.record_from_request(
+            db,
+            http_request,
+            action="auth.verify_email",
+            category="auth",
+            success=False,
+            details={"reason": "invalid_or_expired_token"},
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid or expired verification token",
         )
     user = get_user_by_id(db, row.user_id)
     if user is None:
+        audit_service.record_from_request(
+            db,
+            http_request,
+            action="auth.verify_email",
+            category="auth",
+            success=False,
+            details={"reason": "user_missing"},
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid or expired verification token",
@@ -202,12 +286,23 @@ def verify_email(request: VerifyEmailRequest, db: Session = Depends(get_db)) -> 
     user.email_verified = True
     db.add(user)
     db.commit()
+    audit_service.record_from_request(
+        db,
+        http_request,
+        action="auth.verify_email",
+        category="auth",
+        actor=user,
+        resource_type="user",
+        resource_id=user.id,
+        success=True,
+    )
     return MessageResponse(message="Email verified. You can sign in now.")
 
 
 @router.post("/resend-verification", response_model=MessageResponse)
 def resend_verification(
     request: EmailOnlyRequest,
+    http_request: Request,
     db: Session = Depends(get_db),
 ) -> MessageResponse:
     user = get_user_by_email(db, request.email)
@@ -219,24 +314,46 @@ def resend_verification(
     ):
         raw_token = token_service.create_email_verify_token(db, user)
         send_verification_email(to=user.email, token=raw_token)
+        audit_service.record_from_request(
+            db,
+            http_request,
+            action="auth.resend_verification",
+            category="auth",
+            actor=user,
+            resource_type="user",
+            resource_id=user.id,
+            success=True,
+        )
     return MessageResponse(message=RESEND_MESSAGE)
 
 
 @router.post("/forgot-password", response_model=MessageResponse)
 def forgot_password(
     request: EmailOnlyRequest,
+    http_request: Request,
     db: Session = Depends(get_db),
 ) -> MessageResponse:
     user = get_user_by_email(db, request.email)
     if user is not None and user.is_active and user.email_verified:
         raw_token = token_service.create_password_reset_token(db, user)
         send_password_reset_email(to=user.email, token=raw_token)
+        audit_service.record_from_request(
+            db,
+            http_request,
+            action="auth.forgot_password",
+            category="auth",
+            actor=user,
+            resource_type="user",
+            resource_id=user.id,
+            success=True,
+        )
     return MessageResponse(message=FORGOT_MESSAGE)
 
 
 @router.post("/reset-password", response_model=MessageResponse)
 def reset_password(
     request: ResetPasswordRequest,
+    http_request: Request,
     db: Session = Depends(get_db),
 ) -> MessageResponse:
     row = token_service.consume_auth_token(
@@ -245,12 +362,28 @@ def reset_password(
         purpose=token_service.PURPOSE_PASSWORD_RESET,
     )
     if row is None:
+        audit_service.record_from_request(
+            db,
+            http_request,
+            action="auth.reset_password",
+            category="auth",
+            success=False,
+            details={"reason": "invalid_or_expired_token"},
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid or expired reset token",
         )
     user = get_user_by_id(db, row.user_id)
     if user is None:
+        audit_service.record_from_request(
+            db,
+            http_request,
+            action="auth.reset_password",
+            category="auth",
+            success=False,
+            details={"reason": "user_missing"},
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid or expired reset token",
@@ -268,16 +401,37 @@ def reset_password(
     db.add(user)
     db.commit()
     session_service.revoke_all_user_sessions(db, user.id)
+    audit_service.record_from_request(
+        db,
+        http_request,
+        action="auth.reset_password",
+        category="auth",
+        actor=user,
+        resource_type="user",
+        resource_id=user.id,
+        success=True,
+    )
     return MessageResponse(message="Password updated. You can sign in with your new password.")
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 def logout(
+    http_request: Request,
     current: tuple[User, AuthSession] = Depends(get_current_user_and_session_allow_unverified),
     db: Session = Depends(get_db),
 ) -> None:
-    _user, auth_session = current
+    user, auth_session = current
     session_service.revoke_session(db, auth_session)
+    audit_service.record_from_request(
+        db,
+        http_request,
+        action="auth.logout",
+        category="auth",
+        actor=user,
+        resource_type="session",
+        resource_id=auth_session.id,
+        success=True,
+    )
 
 
 @router.get("/sessions", response_model=list[SessionOut])
@@ -293,6 +447,7 @@ def list_sessions(
 @router.delete("/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
 def revoke_session_endpoint(
     session_id: int,
+    http_request: Request,
     current: tuple[User, AuthSession] = Depends(get_current_user_and_session),
     db: Session = Depends(get_db),
 ) -> None:
@@ -300,6 +455,16 @@ def revoke_session_endpoint(
     row = session_service.revoke_session_by_id(db, session_id=session_id, user_id=user.id)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
+    audit_service.record_from_request(
+        db,
+        http_request,
+        action="auth.session.revoke",
+        category="auth",
+        actor=user,
+        resource_type="session",
+        resource_id=session_id,
+        success=True,
+    )
 
 
 @router.get("/me", response_model=UserOut)
@@ -323,6 +488,7 @@ def update_me(
 @router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
 def change_password_endpoint(
     request: ChangePasswordRequest,
+    http_request: Request,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> None:
@@ -330,6 +496,16 @@ def change_password_endpoint(
         change_password(db, user, request)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    audit_service.record_from_request(
+        db,
+        http_request,
+        action="auth.change_password",
+        category="auth",
+        actor=user,
+        resource_type="user",
+        resource_id=user.id,
+        success=True,
+    )
 
 
 @router.post("/me/avatar", response_model=UserOut)

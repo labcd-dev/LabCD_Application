@@ -74,14 +74,20 @@ def apply_failure_lockouts(
     user: User | None,
     email: str,
     ip_address: str | None,
-) -> None:
-    """After a failed attempt is recorded, lock email and/or IP if thresholds hit."""
+) -> dict[str, bool]:
+    """After a failed attempt is recorded, lock email and/or IP if thresholds hit.
+
+    Returns which lockouts were applied on this call.
+    """
     lock_until = _utcnow() + timedelta(minutes=LOGIN_LOCKOUT_MINUTES)
+    user_locked = False
+    ip_locked = False
 
     email_failures = _count_recent_failures(db, email=email)
     if user is not None and email_failures >= LOGIN_FAIL_MAX_ATTEMPTS:
         user.locked_until = lock_until
         db.add(user)
+        user_locked = True
 
     if ip_address:
         ip_failures = _count_recent_failures(db, ip_address=ip_address)
@@ -92,9 +98,10 @@ def apply_failure_lockouts(
             else:
                 row.locked_until = lock_until
             db.add(row)
+            ip_locked = True
 
     db.commit()
-
+    return {"user_locked": user_locked, "ip_locked": ip_locked}
 
 def clear_user_lock(db: Session, user: User) -> None:
     if user.locked_until is not None:

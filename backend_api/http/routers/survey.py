@@ -1,6 +1,6 @@
 """User and admin routes for surveys and tutorial videos."""
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -22,7 +22,7 @@ from backend_api.http.schemas.survey import (
     TutorialVideoOut,
     TutorialVideoUpdateRequest,
 )
-from backend_api.http.services import survey_service
+from backend_api.http.services import audit_service, survey_service
 from backend_api.http.services.admin_csv_service import (
     export_feedback_survey_csv,
     export_profile_survey_csv,
@@ -120,10 +120,22 @@ def get_survey_settings(
 @router.patch("/admin/survey/settings", response_model=SurveySettings)
 def update_survey_settings(
     request: SurveySettingsUpdate,
-    _: User = Depends(require_action("admin:survey")),
+    http_request: Request,
+    admin: User = Depends(require_action("admin:survey")),
     db: Session = Depends(get_db),
 ) -> SurveySettings:
-    return survey_service.update_settings(db, enabled=request.enabled)
+    result = survey_service.update_settings(db, enabled=request.enabled)
+    audit_service.record_from_request(
+        db,
+        http_request,
+        action="admin.survey.settings.update",
+        category="admin",
+        actor=admin,
+        resource_type="survey_settings",
+        success=True,
+        details=request.model_dump(exclude_unset=True),
+    )
+    return result
 
 
 @router.get("/admin/survey/responses", response_model=SurveyResponsesOut)
@@ -192,15 +204,27 @@ def list_tutorial_videos(
 
 @router.post("/admin/tutorial-videos", response_model=TutorialVideoOut, status_code=status.HTTP_201_CREATED)
 async def upload_tutorial_video(
+    http_request: Request,
     title: str = Form(..., min_length=1, max_length=200),
     file: UploadFile = File(...),
-    _: User = Depends(require_action("admin:survey")),
+    admin: User = Depends(require_action("admin:survey")),
     db: Session = Depends(get_db),
 ) -> TutorialVideoOut:
     try:
         row = await survey_service.create_video(db, title=title, file=file)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    audit_service.record_from_request(
+        db,
+        http_request,
+        action="admin.tutorial_video.create",
+        category="admin",
+        actor=admin,
+        resource_type="tutorial_video",
+        resource_id=row.id,
+        success=True,
+        details={"title": row.title},
+    )
     return TutorialVideoOut.model_validate(row)
 
 
@@ -208,7 +232,8 @@ async def upload_tutorial_video(
 def update_tutorial_video(
     video_id: int,
     request: TutorialVideoUpdateRequest,
-    _: User = Depends(require_action("admin:survey")),
+    http_request: Request,
+    admin: User = Depends(require_action("admin:survey")),
     db: Session = Depends(get_db),
 ) -> TutorialVideoOut:
     video = survey_service.get_video(db, video_id)
@@ -220,16 +245,40 @@ def update_tutorial_video(
         title=request.title,
         sort_order=request.sort_order,
     )
+    audit_service.record_from_request(
+        db,
+        http_request,
+        action="admin.tutorial_video.update",
+        category="admin",
+        actor=admin,
+        resource_type="tutorial_video",
+        resource_id=updated.id,
+        success=True,
+        details={"fields": sorted(request.model_fields_set)},
+    )
     return TutorialVideoOut.model_validate(updated)
 
 
 @router.delete("/admin/tutorial-videos/{video_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_tutorial_video(
     video_id: int,
-    _: User = Depends(require_action("admin:survey")),
+    http_request: Request,
+    admin: User = Depends(require_action("admin:survey")),
     db: Session = Depends(get_db),
 ) -> None:
     video = survey_service.get_video(db, video_id)
     if video is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Video not found")
+    title = video.title
     survey_service.delete_video(db, video)
+    audit_service.record_from_request(
+        db,
+        http_request,
+        action="admin.tutorial_video.delete",
+        category="admin",
+        actor=admin,
+        resource_type="tutorial_video",
+        resource_id=video_id,
+        success=True,
+        details={"title": title},
+    )

@@ -16,7 +16,7 @@ from backend_api.http.schemas.bug_reports import (
     BugReportSettingsUpdate,
     BugReportStatusUpdate,
 )
-from backend_api.http.services import bug_report_service
+from backend_api.http.services import audit_service, bug_report_service
 
 router = APIRouter(tags=["bug-reports"])
 
@@ -79,10 +79,22 @@ def admin_get_bug_report_settings(
 @router.patch("/admin/bug-reports/settings", response_model=BugReportSettings)
 def admin_update_bug_report_settings(
     body: BugReportSettingsUpdate,
-    _: User = Depends(require_action("admin:bug_reports")),
+    http_request: Request,
+    admin: User = Depends(require_action("admin:bug_reports")),
     db: Session = Depends(get_db),
 ) -> BugReportSettings:
-    return bug_report_service.update_settings(db, enabled=body.enabled)
+    result = bug_report_service.update_settings(db, enabled=body.enabled)
+    audit_service.record_from_request(
+        db,
+        http_request,
+        action="admin.bug_reports.settings.update",
+        category="admin",
+        actor=admin,
+        resource_type="bug_report_settings",
+        success=True,
+        details=body.model_dump(exclude_unset=True),
+    )
+    return result
 
 
 @router.get("/admin/bug-reports/export.csv")
@@ -121,11 +133,23 @@ def admin_get_bug_report(
 def admin_update_bug_report(
     report_id: int,
     body: BugReportStatusUpdate,
-    _: User = Depends(require_action("admin:bug_reports")),
+    http_request: Request,
+    admin: User = Depends(require_action("admin:bug_reports")),
     db: Session = Depends(get_db),
 ) -> BugReportOut:
     row = bug_report_service.get_report(db, report_id)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bug report not found")
     updated = bug_report_service.update_status(db, row, body.status)
+    audit_service.record_from_request(
+        db,
+        http_request,
+        action="admin.bug_reports.status.update",
+        category="admin",
+        actor=admin,
+        resource_type="bug_report",
+        resource_id=updated.id,
+        success=True,
+        details={"status": updated.status},
+    )
     return BugReportOut.model_validate(bug_report_service.to_out(updated))

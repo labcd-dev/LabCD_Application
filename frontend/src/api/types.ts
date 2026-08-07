@@ -430,6 +430,23 @@ export interface ErrorEvent {
   created_at: string | null
 }
 
+export type AuditLogCategory = 'auth' | 'admin'
+
+export interface AuditLogEntry {
+  id: number
+  action: string
+  category: AuditLogCategory | string
+  actor_user_id: number | null
+  actor_email: string | null
+  resource_type: string | null
+  resource_id: string | null
+  success: boolean
+  ip_address: string | null
+  user_agent: string | null
+  details: Record<string, unknown> | null
+  created_at: string | null
+}
+
 export interface SiteBrand {
   brand_name: string
   tagline: string

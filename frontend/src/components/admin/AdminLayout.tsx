@@ -14,6 +14,7 @@ import {
   Menu,
   Newspaper,
   Package,
+  ScrollText,
   Users,
   X,
 } from 'lucide-react'
@@ -34,6 +35,7 @@ const navItems = [
   { to: '/admin/bug-reports', end: false, label: 'Bug Reports', icon: Flag, action: 'admin:bug_reports' },
   { to: '/admin/monitoring', end: false, label: 'Monitoring', icon: Activity, action: 'admin:monitoring' },
   { to: '/admin/errors', end: false, label: 'Error Tracking', icon: Bug, action: 'admin:errors' },
+  { to: '/admin/audit-log', end: false, label: 'Audit Log', icon: ScrollText, action: 'admin:audit' },
 ] as const
 
 export function AdminLayout() {
