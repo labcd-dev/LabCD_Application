@@ -45,7 +45,12 @@ from backend_api.http.schemas.error_tracking import (
     ErrorTrackingSettingsUpdate,
 )
 from backend_api.http.schemas.audit import AuditLogOut
-from backend_api.http.schemas.analytics import AnalyticsResponse
+from backend_api.http.schemas.analytics import (
+    AnalyticsResponse,
+    TelegramAnalyticsSettings,
+    TelegramAnalyticsSettingsUpdate,
+    TelegramAnalyticsTestResult,
+)
 from backend_api.http.schemas.monitoring import MonitoringResponse
 from backend_api.http.schemas.projects import ProjectDetail, ProjectSummary, ProjectUpdateRequest
 from backend_api.http.services import (
@@ -58,6 +63,7 @@ from backend_api.http.services import (
     project_service,
     role_service,
     sso_service,
+    telegram_analytics_service,
 )
 from backend_api.http.services.auth_service import (
     create_user,
@@ -227,6 +233,74 @@ def get_analytics(
     _: User = Depends(require_action("admin:analytics")),
 ) -> AnalyticsResponse:
     return AnalyticsResponse(**analytics_service.get_analytics(db, days=days))
+
+
+@router.get("/analytics/telegram", response_model=TelegramAnalyticsSettings)
+def get_telegram_analytics_settings(
+    _: User = Depends(require_action("admin:analytics")),
+    db: Session = Depends(get_db),
+) -> TelegramAnalyticsSettings:
+    return telegram_analytics_service.get_settings(db)
+
+
+@router.patch("/analytics/telegram", response_model=TelegramAnalyticsSettings)
+def update_telegram_analytics_settings(
+    body: TelegramAnalyticsSettingsUpdate,
+    http_request: Request,
+    admin: User = Depends(require_action("admin:analytics")),
+    db: Session = Depends(get_db),
+) -> TelegramAnalyticsSettings:
+    try:
+        result = telegram_analytics_service.update_settings(
+            db,
+            enabled=body.enabled,
+            chat_id=body.chat_id,
+            send_hour_utc=body.send_hour_utc,
+            bot_token=body.bot_token,
+        )
+    except api_key_service.ApiKeyError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    audit_details = body.model_dump(exclude_unset=True)
+    if "bot_token" in audit_details:
+        token = audit_details["bot_token"]
+        audit_details["bot_token"] = (
+            "cleared"
+            if not token
+            else api_key_service.mask_secret(str(token))
+        )
+    audit_service.record_from_request(
+        db,
+        http_request,
+        action="admin.analytics.telegram.settings.update",
+        category="admin",
+        actor=admin,
+        resource_type="telegram_analytics_settings",
+        success=True,
+        details=audit_details,
+    )
+    return result
+
+
+@router.post("/analytics/telegram/test", response_model=TelegramAnalyticsTestResult)
+def test_telegram_analytics_report(
+    http_request: Request,
+    admin: User = Depends(require_action("admin:analytics")),
+    db: Session = Depends(get_db),
+) -> TelegramAnalyticsTestResult:
+    result = telegram_analytics_service.send_daily_report(db, force=True)
+    audit_service.record_from_request(
+        db,
+        http_request,
+        action="admin.analytics.telegram.test",
+        category="admin",
+        actor=admin,
+        resource_type="telegram_analytics_settings",
+        success=result.ok,
+        details={"ok": result.ok, "detail": result.detail},
+    )
+    if not result.ok:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=result.detail)
+    return result
 
 
 @router.get("/monitoring/export.csv")

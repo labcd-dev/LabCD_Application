@@ -19,6 +19,9 @@ import type {
   ModelsResponse,
   MonitoringResponse,
   AnalyticsResponse,
+  TelegramAnalyticsSettings,
+  TelegramAnalyticsSettingsUpdate,
+  TelegramAnalyticsTestResult,
   MuloDesignerStateResponse,
   MuloSimulateResponse,
   PlanInfo,
@@ -189,6 +192,17 @@ export const adminApi = {
   getMonitoring: () => apiFetch<MonitoringResponse>('/admin/monitoring'),
   getAnalytics: (days = 30) =>
     apiFetch<AnalyticsResponse>(`/admin/analytics?days=${encodeURIComponent(String(days))}`),
+  getTelegramAnalyticsSettings: () =>
+    apiFetch<TelegramAnalyticsSettings>('/admin/analytics/telegram'),
+  updateTelegramAnalyticsSettings: (body: TelegramAnalyticsSettingsUpdate) =>
+    apiFetch<TelegramAnalyticsSettings>('/admin/analytics/telegram', {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+  testTelegramAnalyticsReport: () =>
+    apiFetch<TelegramAnalyticsTestResult>('/admin/analytics/telegram/test', {
+      method: 'POST',
+    }),
   listActions: () => apiFetch<ActionInfo[]>('/admin/actions'),
   listPlans: (params?: { active_only?: boolean }) => {
     const query = new URLSearchParams()

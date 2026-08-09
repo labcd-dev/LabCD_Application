@@ -49,6 +49,10 @@ SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
 SMTP_TLS = os.getenv("SMTP_TLS", "true").lower() in {"1", "true", "yes", "on"}
 EMAIL_FROM = os.getenv("EMAIL_FROM", "noreply@labcd.local").strip()
 
+# Telegram — optional seed at boot; Admin → Analytics can update process env + .env.
+# Prefer reading os.environ / api_key_service at send time (this constant is import-time only).
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+
 EMAIL_VERIFY_EXPIRE_HOURS = int(os.getenv("EMAIL_VERIFY_EXPIRE_HOURS", "24"))
 EMAIL_VERIFY_RESEND_COOLDOWN_SECONDS = int(
     os.getenv("EMAIL_VERIFY_RESEND_COOLDOWN_SECONDS", "120")

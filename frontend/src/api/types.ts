@@ -450,6 +450,28 @@ export interface AnalyticsResponse {
   modules: AnalyticsModuleCount[]
 }
 
+export interface TelegramAnalyticsSettings {
+  enabled: boolean
+  chat_id: string
+  send_hour_utc: number
+  bot_token_configured: boolean
+  bot_token_masked: string
+  last_sent_date: string | null
+}
+
+export interface TelegramAnalyticsSettingsUpdate {
+  enabled?: boolean
+  chat_id?: string
+  send_hour_utc?: number
+  /** Write-only; omit to leave unchanged; empty string clears. */
+  bot_token?: string
+}
+
+export interface TelegramAnalyticsTestResult {
+  ok: boolean
+  detail: string
+}
+
 export interface ErrorTrackingSettings {
   enabled: boolean
   frontend: boolean

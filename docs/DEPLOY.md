@@ -153,6 +153,7 @@ Fill at least:
 - At least one LLM API key you use
 - Keep `CORS_ORIGINS=https://labcd.ai,https://www.labcd.ai`
 - SMTP settings for auth emails (see [§4 Email (SMTP)](#4-email-smtp-for-production))
+- Optional `TELEGRAM_BOT_TOKEN` seed for the daily analytics digest (usually set later in Admin → Analytics; see [TELEGRAM_ANALYTICS.md](./TELEGRAM_ANALYTICS.md))
 - `APP_PUBLIC_URL=https://labcd.ai` (used in verify / reset links)
 
 Then:
@@ -332,6 +333,7 @@ Also back up `uploads/` and `results/`.
 | Actions SSH fails | Test key locally; confirm `deploy` is in `docker` group and owns `/opt/labcd` |
 | Admin login fails | Recheck `.env` admin vars; recreate `api` so env reloads. Note: changing `ADMIN_PASSWORD` does not update an existing admin hash — reset via DB or admin UI. |
 | Auth emails never arrive | Set `SMTP_HOST` / credentials in `.env`; recreate `api`. Empty `SMTP_HOST` logs email to the console only. Confirm `EMAIL_FROM` is verified at the provider and `APP_PUBLIC_URL` is the public HTTPS URL. |
+| Telegram analytics digest not delivered | Under Admin → Analytics set bot token + chat ID and enable the digest. Ensure root `.env` is writable so the token can be saved. See [TELEGRAM_ANALYTICS.md](./TELEGRAM_ANALYTICS.md). |
 
 ---
 

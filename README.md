@@ -120,6 +120,7 @@ LabCD-Phase-1-31/
 ├── assets/                # Static assets (logo)
 ├── uploads/               # Runtime uploads (gitignored; .gitkeep only)
 ├── results/               # Runtime artifacts (gitignored; .gitkeep only)
+├── docs/                  # Deploy + feature docs (e.g. Telegram analytics)
 ├── docker-compose.yml     # db + api + frontend
 ├── Dockerfile.api         # FastAPI image
 ├── Dockerfile             # Legacy Streamlit image
@@ -198,9 +199,17 @@ See `.env.example`. Important ones:
 | `DB_POOL_SIZE` / `DB_MAX_OVERFLOW` | SQLAlchemy pool (defaults 10 / 20) |
 | `API_THREAD_LIMIT` | Sync route threadpool size (default 64) |
 | `RESULTS_DIR` / `UPLOADS_DIR` | Artifact paths |
+| `TELEGRAM_BOT_TOKEN` | Optional bot token for daily analytics digests; also settable in Admin → Analytics (see [docs/TELEGRAM_ANALYTICS.md](./docs/TELEGRAM_ANALYTICS.md)) |
 | `VITE_API_BASE_URL` | Frontend API base (`frontend/.env`) |
 
 Never commit `.env` (ignored). Commit only `.env.example`.
+
+### Docs
+
+| Doc | Topic |
+|-----|--------|
+| [docs/DEPLOY.md](./docs/DEPLOY.md) | Production deploy on Ubuntu |
+| [docs/TELEGRAM_ANALYTICS.md](./docs/TELEGRAM_ANALYTICS.md) | Daily Telegram analytics digest |
 
 ### Tests
 

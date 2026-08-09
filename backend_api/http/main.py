@@ -35,7 +35,7 @@ from backend_api.http.routers import (
     tutorials,
     upload,
 )
-from backend_api.http.services import error_tracking_service
+from backend_api.http.services import error_tracking_service, telegram_analytics_service
 
 
 @asynccontextmanager
@@ -54,7 +54,11 @@ async def lifespan(_app: FastAPI):
             db.close()
     except Exception:
         error_tracking_service.set_cached_config(error_tracking_service.ErrorTrackingConfig())
-    yield
+    telegram_analytics_service.start_scheduler()
+    try:
+        yield
+    finally:
+        telegram_analytics_service.stop_scheduler()
 
 
 def create_app() -> FastAPI:

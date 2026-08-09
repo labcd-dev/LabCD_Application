@@ -9,11 +9,19 @@ import {
 } from 'lucide-react'
 import { Navigate } from 'react-router-dom'
 import { adminApi } from '../api/endpoints'
-import type { AnalyticsResponse } from '../api/types'
+import type { AnalyticsResponse, TelegramAnalyticsSettings } from '../api/types'
 import { PlotlyChart } from '../components/PlotlyChart'
 import { StatusMessage } from '../components/StatusMessage'
 import { useAuth } from '../context/AuthContext'
-import { btnBase, btnCompact, cardPanel } from '../lib/classes'
+import {
+  btnBase,
+  btnCompact,
+  btnPrimary,
+  cardPanel,
+  fieldCheckbox,
+  fieldInput,
+  fieldLabel,
+} from '../lib/classes'
 
 const RANGE_OPTIONS = [7, 30, 90] as const
 
@@ -35,22 +43,47 @@ function formatCount(value: number | undefined, loading: boolean): string {
   return value.toLocaleString()
 }
 
+const EMPTY_TELEGRAM: TelegramAnalyticsSettings = {
+  enabled: false,
+  chat_id: '',
+  send_hour_utc: 8,
+  bot_token_configured: false,
+  bot_token_masked: '',
+  last_sent_date: null,
+}
+
 export function AdminAnalyticsPage() {
   const { hasAction } = useAuth()
   const canManage = hasAction('admin:analytics')
   const [days, setDays] = useState<(typeof RANGE_OPTIONS)[number]>(30)
   const [data, setData] = useState<AnalyticsResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [message, setMessage] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [telegram, setTelegram] = useState<TelegramAnalyticsSettings>(EMPTY_TELEGRAM)
+  const [draftChatId, setDraftChatId] = useState('')
+  const [draftHour, setDraftHour] = useState(8)
+  const [draftBotToken, setDraftBotToken] = useState('')
+  const [clearBotToken, setClearBotToken] = useState(false)
+  const [savingTelegram, setSavingTelegram] = useState(false)
+  const [testingTelegram, setTestingTelegram] = useState(false)
 
   const load = useCallback(
     async (isManual = false) => {
       if (isManual) setRefreshing(true)
       setError(null)
       try {
-        const response = await adminApi.getAnalytics(days)
+        const [response, telegramSettings] = await Promise.all([
+          adminApi.getAnalytics(days),
+          adminApi.getTelegramAnalyticsSettings(),
+        ])
         setData(response)
+        setTelegram(telegramSettings)
+        setDraftChatId(telegramSettings.chat_id)
+        setDraftHour(telegramSettings.send_hour_utc)
+        setDraftBotToken('')
+        setClearBotToken(false)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load analytics')
       } finally {
@@ -106,6 +139,92 @@ export function AdminAnalyticsPage() {
     },
   ]
 
+  const buildTelegramUpdate = () => {
+    const body: {
+      enabled: boolean
+      chat_id: string
+      send_hour_utc: number
+      bot_token?: string
+    } = {
+      enabled: telegram.enabled,
+      chat_id: draftChatId.trim(),
+      send_hour_utc: draftHour,
+    }
+    if (clearBotToken) {
+      body.bot_token = ''
+    } else if (draftBotToken.trim()) {
+      body.bot_token = draftBotToken.trim()
+    }
+    return body
+  }
+
+  const saveTelegram = async () => {
+    setSavingTelegram(true)
+    setError(null)
+    setMessage(null)
+    try {
+      const next = await adminApi.updateTelegramAnalyticsSettings(buildTelegramUpdate())
+      setTelegram(next)
+      setDraftChatId(next.chat_id)
+      setDraftHour(next.send_hour_utc)
+      setDraftBotToken('')
+      setClearBotToken(false)
+      setMessage('Telegram daily report settings saved.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save Telegram settings')
+    } finally {
+      setSavingTelegram(false)
+    }
+  }
+
+  const toggleTelegramEnabled = async (enabled: boolean) => {
+    setSavingTelegram(true)
+    setError(null)
+    setMessage(null)
+    try {
+      const next = await adminApi.updateTelegramAnalyticsSettings({ enabled })
+      setTelegram(next)
+      setMessage(
+        next.enabled
+          ? 'Telegram daily report enabled.'
+          : 'Telegram daily report disabled.',
+      )
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update Telegram settings')
+    } finally {
+      setSavingTelegram(false)
+    }
+  }
+
+  const sendTestReport = async () => {
+    setTestingTelegram(true)
+    setError(null)
+    setMessage(null)
+    try {
+      const hasDraftChanges =
+        draftChatId.trim() !== telegram.chat_id ||
+        draftHour !== telegram.send_hour_utc ||
+        clearBotToken ||
+        Boolean(draftBotToken.trim())
+      if (hasDraftChanges) {
+        const saved = await adminApi.updateTelegramAnalyticsSettings(buildTelegramUpdate())
+        setTelegram(saved)
+        setDraftChatId(saved.chat_id)
+        setDraftHour(saved.send_hour_utc)
+        setDraftBotToken('')
+        setClearBotToken(false)
+      }
+      const result = await adminApi.testTelegramAnalyticsReport()
+      const refreshed = await adminApi.getTelegramAnalyticsSettings()
+      setTelegram(refreshed)
+      setMessage(result.detail)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to send test report')
+    } finally {
+      setTestingTelegram(false)
+    }
+  }
+
   return (
     <div className="admin-fade-in space-y-8">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -151,6 +270,7 @@ export function AdminAnalyticsPage() {
       </header>
 
       {error && <StatusMessage type="error" message={error} />}
+      {message && <StatusMessage type="success" message={message} />}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
@@ -206,6 +326,118 @@ export function AdminAnalyticsPage() {
             revision={modules.length}
           />
         </ChartCard>
+      </section>
+
+      <section className={cardPanel}>
+        <h2 className="m-0 mb-1 text-base font-semibold text-foreground">
+          Telegram daily report
+        </h2>
+        <p className="m-0 mb-4 text-sm text-muted-text leading-relaxed">
+          Send a once-per-day digest (DAU, MAU, retention, module runs) to a Telegram channel.
+          Bot token is stored in the API <code className="text-xs">.env</code> (same pattern as
+          provider API keys). Leave the token empty to log digests to the console.
+        </p>
+        <label className={fieldCheckbox}>
+          <input
+            type="checkbox"
+            checked={telegram.enabled}
+            disabled={savingTelegram || loading}
+            onChange={(e) => void toggleTelegramEnabled(e.target.checked)}
+          />
+          <span>Enable daily Telegram digest</span>
+        </label>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className={fieldLabel}>
+            <span>Bot token</span>
+            <input
+              className={fieldInput}
+              type="password"
+              value={draftBotToken}
+              onChange={(e) => {
+                setDraftBotToken(e.target.value)
+                if (e.target.value) setClearBotToken(false)
+              }}
+              placeholder={
+                telegram.bot_token_configured
+                  ? 'Leave blank to keep current'
+                  : '123456:ABC-your-bot-token'
+              }
+              disabled={savingTelegram || loading || clearBotToken}
+              autoComplete="off"
+            />
+          </label>
+          <label className={fieldLabel}>
+            <span>Channel / chat ID</span>
+            <input
+              className={fieldInput}
+              value={draftChatId}
+              onChange={(e) => setDraftChatId(e.target.value)}
+              placeholder="-100xxxxxxxxxx"
+              disabled={savingTelegram || loading}
+              autoComplete="off"
+            />
+          </label>
+          <label className={fieldLabel}>
+            <span>Send hour (UTC, 0–23)</span>
+            <input
+              className={fieldInput}
+              type="number"
+              min={0}
+              max={23}
+              value={draftHour}
+              onChange={(e) => {
+                const next = Number(e.target.value)
+                if (Number.isNaN(next)) return
+                setDraftHour(Math.max(0, Math.min(23, Math.trunc(next))))
+              }}
+              disabled={savingTelegram || loading}
+            />
+          </label>
+        </div>
+        <label className={fieldCheckbox}>
+          <input
+            type="checkbox"
+            checked={clearBotToken}
+            disabled={savingTelegram || loading || !telegram.bot_token_configured}
+            onChange={(e) => {
+              setClearBotToken(e.target.checked)
+              if (e.target.checked) setDraftBotToken('')
+            }}
+          />
+          <span>Clear bot token</span>
+        </label>
+        <dl className="mt-2 mb-4 grid gap-2 text-sm text-muted-text sm:grid-cols-2">
+          <div>
+            <dt className="inline font-medium text-foreground">Bot token: </dt>
+            <dd className="inline m-0">
+              {telegram.bot_token_configured
+                ? `configured ${telegram.bot_token_masked}`
+                : 'not set (console fallback)'}
+            </dd>
+          </div>
+          <div>
+            <dt className="inline font-medium text-foreground">Last sent (UTC date): </dt>
+            <dd className="inline m-0">{telegram.last_sent_date ?? '—'}</dd>
+          </div>
+        </dl>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            className={btnPrimary}
+            onClick={() => void saveTelegram()}
+            disabled={savingTelegram || testingTelegram || loading}
+          >
+            Save settings
+          </button>
+          <button
+            type="button"
+            className={btnBase}
+            onClick={() => void sendTestReport()}
+            disabled={savingTelegram || testingTelegram || loading}
+          >
+            {testingTelegram ? 'Sending…' : 'Send test now'}
+          </button>
+        </div>
       </section>
     </div>
   )

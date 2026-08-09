@@ -127,17 +127,22 @@ def _upsert_env_file(path: Path, updates: dict[str, str]) -> None:
         raise
 
 
-def update_keys(updates: dict[str, str | None]) -> list[str]:
-    """Apply updates. Empty string clears; omitted keys are not in `updates`.
+def update_env_keys(
+    updates: dict[str, str | None],
+    *,
+    allowed: frozenset[str],
+) -> list[str]:
+    """Apply env updates for an allowlisted set of keys.
 
+    Empty string clears; keys with value ``None`` are ignored.
     Returns the list of key names that changed.
     """
     if not updates:
         return []
 
-    unknown = sorted(set(updates) - MANAGED_API_KEY_SET)
+    unknown = sorted(set(updates) - allowed)
     if unknown:
-        raise ApiKeyError(f"Unknown API key(s): {', '.join(unknown)}")
+        raise ApiKeyError(f"Unknown env key(s): {', '.join(unknown)}")
 
     changed: list[str] = []
     previous: dict[str, str] = {}
@@ -170,3 +175,18 @@ def update_keys(updates: dict[str, str | None]) -> list[str]:
         raise ApiKeyError(f"Failed to write .env: {exc}") from exc
 
     return changed
+
+
+def update_keys(updates: dict[str, str | None]) -> list[str]:
+    """Apply LLM/search API key updates. Empty string clears."""
+    return update_env_keys(updates, allowed=MANAGED_API_KEY_SET)
+
+
+def mask_secret(value: str) -> str:
+    """Return a masked display form for a secret value."""
+    return _mask_value(value)
+
+
+def current_env_value(name: str) -> str:
+    """Read a process-env secret (prefer this over import-time config constants)."""
+    return _current_value(name)
