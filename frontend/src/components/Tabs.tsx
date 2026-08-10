@@ -1,45 +1,115 @@
-import type { ReactNode } from 'react'
+import {
+  useCallback,
+  useId,
+  useRef,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react'
 
-interface TabsProps {
-  tabs: Array<{ id: string; label: string; content: ReactNode }>
-  activeTab: string
-  onChange: (tabId: string) => void
+interface TabItem {
+  id: string
+  label: string
+  content: ReactNode
 }
 
-export function Tabs({ tabs, activeTab, onChange }: TabsProps) {
+interface TabsProps {
+  tabs: TabItem[]
+  activeTab: string
+  onChange: (tabId: string) => void
+  /** Optional accessible name for the tab list. */
+  label?: string
+}
+
+export function Tabs({ tabs, activeTab, onChange, label }: TabsProps) {
+  const baseId = useId()
+  const listRef = useRef<HTMLDivElement>(null)
+
+  const focusTabAt = useCallback(
+    (index: number) => {
+      const nodes = listRef.current?.querySelectorAll<HTMLButtonElement>('[role="tab"]')
+      const target = nodes?.[index]
+      if (!target) return
+      target.focus()
+      onChange(tabs[index].id)
+    },
+    [onChange, tabs],
+  )
+
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const currentIndex = tabs.findIndex((tab) => tab.id === activeTab)
+    if (currentIndex < 0) return
+
+    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+      event.preventDefault()
+      focusTabAt((currentIndex + 1) % tabs.length)
+      return
+    }
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+      event.preventDefault()
+      focusTabAt((currentIndex - 1 + tabs.length) % tabs.length)
+      return
+    }
+    if (event.key === 'Home') {
+      event.preventDefault()
+      focusTabAt(0)
+      return
+    }
+    if (event.key === 'End') {
+      event.preventDefault()
+      focusTabAt(tabs.length - 1)
+    }
+  }
+
+  const active = tabs.find((tab) => tab.id === activeTab) ?? tabs[0]
+  if (!active) return null
+
   return (
-    <div className="mt-4">
-      <div
-        className="flex gap-1 border-b border-border mb-4 overflow-x-auto"
-        role="tablist"
-      >
-        {tabs.map((tab) => {
-          const isActive = activeTab === tab.id
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              role="tab"
-              aria-selected={isActive}
-              className={`shrink-0 border-none bg-transparent px-4 py-3 cursor-pointer border-b-2 text-sm font-medium transition-colors ${
-                isActive
-                  ? 'border-b-primary text-primary'
-                  : 'border-b-transparent text-muted-text hover:text-foreground'
-              }`}
-              onClick={() => onChange(tab.id)}
-            >
-              {tab.label}
-            </button>
-          )
-        })}
+    <div className="module-tabs">
+      <div className="module-tabs__rail">
+        <div
+          ref={listRef}
+          className="module-tabs__list"
+          role="tablist"
+          aria-label={label}
+          aria-orientation="horizontal"
+          onKeyDown={onKeyDown}
+        >
+          {tabs.map((tab) => {
+            const isActive = active.id === tab.id
+            const tabId = `${baseId}-tab-${tab.id}`
+            const panelId = `${baseId}-panel-${tab.id}`
+            return (
+              <button
+                key={tab.id}
+                id={tabId}
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+                aria-controls={panelId}
+                tabIndex={isActive ? 0 : -1}
+                className={[
+                  'module-tabs__tab',
+                  isActive && 'module-tabs__tab--active',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+                onClick={() => onChange(tab.id)}
+              >
+                <span className="module-tabs__label">{tab.label}</span>
+              </button>
+            )
+          })}
+        </div>
       </div>
-      {tabs.map((tab) =>
-        activeTab === tab.id ? (
-          <div key={tab.id} role="tabpanel">
-            {tab.content}
-          </div>
-        ) : null,
-      )}
+
+      <div
+        id={`${baseId}-panel-${active.id}`}
+        role="tabpanel"
+        aria-labelledby={`${baseId}-tab-${active.id}`}
+        className="module-tabs__panel"
+      >
+        {active.content}
+      </div>
     </div>
   )
 }
