@@ -404,6 +404,7 @@ def design_scenario(state: Dict) -> Dict:
             return {"should_continue_outer": False, "scenario": None}
 
     state["simulator"].set_scenario(scenario_data)
+    state["system"] = state["simulator"].system
     state["buffer"].scenario = scenario_data
 
     # Initialize per-scenario metrics and start wall clock timer

@@ -27,6 +27,7 @@ MONITOR_STATE_KEYS = (
     'output_channel',
     'min_ctrl',
     'max_ctrl',
+    'scenario',
     'current_params',
     'results',
     'simulator',
@@ -76,6 +77,9 @@ def lightweight_monitor_snapshot(state: Dict[str, Any]) -> Dict[str, Any]:
             continue
         if key == 'target_metrics' and isinstance(state.get('target_metrics'), dict):
             snapshot['target_metrics'] = copy.deepcopy(state['target_metrics'])
+            continue
+        if key == 'scenario' and isinstance(state.get('scenario'), dict):
+            snapshot['scenario'] = copy.deepcopy(state['scenario'])
             continue
         snapshot[key] = state[key]
     return snapshot
@@ -401,7 +405,7 @@ def run_ga_optimization(config, ga_results_container):
         # Get scenario config (use first scenario)
         scenarios = config.get('custom_scenarios', [])
         scenario_config = scenarios[0] if scenarios else {
-            'initial_condition_range': (-1.0, 1.0),
+            'initial_condition_range': (1.0, 1.0),
             'randomness_level': 0.0,
             'disturbance_level': 0.0
         }

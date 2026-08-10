@@ -6,7 +6,12 @@ const MANUAL_COLOR = 'rgb(54, 162, 235)'
 const TARGET_COLOR = 'rgb(75, 192, 192)'
 
 /** Overlay Agentic vs Manual trajectories — Streamlit Time Response parity. */
-export function buildSiloTimeResponseChart(result: SiloSimulateResponse): {
+export function buildSiloTimeResponseChart(
+  result: SiloSimulateResponse,
+  options?: {
+    title?: string
+  },
+): {
   data: Data[]
   layout: Partial<Layout>
 } {
@@ -75,7 +80,7 @@ export function buildSiloTimeResponseChart(result: SiloSimulateResponse): {
     data,
     layout: {
       grid: { rows: 2, columns: 1, pattern: 'independent', roworder: 'top to bottom' },
-      title: { text: 'System Response & Control Input' },
+      title: options?.title ? { text: options.title } : { text: 'System Response & Control Input' },
       xaxis: { title: { text: 'Time (s)' }, anchor: 'y' },
       yaxis: { title: { text: 'Output' }, domain: [0.55, 1] },
       xaxis2: { title: { text: 'Time (s)' }, anchor: 'y2' },

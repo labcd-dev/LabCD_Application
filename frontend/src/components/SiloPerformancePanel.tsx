@@ -8,12 +8,14 @@ import {
   buildMonitorSummary,
   getControllerType,
 } from '../lib/monitorStateParser'
+import { resolveSimulateScenario } from '../lib/siloDesignConfig'
 import { btnBase, cardPanel, mutedText } from '../lib/classes'
 
 interface SiloPerformancePanelProps {
   jobId?: string | null
   projectId?: number | null
   currentState?: Record<string, unknown> | null
+  designConfig?: Record<string, unknown> | null
   /** Lock sliders while design optimization is running (Streamlit parity). */
   disabled?: boolean
 }
@@ -34,6 +36,7 @@ export function SiloPerformancePanel({
   jobId,
   projectId,
   currentState,
+  designConfig,
   disabled = false,
 }: SiloPerformancePanelProps) {
   const summary = useMemo(
@@ -67,13 +70,20 @@ export function SiloPerformancePanel({
     setError(null)
   }, [optimalGains])
 
+  const simulateScenario = useMemo(
+    () => resolveSimulateScenario(currentState, designConfig),
+    [currentState, designConfig],
+  )
+
   const runSimulation = useCallback(
     async (nextGains: Record<string, number>, asTest: boolean) => {
       if (!canSimulate || disabled) return
       setLoading(true)
       setError(null)
       try {
-        const body = { gains: nextGains }
+        const body = simulateScenario
+          ? { gains: nextGains, scenario: simulateScenario }
+          : { gains: nextGains }
         let response: SiloSimulateResponse | null = null
         if (jobId) {
           try {
@@ -100,7 +110,7 @@ export function SiloPerformancePanel({
         setLoading(false)
       }
     },
-    [canSimulate, disabled, jobId, projectId],
+    [canSimulate, disabled, jobId, projectId, simulateScenario],
   )
 
   useEffect(() => {
@@ -124,7 +134,30 @@ export function SiloPerformancePanel({
     void runSimulation(gains, true)
   }
 
-  const chart = result ? buildSiloTimeResponseChart(result) : null
+  const chart = result
+    ? buildSiloTimeResponseChart(result, {
+        title: buildTimeResponseTitle(result),
+      })
+    : null
+
+  function buildTimeResponseTitle(response: SiloSimulateResponse): string {
+    const gains = Object.entries(response.optimal_gains)
+      .filter(([key]) => key !== 'reasoning')
+      .map(([key, value]) => `${key}: ${value.toFixed(2)}`)
+      .join(', ')
+    const outputChannel = response.output_channel ?? 0
+    const icValue = response.initial_condition_value
+    const icRange = response.initial_condition_range
+    const icPart =
+      icValue !== undefined && icRange
+        ? `IC: x[${outputChannel}]=${icValue.toFixed(3)} (fixed from range ${icRange[0]} to ${icRange[1]})`
+        : ''
+    const scenarioId =
+      response.scenario && typeof response.scenario.id === 'string'
+        ? ` | Scenario ${response.scenario.id}`
+        : ''
+    return `Controller: ${response.controller_type} | Optimized Gains: ${gains}${icPart ? ` | ${icPart}` : ''}${scenarioId}`
+  }
   const deltas =
     testMode && result
       ? Object.keys(gains)

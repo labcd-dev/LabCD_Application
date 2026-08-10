@@ -22,8 +22,10 @@ from backend_api.http.services.project_service import link_or_create_for_job, sy
 MONITOR_PUBLISH_INTERVAL_SECONDS = 3.0
 
 _INIT_EXCLUDED_KEYS = frozenset({"enable_ga", "ga_config", "file_name", "monitor"})
+# Match design_scenario() nominal defaults (IC = 1), not a symmetric
+# [-1, 1] range whose midpoint equals the default target (0).
 _DEFAULT_SCENARIO = {
-    "initial_condition_range": (-1.0, 1.0),
+    "initial_condition_range": (1.0, 1.0),
     "randomness_level": 0.0,
     "disturbance_level": 0.0,
 }
@@ -330,11 +332,99 @@ def _resolve_simulator(
     return rebuilt["simulator"], rebuilt["system"], {**live_state, **rebuilt}
 
 
+def _apply_system_config(system: Any, config: Dict[str, Any]) -> None:
+    """Ensure rebuilt simulators honor saved design limits and channels."""
+    if system is None:
+        return
+    float_fields = (
+        ("dt", "dt", 0.01),
+        ("max_time", "max_time", 5.0),
+        ("target", "target", 0.0),
+        ("min_control", "min_ctrl", -10.0),
+        ("max_control", "max_ctrl", 10.0),
+    )
+    int_fields = (
+        ("num_inputs", "num_inputs", 1),
+        ("input_channel", "input_channel", 0),
+        ("output_channel", "output_channel", 0),
+    )
+    for attr, key, default in float_fields:
+        if hasattr(system, attr):
+            setattr(system, attr, float(config.get(key, default) or default))
+    for attr, key, default in int_fields:
+        if hasattr(system, attr):
+            setattr(system, attr, int(config.get(key, default) or default))
+
+    trim_values = config.get("trim_values")
+    if trim_values is not None and hasattr(system, "trim_values"):
+        system.trim_values = np.asarray(trim_values, dtype=float)
+
+
+def _effective_scenario_for_plot(
+    scenario: Dict[str, Any],
+    target: float,
+) -> Dict[str, Any]:
+    """Avoid IC-range midpoints that equal the setpoint (flat u=0 response).
+
+    Streamlit often uses backend default scenario IC [1, 1] while the UI slider
+    default is [-1, 1]. When the midpoint equals the target, pin the range to an
+    endpoint so the ball/beam is not released already at equilibrium.
+    """
+    ic_range = scenario.get("initial_condition_range")
+    if not isinstance(ic_range, (list, tuple)) or len(ic_range) < 2:
+        return dict(scenario)
+
+    ic_min = float(ic_range[0])
+    ic_max = float(ic_range[1])
+    mid = (ic_min + ic_max) / 2.0
+    if abs(mid - target) < 1e-9 and abs(ic_max - ic_min) > 1e-9:
+        endpoint = ic_max if abs(ic_max - target) >= abs(ic_min - target) else ic_min
+        return {
+            **scenario,
+            "initial_condition_range": [endpoint, endpoint],
+        }
+    return dict(scenario)
+
+
 def _fixed_initial_state(system: Any) -> np.ndarray:
+    """Fixed IC for time-response plots (Streamlit midpoint convention).
+
+    If the IC-range midpoint equals the setpoint, prefer a range endpoint so
+    the plant is not started already at equilibrium (constant u=0 / flat MSE).
+    """
     initial_state = np.zeros(system.num_states)
-    ic_min, ic_max = system.initial_condition_range
-    initial_state[system.output_channel] = (float(ic_min) + float(ic_max)) / 2.0
+    ic_min = float(system.initial_condition_range[0])
+    ic_max = float(system.initial_condition_range[1])
+    mid = (ic_min + ic_max) / 2.0
+    target = float(getattr(system, "target", 0.0) or 0.0)
+    if abs(mid - target) < 1e-9 and abs(ic_max - ic_min) > 1e-9:
+        fixed = ic_max if abs(ic_max - target) >= abs(ic_min - target) else ic_min
+    else:
+        fixed = mid
+    initial_state[system.output_channel] = fixed
     return initial_state
+
+
+def _scenario_from_config(
+    config: Dict[str, Any],
+    live_state: Dict[str, Any],
+    serialized_current: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Prefer the scenario used during design over the simulate fallback."""
+    for candidate in (
+        live_state.get("scenario"),
+        serialized_current.get("scenario"),
+    ):
+        if isinstance(candidate, dict) and candidate.get("initial_condition_range") is not None:
+            return candidate
+
+    custom = config.get("custom_scenarios")
+    if isinstance(custom, list) and custom:
+        first = custom[0]
+        if isinstance(first, dict) and first.get("initial_condition_range") is not None:
+            return first
+
+    return dict(_DEFAULT_SCENARIO)
 
 
 def _serialize_sim_result(result: Dict[str, Any]) -> Dict[str, Any]:
@@ -377,12 +467,19 @@ def _run_manual_simulation(
     if not manual_gains:
         manual_gains = dict(optimal_gains)
 
-    selected_scenario = scenario if isinstance(scenario, dict) and scenario else _DEFAULT_SCENARIO
-    simulator.set_scenario(selected_scenario)
+    if isinstance(scenario, dict) and scenario.get("initial_condition_range") is not None:
+        selected_scenario = scenario
+    else:
+        selected_scenario = _scenario_from_config(config, live_state, serialized_current)
+
+    target = float(config.get("target", live_state.get("target", 0.0)) or 0.0)
+    plot_scenario = _effective_scenario_for_plot(selected_scenario, target)
+    simulator.set_scenario(plot_scenario)
     system = simulator.system
     if system is None:
         raise ValueError("Simulator system is not initialized")
 
+    _apply_system_config(system, config)
     initial_state = _fixed_initial_state(system)
     optimal_result = simulator.evaluate_parameters(optimal_gains, initial_state=initial_state)
     optimal_payload = _serialize_sim_result(optimal_result)
@@ -395,6 +492,8 @@ def _run_manual_simulation(
     dt = float(getattr(system, "dt", config.get("dt", 0.01)) or 0.01)
     max_time = float(getattr(system, "max_time", config.get("max_time", 5.0)) or 5.0)
     target = float(getattr(system, "target", config.get("target", 0.0)) or 0.0)
+    ic_range = getattr(system, "initial_condition_range", [0.0, 0.0])
+    ic_value = float(initial_state[system.output_channel])
     traj_len = len(optimal_payload.get("trajectory") or [])
     expected_steps = int(max_time / dt) + 1
     time_points = (np.arange(0, max_time + dt, dt)[:expected_steps])[:traj_len].tolist()
@@ -412,6 +511,11 @@ def _run_manual_simulation(
         "dt": dt,
         "max_time": max_time,
         "time": time_points,
+        "scenario": make_serializable(plot_scenario),
+        "initial_condition": make_serializable(initial_state.tolist()),
+        "initial_condition_value": ic_value,
+        "initial_condition_range": make_serializable(list(ic_range)),
+        "output_channel": int(getattr(system, "output_channel", 0)),
         "optimal": optimal_payload,
         "manual": manual_payload,
     }

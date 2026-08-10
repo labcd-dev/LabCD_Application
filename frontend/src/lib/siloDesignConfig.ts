@@ -58,9 +58,13 @@ export interface SiloAdvancedConfig {
 }
 
 export function createDefaultScenario(index: number): CustomScenario {
+  // Match backend design_scenario defaults ([1, 1]), not the symmetric
+  // [-1, 1] UI slider default. Midpoint of [-1, 1] is 0 — same as the
+  // default target — so plants like Ball-and-Beam stay at equilibrium
+  // (u=0) and the time-response plot looks constant.
   return {
     id: String.fromCharCode(64 + index),
-    initial_condition_range: [-1, 1],
+    initial_condition_range: [1, 1],
     randomness_level: 0,
     disturbance_level: 0,
   }
@@ -166,6 +170,10 @@ export function buildSiloStartConfig(
     file_type: string
     file_name?: string
   },
+  options?: {
+    /** Streamlit sends custom_scenarios only from Advanced Settings. */
+    includeCustomScenarios?: boolean
+  },
 ): Record<string, unknown> {
   const trimValues = advanced.trim_values_str
     .split(',')
@@ -190,6 +198,8 @@ export function buildSiloStartConfig(
     fileName && fileName.toLowerCase().endsWith('.m')
       ? fileName.replace(/\.m$/i, '')
       : 'dynamics'
+
+  const includeCustomScenarios = options?.includeCustomScenarios ?? false
 
   return {
     llm_model: base.llm_model,
@@ -219,10 +229,33 @@ export function buildSiloStartConfig(
       trimValues.length === advanced.num_inputs ? trimValues : null,
     param_ranges: buildParamRanges(advanced),
     custom_scenarios:
-      advanced.scenarios.length > 0 ? advanced.scenarios.slice(0, advanced.max_scenarios) : null,
+      includeCustomScenarios && advanced.scenarios.length > 0
+        ? advanced.scenarios.slice(0, advanced.max_scenarios)
+        : null,
     enable_ga: advanced.enable_ga,
     ga_config: gaConfig,
   }
+}
+
+/** Resolve the scenario payload for manual time-response re-simulation. */
+export function resolveSimulateScenario(
+  currentState?: Record<string, unknown> | null,
+  designConfig?: Record<string, unknown> | null,
+): Record<string, unknown> | undefined {
+  const liveScenario = currentState?.scenario
+  if (liveScenario && typeof liveScenario === 'object') {
+    return liveScenario as Record<string, unknown>
+  }
+
+  const custom = designConfig?.custom_scenarios
+  if (Array.isArray(custom) && custom.length > 0) {
+    const first = custom[0]
+    if (first && typeof first === 'object') {
+      return first as Record<string, unknown>
+    }
+  }
+
+  return undefined
 }
 
 export function syncScenariosToMax(

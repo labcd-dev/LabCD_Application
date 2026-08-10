@@ -121,6 +121,11 @@ export interface SiloSimulateResponse {
   dt: number
   max_time: number
   time: number[]
+  scenario?: Record<string, unknown>
+  initial_condition?: number[]
+  initial_condition_value?: number
+  initial_condition_range?: number[]
+  output_channel?: number
   optimal: SiloSimTrace
   manual: SiloSimTrace | null
 }

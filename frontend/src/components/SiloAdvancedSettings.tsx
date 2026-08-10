@@ -7,7 +7,7 @@ import {
   syncFsfRangesToNumStates,
   syncScenariosToMax,
 } from '../lib/siloDesignConfig'
-import { cardPanel, fieldCheckbox, fieldInput, fieldLabel } from '../lib/classes'
+import { cardPanel, fieldCheckbox, fieldInput, fieldLabel, mutedText } from '../lib/classes'
 
 interface SiloAdvancedSettingsProps {
   value: SiloAdvancedConfig
@@ -441,6 +441,10 @@ export function SiloAdvancedSettings({ value, onChange }: SiloAdvancedSettingsPr
       )}
 
       <SectionHeader>Scenario Configurations</SectionHeader>
+      <p className={`mt-0 mb-2 text-sm ${mutedText}`}>
+        For regulation to target 0, avoid a symmetric IC range centered at 0 (for example
+        -1 to 1). Use 1 to 1 so the plant starts away from the setpoint.
+      </p>
       <div className="flex flex-col gap-2">
         {value.scenarios.slice(0, value.max_scenarios).map((scenario, index) => (
           <details

@@ -68,10 +68,12 @@ function SiloResults({
   monitorState,
   jobId,
   projectId,
+  designConfig,
 }: {
   monitorState: Record<string, unknown>
   jobId?: string | null
   projectId?: number
+  designConfig?: Record<string, unknown> | null
 }) {
   const [activeTab, setActiveTab] = useState('simulation')
   const llmResponses = asArray(monitorState.llm_responses) as LlmResponseEntry[]
@@ -97,6 +99,7 @@ function SiloResults({
           jobId={jobId}
           projectId={projectId}
           currentState={currentState}
+          designConfig={designConfig}
           disabled={false}
         />
       ),
@@ -323,12 +326,14 @@ export function ProjectResultsView({
 
   if (pipelineType === 'siloDesign') {
     const monitorState = asRecord(results.monitor_state)
+    const designConfig = asRecord(results.design_config)
     if (monitorState) {
       return (
         <SiloResults
           monitorState={monitorState}
           jobId={jobId}
           projectId={projectId}
+          designConfig={designConfig}
         />
       )
     }

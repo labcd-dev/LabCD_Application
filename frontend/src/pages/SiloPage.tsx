@@ -43,13 +43,17 @@ export function SiloPage() {
     setLoading(true)
     setError(null)
     try {
-      const config = buildSiloStartConfig(advancedConfig, {
-        llm_model: pipeline.model,
-        file_content: pipeline.fileContent,
-        file_name: pipeline.fileName,
-        // Uploaded files are always run as Python after regularization.
-        file_type: 'Python (.py)',
-      })
+      const config = buildSiloStartConfig(
+        advancedConfig,
+        {
+          llm_model: pipeline.model,
+          file_content: pipeline.fileContent,
+          file_name: pipeline.fileName,
+          // Uploaded files are always run as Python after regularization.
+          file_type: 'Python (.py)',
+        },
+        { includeCustomScenarios: showAdvanced },
+      )
 
       const job = await siloApi.start({
         config,
