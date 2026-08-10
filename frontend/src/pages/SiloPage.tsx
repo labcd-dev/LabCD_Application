@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { siloApi } from '../api/endpoints'
 import { CodePreview } from '../components/CodePreview'
 import { SiloAdvancedSettings } from '../components/SiloAdvancedSettings'
+import { SiloDesignFlow } from '../components/SiloDesignFlow'
 import { StatusMessage } from '../components/StatusMessage'
 import { usePipeline } from '../context/PipelineContext'
 import {
@@ -87,20 +88,7 @@ export function SiloPage() {
 
       {error && <StatusMessage type="error" message={error} />}
 
-      <h1 className='text-xl font-bold'>How does it work?</h1>
-
-      <div className="my-5 flex flex-col gap-5">
-        <img
-          src="/silo-agent-loop-closed.svg"
-          alt="Closed-loop agent system: Actor, Critic, Terminator, and Juror with redesign, refinement, and evaluation"
-          className="h-auto w-full object-contain rounded-lg border border-border bg-white"
-        />
-        <img
-          src="/silo-agent-loop-flow.svg"
-          alt="Single-loop agent decision flow from IN through Actor, Critic, Terminator, Juror, and Buffer to OUT"
-          className="h-auto w-full object-contain rounded-lg border border-border bg-white"
-        />
-      </div>
+      <SiloDesignFlow />
 
       <button type="button" className={btnLink} onClick={() => setShowAdvanced((v) => !v)}>
         {showAdvanced ? 'Hide' : 'Show'} Advanced Settings

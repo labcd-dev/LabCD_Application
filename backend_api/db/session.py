@@ -146,6 +146,7 @@ def _migrate_schema() -> None:
     _migrate_project_file_url()
     _migrate_feedback_survey_pipeline()
     _migrate_password_hash_nullable()
+    _migrate_analytics_module_width()
 
 
 def _migrate_password_hash_nullable() -> None:
@@ -238,6 +239,28 @@ def _migrate_project_llm_model() -> None:
                 "NOT NULL DEFAULT 'gpt-4o'"
             )
         )
+
+
+def _migrate_analytics_module_width() -> None:
+    """Widen analytics_events.module so LLM model ids fit (event_type=llm)."""
+    from sqlalchemy import inspect
+
+    inspector = inspect(engine)
+    if "analytics_events" not in inspector.get_table_names():
+        return
+
+    columns = {col["name"]: col for col in inspector.get_columns("analytics_events")}
+    module_col = columns.get("module")
+    if module_col is None:
+        return
+
+    col_type = module_col.get("type")
+    length = getattr(col_type, "length", None)
+    if length is not None and length >= 100:
+        return
+
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE analytics_events ALTER COLUMN module TYPE VARCHAR(100)"))
 
 
 def _migrate_feedback_survey_pipeline() -> None:

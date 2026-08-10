@@ -15,6 +15,11 @@ class AnalyticsModuleCount(BaseModel):
     count: int
 
 
+class AnalyticsLlmCount(BaseModel):
+    model: str
+    count: int
+
+
 class AnalyticsResponse(BaseModel):
     days: int
     dau_today: int
@@ -24,6 +29,8 @@ class AnalyticsResponse(BaseModel):
     dau_series: List[AnalyticsSeriesPoint] = Field(default_factory=list)
     mau_series: List[AnalyticsSeriesPoint] = Field(default_factory=list)
     modules: List[AnalyticsModuleCount] = Field(default_factory=list)
+    llms: List[AnalyticsLlmCount] = Field(default_factory=list)
+    most_used_llm: Optional[str] = None
 
 
 class TelegramAnalyticsSettings(BaseModel):

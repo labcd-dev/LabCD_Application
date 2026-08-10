@@ -195,9 +195,10 @@ def start_silo_job(
         },
         user_id=user_id,
     )
-    from backend_api.http.services.analytics_service import record_module_use
+    from backend_api.http.services.analytics_service import record_llm_use, record_module_use
 
     record_module_use(user_id, "silo")
+    record_llm_use(user_id, runtime_config.get("llm_model") or config.get("llm_model"))
     linked_project_id = link_or_create_for_job(
         user_id=user_id,
         project_id=project_id,

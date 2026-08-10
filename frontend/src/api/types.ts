@@ -444,6 +444,11 @@ export interface AnalyticsModuleCount {
   count: number
 }
 
+export interface AnalyticsLlmCount {
+  model: string
+  count: number
+}
+
 export interface AnalyticsResponse {
   days: number
   dau_today: number
@@ -453,6 +458,8 @@ export interface AnalyticsResponse {
   dau_series: AnalyticsSeriesPoint[]
   mau_series: AnalyticsSeriesPoint[]
   modules: AnalyticsModuleCount[]
+  llms: AnalyticsLlmCount[]
+  most_used_llm: string | null
 }
 
 export interface TelegramAnalyticsSettings {

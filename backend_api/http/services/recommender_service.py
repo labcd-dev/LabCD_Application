@@ -86,9 +86,10 @@ def start_recommender_job(
         },
         user_id=user_id,
     )
-    from backend_api.http.services.analytics_service import record_module_use
+    from backend_api.http.services.analytics_service import record_llm_use, record_module_use
 
     record_module_use(user_id, "recommender")
+    record_llm_use(user_id, model)
     job.metadata["graph_config"] = {"configurable": {"thread_id": job.id}}
 
     graph_input = (

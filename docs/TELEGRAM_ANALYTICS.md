@@ -11,6 +11,7 @@ Plain-text message including:
 - Monthly active users (MAU, trailing 30 days)
 - D7 and D30 retention
 - Module run counts for today (Silo, Mulo, Recommender, Trimmer, Regularizer)
+- LLM usage for today (most-used model plus per-model run counts)
 
 Timezone for the schedule and “today” is **UTC**.
 

@@ -1051,6 +1051,228 @@
   opacity: 0.9;
 }
 
+/* ── Silo design flow explainer ───────────────────────────────────── */
+
+.labcd-flow {
+  margin: 0.25rem 0 0.5rem;
+  padding: 1.25rem 1.25rem 1.35rem;
+  border-radius: 1rem;
+  border: 1px solid var(--app-border);
+  background: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--app-primary) 7%, var(--app-surface-elevated)) 0%,
+    var(--app-surface-elevated) 42%,
+    var(--app-surface-muted) 100%
+  );
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--app-foreground) 6%, transparent);
+}
+
+.labcd-flow__header {
+  margin-bottom: 1.25rem;
+}
+
+.labcd-flow__title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: var(--app-foreground);
+}
+
+.labcd-flow__subtitle {
+  margin: 0.4rem 0 0;
+  max-width: 36rem;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  color: var(--app-muted-text);
+}
+
+.labcd-flow__steps {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.labcd-step {
+  position: relative;
+  animation: setup-fade-in-up 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.labcd-flow__arrow {
+  display: none;
+}
+
+.labcd-step__card {
+  height: 100%;
+  padding: 1rem;
+  border-radius: 0.875rem;
+  border: 1px solid var(--app-border);
+  background: var(--app-surface-elevated);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--app-foreground) 4%, transparent);
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
+}
+
+.labcd-step__card:hover {
+  border-color: color-mix(in srgb, var(--app-primary) 45%, var(--app-border));
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--app-primary) 12%, transparent);
+  transform: translateY(-1px);
+}
+
+.labcd-step__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  margin-bottom: 0.75rem;
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, var(--app-primary) 12%, transparent);
+  color: var(--app-primary);
+}
+
+.labcd-step--design .labcd-step__icon {
+  background: color-mix(in srgb, var(--app-badge-strategy-text) 12%, transparent);
+  color: var(--app-badge-strategy-text);
+}
+
+.labcd-step--test .labcd-step__icon {
+  background: color-mix(in srgb, var(--app-badge-continue-text) 12%, transparent);
+  color: var(--app-badge-continue-text);
+}
+
+.labcd-step--check .labcd-step__icon {
+  background: color-mix(in srgb, var(--app-badge-terminate-text) 12%, transparent);
+  color: var(--app-badge-terminate-text);
+}
+
+.labcd-step__icon-svg {
+  width: 1.2rem;
+  height: 1.2rem;
+}
+
+.labcd-step__index {
+  margin: 0 0 0.25rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--app-foreground-faint);
+}
+
+.labcd-step__title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--app-foreground);
+}
+
+.labcd-step__description {
+  margin: 0.4rem 0 0;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--app-muted-text);
+}
+
+.labcd-flow__result {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin-top: 1.125rem;
+  padding: 0.875rem 1rem;
+  border-radius: 0.875rem;
+  border: 1px dashed var(--app-border);
+  background: color-mix(in srgb, var(--app-surface-muted) 70%, transparent);
+}
+
+.labcd-flow__result-label,
+.labcd-flow__result-or {
+  font-size: 0.8125rem;
+  color: var(--app-muted);
+}
+
+.labcd-result {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: 9999px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.labcd-result__icon {
+  width: 0.9rem;
+  height: 0.9rem;
+}
+
+.labcd-result--success {
+  background: var(--app-status-success-bg);
+  color: var(--app-status-success-text);
+}
+
+.labcd-result--retry {
+  background: var(--app-status-warning-bg);
+  color: var(--app-status-warning-text);
+}
+
+.labcd-result--retry .labcd-result__icon {
+  animation: labcd-flow-spin 3.5s linear infinite;
+}
+
+@keyframes labcd-flow-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (min-width: 768px) {
+  .labcd-flow {
+    padding: 1.5rem;
+  }
+
+  .labcd-flow__title {
+    font-size: 1.25rem;
+  }
+
+  .labcd-flow__steps {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.75rem;
+  }
+
+  .labcd-flow__arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: absolute;
+    top: 4rem;
+    left: -2rem;
+    z-index: 1;
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 9999px;
+    background: var(--app-surface-elevated);
+    border: 1px solid var(--app-border);
+    color: var(--app-primary);
+  }
+
+  .labcd-flow__arrow-icon {
+    width: 0.7rem;
+    height: 0.7rem;
+  }
+
+  .labcd-flow__result {
+    justify-content: center;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .setup-animate-in,
   .setup-hero__icon-wrap,
@@ -1066,12 +1288,15 @@
   .bug-report-success__check,
   .designer-coming-soon-modal,
   .designer-coming-soon-modal__glow,
-  .designer-coming-soon-modal__icon {
+  .designer-coming-soon-modal__icon,
+  .labcd-step,
+  .labcd-result--retry .labcd-result__icon {
     animation: none;
   }
 
   .pipeline-card:hover,
-  .setup-cta:not(:disabled):hover {
+  .setup-cta:not(:disabled):hover,
+  .labcd-step__card:hover {
     transform: none;
   }
 }

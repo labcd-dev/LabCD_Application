@@ -516,7 +516,7 @@ class BugReport(Base):
 
 
 class AnalyticsEvent(Base):
-    """Durable product-analytics event (daily activity or module run)."""
+    """Durable product-analytics event (daily activity, module run, or LLM use)."""
 
     __tablename__ = "analytics_events"
     __table_args__ = (
@@ -531,7 +531,8 @@ class AnalyticsEvent(Base):
         index=True,
     )
     event_type: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
-    module: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    # Module name for EVENT_MODULE, or LLM model id for EVENT_LLM.
+    module: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

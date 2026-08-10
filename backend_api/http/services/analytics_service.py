@@ -12,8 +12,10 @@ from backend_api.db.session import SessionLocal
 
 EVENT_ACTIVE = "active"
 EVENT_MODULE = "module"
+EVENT_LLM = "llm"
 
 VALID_MODULES = frozenset({"silo", "mulo", "recommender", "trimmer", "regularize"})
+MAX_LLM_MODEL_LEN = 100
 
 
 def _utcnow() -> datetime:
@@ -69,6 +71,29 @@ def record_module_use(user_id: int | None, module: str) -> None:
                 user_id=user_id,
                 event_type=EVENT_MODULE,
                 module=module,
+                created_at=_utcnow(),
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
+
+def record_llm_use(user_id: int | None, llm_model: str | None) -> None:
+    """Persist an LLM-model usage event. Opens its own DB session (safe from workers)."""
+    if user_id is None:
+        return
+    model = (llm_model or "").strip()
+    if not model:
+        return
+    model = model[:MAX_LLM_MODEL_LEN]
+    db = SessionLocal()
+    try:
+        db.add(
+            AnalyticsEvent(
+                user_id=user_id,
+                event_type=EVENT_LLM,
+                module=model,
                 created_at=_utcnow(),
             )
         )
@@ -195,6 +220,25 @@ def get_analytics(db: Session, days: int = 30) -> dict:
         if module
     ]
 
+    llm_rows = (
+        db.query(AnalyticsEvent.module, func.count(AnalyticsEvent.id))
+        .filter(
+            AnalyticsEvent.event_type == EVENT_LLM,
+            AnalyticsEvent.created_at >= range_start,
+            AnalyticsEvent.created_at < tomorrow,
+            AnalyticsEvent.module.isnot(None),
+        )
+        .group_by(AnalyticsEvent.module)
+        .order_by(func.count(AnalyticsEvent.id).desc())
+        .all()
+    )
+    llms = [
+        {"model": model or "", "count": int(count)}
+        for model, count in llm_rows
+        if model
+    ]
+    most_used_llm = llms[0]["model"] if llms else None
+
     return {
         "days": days,
         "dau_today": dau_today,
@@ -204,4 +248,6 @@ def get_analytics(db: Session, days: int = 30) -> dict:
         "dau_series": dau_series,
         "mau_series": mau_series,
         "modules": modules,
+        "llms": llms,
+        "most_used_llm": most_used_llm,
     }

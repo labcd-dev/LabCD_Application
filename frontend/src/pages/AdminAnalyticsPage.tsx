@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import type { Data } from 'plotly.js'
 import {
   BarChart3,
+  BrainCircuit,
   CalendarDays,
   RefreshCw,
   Repeat2,
@@ -107,6 +108,8 @@ export function AdminAnalyticsPage() {
   const dauSeries = data?.dau_series ?? []
   const mauSeries = data?.mau_series ?? []
   const modules = data?.modules ?? []
+  const llms = data?.llms ?? []
+  const mostUsedLlm = data?.most_used_llm ?? null
 
   const activityChart: Data[] = [
     {
@@ -135,6 +138,16 @@ export function AdminAnalyticsPage() {
       name: 'Runs',
       x: modules.map((m) => MODULE_LABELS[m.module] ?? m.module),
       y: modules.map((m) => m.count),
+      hovertemplate: '%{x}: %{y}<extra></extra>',
+    },
+  ]
+
+  const llmChart: Data[] = [
+    {
+      type: 'bar',
+      name: 'Runs',
+      x: llms.map((row) => row.model),
+      y: llms.map((row) => row.count),
       hovertemplate: '%{x}: %{y}<extra></extra>',
     },
   ]
@@ -236,7 +249,8 @@ export function AdminAnalyticsPage() {
             Analytics
           </h1>
           <p className="m-0 max-w-xl text-muted-text leading-relaxed">
-            Daily and monthly active users, retention, and most-used product modules.
+            Daily and monthly active users, retention, most-used product modules, and LLM
+            usage.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -272,7 +286,7 @@ export function AdminAnalyticsPage() {
       {error && <StatusMessage type="error" message={error} />}
       {message && <StatusMessage type="success" message={message} />}
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <MetricCard
           label="Daily active users"
           value={formatCount(data?.dau_today, loading)}
@@ -296,6 +310,13 @@ export function AdminAnalyticsPage() {
           value={loading ? '—' : formatPercent(data?.retention_d30)}
           hint="Cohort return rate on/after day 30"
           icon={BarChart3}
+        />
+        <MetricCard
+          label="Most used LLM"
+          value={loading ? '—' : mostUsedLlm ?? '—'}
+          hint={`Top model in selected ${days}d range`}
+          icon={BrainCircuit}
+          compactValue
         />
       </div>
 
@@ -328,14 +349,31 @@ export function AdminAnalyticsPage() {
         </ChartCard>
       </section>
 
+      <section className="grid gap-4 lg:grid-cols-1">
+        <ChartCard title="Most used LLMs" empty={!loading && llms.length === 0}>
+          <PlotlyChart
+            data={llmChart}
+            layout={{
+              margin: { l: 40, r: 12, t: 12, b: 80 },
+              showlegend: false,
+              xaxis: { title: { text: 'Model' }, tickangle: -25 },
+              yaxis: { title: { text: 'Runs' }, rangemode: 'tozero' },
+            }}
+            height={280}
+            revision={llms.length}
+          />
+        </ChartCard>
+      </section>
+
       <section className={cardPanel}>
         <h2 className="m-0 mb-1 text-base font-semibold text-foreground">
           Telegram daily report
         </h2>
         <p className="m-0 mb-4 text-sm text-muted-text leading-relaxed">
-          Send a once-per-day digest (DAU, MAU, retention, module runs) to a Telegram channel.
-          Bot token is stored in the API <code className="text-xs">.env</code> (same pattern as
-          provider API keys). Leave the token empty to log digests to the console.
+          Send a once-per-day digest (DAU, MAU, retention, module runs, LLM usage) to a
+          Telegram channel. Bot token is stored in the API <code className="text-xs">.env</code>{' '}
+          (same pattern as provider API keys). Leave the token empty to log digests to the
+          console.
         </p>
         <label className={fieldCheckbox}>
           <input
@@ -448,11 +486,13 @@ function MetricCard({
   value,
   hint,
   icon: Icon,
+  compactValue = false,
 }: {
   label: string
   value: string
   hint: string
   icon: typeof Users
+  compactValue?: boolean
 }) {
   return (
     <div
@@ -461,7 +501,14 @@ function MetricCard({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="text-xs font-medium uppercase tracking-wide text-muted">{label}</div>
-          <div className="mt-2 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+          <div
+            className={`mt-2 font-semibold tracking-tight text-foreground ${
+              compactValue
+                ? 'break-all text-base sm:text-lg'
+                : 'text-2xl sm:text-3xl'
+            }`}
+            title={value}
+          >
             {value}
           </div>
           <div className="mt-1 text-sm text-muted-text">{hint}</div>
@@ -488,7 +535,8 @@ function ChartCard({
       <h2 className="m-0 mb-2 text-sm font-semibold text-foreground">{title}</h2>
       {empty ? (
         <p className="m-0 py-12 text-center text-sm text-muted-text">
-          No data yet for this range. Metrics start after users are active or modules run.
+          No data yet for this range. Metrics start after users are active, modules run, or
+          LLMs are used.
         </p>
       ) : (
         children

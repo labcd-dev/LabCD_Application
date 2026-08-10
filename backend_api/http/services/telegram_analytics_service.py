@@ -138,6 +138,17 @@ def format_daily_message(db: Session) -> str:
         for row in modules:
             label = MODULE_LABELS.get(row["module"], row["module"])
             lines.append(f"  {label}: {row['count']}")
+
+    lines.extend(["", "LLM usage (today):"])
+    llms = data.get("llms") or []
+    most_used = data.get("most_used_llm")
+    if most_used:
+        lines.append(f"  Most used: {most_used}")
+    if not llms:
+        lines.append("  (none)")
+    else:
+        for row in llms:
+            lines.append(f"  {row['model']}: {row['count']}")
     return "\n".join(lines)
 
 
