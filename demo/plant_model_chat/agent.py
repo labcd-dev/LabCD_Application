@@ -56,6 +56,57 @@ _FINISH_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Common Greek / unit glyphs the model likes to emit inside python_code.
+# Mapped to plain ASCII so dynamics.py stays executable and editor-safe.
+_ASCII_REPLACEMENTS = (
+    ("θ", "theta"),
+    ("Θ", "Theta"),
+    ("ω", "omega"),
+    ("Ω", "Omega"),
+    ("τ", "tau"),
+    ("α", "alpha"),
+    ("β", "beta"),
+    ("γ", "gamma"),
+    ("δ", "delta"),
+    ("Δ", "Delta"),
+    ("φ", "phi"),
+    ("Φ", "Phi"),
+    ("ψ", "psi"),
+    ("Ψ", "Psi"),
+    ("ρ", "rho"),
+    ("σ", "sigma"),
+    ("Σ", "Sigma"),
+    ("μ", "mu"),
+    ("λ", "lambda"),
+    ("π", "pi"),
+    ("·", "*"),
+    ("×", "*"),
+    ("²", "^2"),
+    ("³", "^3"),
+    ("¹", "^1"),
+    ("⁰", "^0"),
+    ("⁻", "-"),
+    ("≈", "~="),
+    ("≤", "<="),
+    ("≥", ">="),
+    ("≠", "!="),
+    ("→", "->"),
+    ("←", "<-"),
+    ("°", " deg"),
+    ("\u00a0", " "),  # non-breaking space
+)
+
+
+def _to_ascii(text: str) -> str:
+    """Replace common non-ASCII science glyphs, then strip any remaining non-ASCII."""
+    if not text:
+        return text
+    out = text
+    for src, dst in _ASCII_REPLACEMENTS:
+        out = out.replace(src, dst)
+    # Drop anything still outside printable ASCII (keep tab/newline).
+    return "".join(ch if (32 <= ord(ch) <= 126) or ch in "\n\r\t" else "?" for ch in out)
+
 
 class PlantModelAgent(BaseAgent):
     """Plant-model chatbot with continue / draft / complete structured turns.
@@ -157,7 +208,7 @@ class PlantModelAgent(BaseAgent):
         status = parsed.get("status")
 
         if status == "continue":
-            reply = (parsed.get("reply") or "").strip()
+            reply = _to_ascii((parsed.get("reply") or "").strip())
             if reply:
                 return reply, None
             # Model sent continue without reply — one forced repair, then raw.
@@ -175,6 +226,7 @@ class PlantModelAgent(BaseAgent):
             # fall through if repair produced draft/complete
 
         if status == "draft" and self._has_code(parsed):
+            parsed = self._sanitize_code_fields(parsed)
             self._draft_count += 1
             self._latest_draft = {
                 "system_name": parsed["system_name"],
@@ -205,6 +257,7 @@ class PlantModelAgent(BaseAgent):
             if parsed is None:
                 return response_text.strip() or "(empty model response)", None
             if parsed.get("status") == "draft" and self._has_code(parsed):
+                parsed = self._sanitize_code_fields(parsed)
                 self._draft_count += 1
                 self._latest_draft = {
                     "system_name": parsed["system_name"],
@@ -226,6 +279,7 @@ class PlantModelAgent(BaseAgent):
         return response_text.strip() or "(empty model response)", None
 
     def _accept_complete(self, payload: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
+        payload = self._sanitize_code_fields(payload)
         final = {
             "system_name": payload["system_name"],
             "python_code": payload["python_code"],
@@ -233,6 +287,18 @@ class PlantModelAgent(BaseAgent):
         self._latest_draft = final
         # Display text still comes from structured fields only (system_name).
         return f"Model ready — **{final['system_name']}**.", final
+
+    @staticmethod
+    def _sanitize_code_fields(data: Dict[str, Any]) -> Dict[str, Any]:
+        """Ensure system_name and python_code are pure ASCII."""
+        out = dict(data)
+        if isinstance(out.get("system_name"), str):
+            out["system_name"] = _to_ascii(out["system_name"])
+        if isinstance(out.get("python_code"), str):
+            out["python_code"] = _to_ascii(out["python_code"])
+        if isinstance(out.get("reply"), str):
+            out["reply"] = _to_ascii(out["reply"])
+        return out
 
     @staticmethod
     def _format_draft_display(parsed: Dict[str, Any]) -> str:

@@ -23,7 +23,7 @@ from agent import (  # noqa: E402
 )
 
 DEFAULT_MODEL = os.getenv("LABCD_DEMO_MODEL", "gpt-4o-mini")
-DEFAULT_TEMPERATURE = 0.2
+DEFAULT_TEMPERATURE = 0.0
 
 st.set_page_config(page_title="LabCD Plant-Model Agent", page_icon="🧪", layout="wide")
 
