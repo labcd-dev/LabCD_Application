@@ -1,0 +1,6 @@
+# Streamlit itself.
+streamlit>=1.38,<2
+
+# labcd_agents is installed separately (editable, from the repo) so you can
+# pick provider extras — see README.md, step 1. It's not pinned here since
+# it isn't published to PyPI.
