@@ -3,8 +3,9 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
-  --app-primary: #1f77b4;
+  --app-primary: #5b7fff;
   --app-primary-foreground: #ffffff;
+  --app-accent-2: #8b7dff;
   --app-surface: #f4f6fb;
   --app-surface-elevated: #ffffff;
   --app-surface-muted: #f8fafc;
@@ -45,60 +46,62 @@
   --app-badge-latest-bg: #dbeafe;
   --app-badge-latest-text: #1d4ed8;
   --app-iteration-latest-border: #93c5fd;
-  --app-iteration-latest-shadow: rgba(31, 119, 180, 0.08);
+  --app-iteration-latest-shadow: rgba(91, 127, 255, 0.08);
   --app-iteration-latest-header: linear-gradient(135deg, #eff6ff 0%, #f8fafc 100%);
 }
 
 .dark {
-  --app-primary: #4da3d9;
+  --app-primary: #5b7fff;
   --app-primary-foreground: #ffffff;
-  --app-surface: #0d1117;
-  --app-surface-elevated: #161b22;
-  --app-surface-muted: #1c2128;
-  --app-surface-hover: #21262d;
-  --app-border: #30363d;
-  --app-border-subtle: #282e36;
-  --app-border-input: #3d444d;
-  --app-muted: #8b949e;
-  --app-muted-text: #9ca3af;
-  --app-foreground: #e6edf3;
-  --app-foreground-secondary: #c9d1d9;
-  --app-foreground-subtle: #8b949e;
-  --app-foreground-faint: #6e7681;
-  --app-progress-track: #21262d;
-  --app-code-bg: #0d1117;
-  --app-code-text: #c9d1d9;
-  --app-param-bg: #1c2a3a;
-  --app-param-border: #2d4a66;
-  --app-param-key: #7ba3c4;
-  --app-param-value: #a8cce8;
-  --app-label: #8b949e;
-  --app-status-info-bg: #132f4c;
-  --app-status-info-text: #7dd3fc;
-  --app-status-success-bg: #132a1a;
-  --app-status-success-text: #86efac;
-  --app-status-warning-bg: #2a2010;
-  --app-status-warning-text: #fcd34d;
-  --app-status-error-bg: #2a1414;
-  --app-status-error-text: #fca5a5;
-  --app-badge-strategy-bg: #2e1065;
+  --app-accent-2: #8b7dff;
+  --app-surface: #0a0d12;
+  --app-surface-elevated: #11161d;
+  --app-surface-muted: #161d27;
+  --app-surface-hover: #1a222d;
+  --app-border: rgba(255, 255, 255, 0.07);
+  --app-border-subtle: rgba(255, 255, 255, 0.045);
+  --app-border-input: rgba(255, 255, 255, 0.1);
+  --app-muted: #556074;
+  --app-muted-text: #8d9bb0;
+  --app-foreground: #eef2f8;
+  --app-foreground-secondary: #c5cedc;
+  --app-foreground-subtle: #8d9bb0;
+  --app-foreground-faint: #556074;
+  --app-progress-track: #161d27;
+  --app-code-bg: #0a0d12;
+  --app-code-text: #c5cedc;
+  --app-param-bg: #161d27;
+  --app-param-border: rgba(91, 127, 255, 0.28);
+  --app-param-key: #8d9bb0;
+  --app-param-value: #a9bcff;
+  --app-label: #8d9bb0;
+  --app-status-info-bg: rgba(91, 127, 255, 0.12);
+  --app-status-info-text: #a9bcff;
+  --app-status-success-bg: rgba(34, 211, 167, 0.12);
+  --app-status-success-text: #22d3a7;
+  --app-status-warning-bg: rgba(240, 180, 41, 0.12);
+  --app-status-warning-text: #f0b429;
+  --app-status-error-bg: rgba(240, 87, 107, 0.12);
+  --app-status-error-text: #f0576b;
+  --app-badge-strategy-bg: rgba(139, 125, 255, 0.16);
   --app-badge-strategy-text: #c4b5fd;
-  --app-badge-continue-bg: #422006;
-  --app-badge-continue-text: #fcd34d;
-  --app-badge-terminate-bg: #064e3b;
-  --app-badge-terminate-text: #6ee7b7;
-  --app-badge-juror-bg: #431407;
+  --app-badge-continue-bg: rgba(240, 180, 41, 0.12);
+  --app-badge-continue-text: #f0b429;
+  --app-badge-terminate-bg: rgba(34, 211, 167, 0.12);
+  --app-badge-terminate-text: #22d3a7;
+  --app-badge-juror-bg: rgba(240, 122, 74, 0.14);
   --app-badge-juror-text: #fdba74;
-  --app-badge-latest-bg: #1e3a5f;
-  --app-badge-latest-text: #93c5fd;
-  --app-iteration-latest-border: #1e4976;
-  --app-iteration-latest-shadow: rgba(77, 163, 217, 0.12);
-  --app-iteration-latest-header: linear-gradient(135deg, #1c2a3a 0%, #161b22 100%);
+  --app-badge-latest-bg: rgba(91, 127, 255, 0.12);
+  --app-badge-latest-text: #a9bcff;
+  --app-iteration-latest-border: rgba(91, 127, 255, 0.28);
+  --app-iteration-latest-shadow: rgba(91, 127, 255, 0.16);
+  --app-iteration-latest-header: linear-gradient(135deg, #161d27 0%, #11161d 100%);
 }
 
 @theme {
   --color-primary: var(--app-primary);
   --color-primary-foreground: var(--app-primary-foreground);
+  --color-accent-2: var(--app-accent-2);
   --color-surface: var(--app-surface);
   --color-surface-elevated: var(--app-surface-elevated);
   --color-surface-muted: var(--app-surface-muted);
@@ -1181,6 +1184,49 @@
   .module-tabs__panel {
     animation: none;
   }
+}
+
+/* ── Plant-model chat markdown (bubble) ───────────────────────────── */
+
+.plant-chat-md {
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--app-foreground);
+}
+
+.plant-chat-md p {
+  margin: 0 0 0.55em;
+}
+
+.plant-chat-md p:last-child {
+  margin-bottom: 0;
+}
+
+.plant-chat-md pre {
+  margin: 0.5em 0;
+  padding: 0.65rem 0.75rem;
+  overflow-x: auto;
+  border-radius: 0.55rem;
+  background: var(--app-code-bg);
+  color: var(--app-code-text);
+  font-size: 0.78rem;
+}
+
+.plant-chat-md code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+}
+
+.setup-hero__inline-link {
+  appearance: none;
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--app-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
 }
 
 /* ── Silo design flow explainer ───────────────────────────────────── */

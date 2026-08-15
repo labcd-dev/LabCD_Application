@@ -20,6 +20,8 @@ import { AdminPlansPage } from './pages/AdminPlansPage'
 import { AdminRolesPage } from './pages/AdminRolesPage'
 import { AdminProjectDetailPage } from './pages/AdminProjectDetailPage'
 import { AdminProjectsPage } from './pages/AdminProjectsPage'
+import { AdminPlantModelChatDetailPage } from './pages/AdminPlantModelChatDetailPage'
+import { AdminPlantModelChatsPage } from './pages/AdminPlantModelChatsPage'
 import { AdminSitePage } from './pages/AdminSitePage'
 import { AdminSurveyPage } from './pages/AdminSurveyPage'
 import { AdminTutorialsPage } from './pages/AdminTutorialsPage'
@@ -29,6 +31,7 @@ import { BlogListPage } from './pages/BlogListPage'
 import { BlogPostPage } from './pages/BlogPostPage'
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 import { HomePage } from './pages/HomePage'
+import { DesignPage } from './pages/DesignPage'
 import { LandingPage } from './pages/LandingPage'
 import { LoginPage } from './pages/LoginPage'
 import { LoginSsoPage } from './pages/LoginSsoPage'
@@ -64,6 +67,7 @@ export default function App() {
                 <Route path="forgot-password" element={<ForgotPasswordPage />} />
                 <Route path="reset-password" element={<ResetPasswordPage />} />
                 <Route element={<ProtectedRoute />}>
+                  <Route path="design" element={<DesignPage />} />
                   <Route path="studio" element={<HomePage />} />
                   <Route path="projects" element={<ProjectsPage />} />
                   <Route path="projects/:projectId" element={<ProjectDetailPage />} />
@@ -73,7 +77,7 @@ export default function App() {
                   <Route path="mulo" element={<MuloPage />} />
                   <Route path="tutorials" element={<TutorialsPage />} />
                   <Route path="profile" element={<ProfilePage />} />
-                  <Route path="*" element={<Navigate to="/studio" replace />} />
+                  <Route path="*" element={<Navigate to="/design" replace />} />
                 </Route>
               </Route>
               <Route element={<ProtectedRoute />}>
@@ -95,6 +99,11 @@ export default function App() {
                   <Route path="users/:userId" element={<AdminUserDetailPage />} />
                   <Route path="projects" element={<AdminProjectsPage />} />
                   <Route path="projects/:projectId" element={<AdminProjectDetailPage />} />
+                  <Route path="plant-model" element={<AdminPlantModelChatsPage />} />
+                  <Route
+                    path="plant-model/:conversationId"
+                    element={<AdminPlantModelChatDetailPage />}
+                  />
                   <Route path="survey" element={<AdminSurveyPage />} />
                   <Route path="tutorials" element={<AdminTutorialsPage />} />
                 </Route>

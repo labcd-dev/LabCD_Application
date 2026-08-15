@@ -18,7 +18,7 @@ export function LoginSsoPage() {
   useEffect(() => {
     const params = parseHashParams(window.location.hash)
     const token = params.get('access_token')
-    const redirectTo = params.get('redirect_to') || '/studio'
+    const redirectTo = params.get('redirect_to') || '/design'
     const ssoError = params.get('error')
 
     // Clear sensitive token from the address bar.
@@ -42,7 +42,7 @@ export function LoginSsoPage() {
       try {
         await loginWithToken(token)
         if (!cancelled) {
-          navigate(redirectTo.startsWith('/') ? redirectTo : '/studio', { replace: true })
+          navigate(redirectTo.startsWith('/') ? redirectTo : '/design', { replace: true })
         }
       } catch (err) {
         if (!cancelled) {
@@ -58,7 +58,7 @@ export function LoginSsoPage() {
   }, [loginWithToken, navigate])
 
   if (!loading && user && !error && !busy) {
-    return <Navigate to="/studio" replace />
+    return <Navigate to="/design" replace />
   }
 
   return (

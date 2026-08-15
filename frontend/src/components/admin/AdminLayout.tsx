@@ -14,6 +14,7 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
+  MessagesSquare,
   Newspaper,
   Package,
   ScrollText,
@@ -31,6 +32,7 @@ const navItems = [
   { to: '/admin', end: true, label: 'Overview', icon: LayoutDashboard, action: 'admin:access' },
   { to: '/admin/users', end: false, label: 'Users', icon: Users, action: 'admin:users' },
   { to: '/admin/projects', end: false, label: 'Projects', icon: FolderKanban, action: 'admin:projects' },
+  { to: '/admin/plant-model', end: false, label: 'Plant chats', icon: MessagesSquare, action: 'admin:plant_model' },
   { to: '/admin/plans', end: false, label: 'Plans', icon: Package, action: 'admin:plans' },
   { to: '/admin/roles', end: false, label: 'Roles', icon: KeyRound, action: 'admin:roles' },
   { to: '/admin/api-keys', end: false, label: 'API Keys', icon: Key, action: 'admin:api_keys' },
@@ -52,7 +54,7 @@ export function AdminLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   if (!user || !hasAction('admin:access')) {
-    return <Navigate to="/studio" replace />
+    return <Navigate to="/design" replace />
   }
 
   const visibleNav = navItems.filter((item) => hasAction(item.action))
@@ -131,12 +133,12 @@ export function AdminLayout() {
 
         <div className="space-y-3 border-t border-border p-4">
           <Link
-            to="/studio"
+            to="/design"
             className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm text-muted-text transition-colors hover:bg-surface-hover hover:text-foreground"
             onClick={closeSidebar}
           >
             <ArrowLeft className="size-4" aria-hidden />
-            Back to studio
+            Back to app
           </Link>
           <div className="rounded-xl border border-border-subtle bg-surface-muted px-3 py-2.5">
             <div className="truncate text-sm font-medium text-foreground">{user.email}</div>

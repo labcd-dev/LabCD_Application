@@ -123,10 +123,11 @@ export function ProjectsPage() {
           <FolderOpen className="mx-auto mb-3 size-10 text-muted" />
           <p className="m-0 text-foreground font-medium">No projects yet</p>
           <p className="mt-1 mb-4 text-sm text-muted-text">
-            Upload a dynamics file on New Project and start a Single or Multi Loop design.
+            Design a plant with AI or upload a dynamics file in Studio to start a Single or Multi Loop
+            design.
           </p>
-          <Link to="/studio" className={btnPrimary}>
-            Go to Studio
+          <Link to="/design" className={btnPrimary}>
+            Design with AI
           </Link>
         </div>
       ) : (

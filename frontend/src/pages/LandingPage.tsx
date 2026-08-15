@@ -42,7 +42,7 @@ export function LandingPage() {
   }, [])
 
   if (!loading && user) {
-    return <Navigate to="/studio" replace />
+    return <Navigate to="/design" replace />
   }
 
   const { brand, menus, landing } = payload

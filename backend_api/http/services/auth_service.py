@@ -36,6 +36,7 @@ DEFAULT_ACTIONS: list[tuple[str, str]] = [
     ("admin:access", "Enter the admin area"),
     ("admin:users", "Manage users"),
     ("admin:projects", "Manage all projects"),
+    ("admin:plant_model", "Manage plant-model chats"),
     ("admin:plans", "Manage subscription plans"),
     ("admin:roles", "Manage roles and permissions"),
     ("admin:site", "Manage site CMS"),

@@ -25,6 +25,11 @@ import type {
   MuloDesignerStateResponse,
   MuloSimulateResponse,
   PlanInfo,
+  PlantModelChatMessage,
+  PlantModelChatResponse,
+  PlantModelConversationDetail,
+  PlantModelConversationSummary,
+  PlantModelSessionState,
   ProfileSurveyRequest,
   ProjectDetail,
   ProjectSummary,
@@ -326,6 +331,23 @@ export const adminApi = {
     }),
   deleteProject: (projectId: number) =>
     apiFetch<void>(`/admin/projects/${projectId}`, { method: 'DELETE' }),
+  listPlantModelConversations: (params?: { user_id?: number; status?: string }) => {
+    const query = new URLSearchParams()
+    if (params?.user_id != null) query.set('user_id', String(params.user_id))
+    if (params?.status) query.set('status', params.status)
+    const suffix = query.toString() ? `?${query}` : ''
+    return apiFetch<PlantModelConversationSummary[]>(
+      `/admin/plant-model/conversations${suffix}`,
+    )
+  },
+  getPlantModelConversation: (conversationId: number) =>
+    apiFetch<PlantModelConversationDetail>(
+      `/admin/plant-model/conversations/${conversationId}`,
+    ),
+  deletePlantModelConversation: (conversationId: number) =>
+    apiFetch<void>(`/admin/plant-model/conversations/${conversationId}`, {
+      method: 'DELETE',
+    }),
   getApiKeys: () => apiFetch<ApiKeysResponse>('/admin/api-keys'),
   updateApiKeys: (body: ApiKeysUpdate) =>
     apiFetch<ApiKeysResponse>('/admin/api-keys', {
@@ -627,6 +649,28 @@ export const bugReportsApi = {
     downloadAdminCsv('/admin/bug-reports/export.csv', {
       status: params?.status,
     }),
+}
+
+export const plantModelApi = {
+  chat: (body: {
+    messages: PlantModelChatMessage[]
+    user_message: string
+    model?: string
+    session_state?: PlantModelSessionState | null
+    conversation_id?: number | null
+    max_drafts?: number
+    min_user_turns_before_completion?: number
+  }) =>
+    apiFetch<PlantModelChatResponse>('/plant-model/chat', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  listConversations: () =>
+    apiFetch<PlantModelConversationSummary[]>('/plant-model/conversations'),
+  getConversation: (conversationId: number) =>
+    apiFetch<PlantModelConversationDetail>(`/plant-model/conversations/${conversationId}`),
+  deleteConversation: (conversationId: number) =>
+    apiFetch<void>(`/plant-model/conversations/${conversationId}`, { method: 'DELETE' }),
 }
 
 export const regularizerApi = {

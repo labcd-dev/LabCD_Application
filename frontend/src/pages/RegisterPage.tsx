@@ -16,7 +16,7 @@ export function RegisterPage() {
   const [submitting, setSubmitting] = useState(false)
 
   if (!loading && user) {
-    return <Navigate to="/studio" replace />
+    return <Navigate to="/design" replace />
   }
 
   const handleSubmit = async (event: FormEvent) => {

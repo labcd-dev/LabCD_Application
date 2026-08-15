@@ -6,14 +6,17 @@ import {
   useState,
   type ReactNode,
 } from 'react'
+import { getThemeOfDay } from '../lib/themeOfDay'
 
-export type ThemeMode = 'light' | 'dark' | 'system'
+export type ThemeMode = 'light' | 'dark' | 'system' | 'theme_of_day'
 
 const STORAGE_KEY = 'labcd-theme'
+const VALID_THEMES = new Set<ThemeMode>(['light', 'dark', 'system', 'theme_of_day'])
 
 interface ThemeContextValue {
   theme: ThemeMode
   resolvedTheme: 'light' | 'dark'
+  themeOfDayName: string
   setTheme: (theme: ThemeMode) => void
   toggleTheme: () => void
 }
@@ -25,16 +28,33 @@ function getSystemTheme(): 'light' | 'dark' {
 }
 
 function resolveTheme(theme: ThemeMode): 'light' | 'dark' {
-  return theme === 'system' ? getSystemTheme() : theme
+  if (theme === 'system') return getSystemTheme()
+  if (theme === 'theme_of_day') return 'dark'
+  return theme
 }
 
-function applyTheme(resolved: 'light' | 'dark') {
+function applyDayAccent(enabled: boolean) {
+  const root = document.documentElement
+  if (!enabled) {
+    root.style.removeProperty('--app-primary')
+    root.style.removeProperty('--app-accent-2')
+    root.classList.remove('theme-of-day')
+    return
+  }
+  const day = getThemeOfDay()
+  root.classList.add('theme-of-day')
+  root.style.setProperty('--app-primary', day.primary)
+  root.style.setProperty('--app-accent-2', day.accent2)
+}
+
+function applyTheme(theme: ThemeMode, resolved: 'light' | 'dark') {
   document.documentElement.classList.toggle('dark', resolved === 'dark')
+  applyDayAccent(theme === 'theme_of_day')
 }
 
 function readStoredTheme(): ThemeMode {
   const stored = localStorage.getItem(STORAGE_KEY)
-  if (stored === 'light' || stored === 'dark' || stored === 'system') return stored
+  if (stored && VALID_THEMES.has(stored as ThemeMode)) return stored as ThemeMode
   return 'system'
 }
 
@@ -43,11 +63,13 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>(() =>
     resolveTheme(readStoredTheme()),
   )
+  const [themeOfDayName, setThemeOfDayName] = useState(() => getThemeOfDay().name)
 
   useEffect(() => {
     const resolved = resolveTheme(theme)
     setResolvedTheme(resolved)
-    applyTheme(resolved)
+    setThemeOfDayName(getThemeOfDay().name)
+    applyTheme(theme, resolved)
     localStorage.setItem(STORAGE_KEY, theme)
   }, [theme])
 
@@ -58,7 +80,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     const onChange = () => {
       const resolved = getSystemTheme()
       setResolvedTheme(resolved)
-      applyTheme(resolved)
+      applyTheme(theme, resolved)
     }
 
     media.addEventListener('change', onChange)
@@ -73,7 +95,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, [])
 
   return (
-    <ThemeContext.Provider value={{ theme, resolvedTheme, setTheme, toggleTheme }}>
+    <ThemeContext.Provider
+      value={{ theme, resolvedTheme, themeOfDayName, setTheme, toggleTheme }}
+    >
       {children}
     </ThemeContext.Provider>
   )

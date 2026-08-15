@@ -37,6 +37,62 @@ export interface StandardizeResponse {
   file_content: string
 }
 
+export interface PlantModelChatMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+export interface PlantModelResult {
+  system_name: string
+  python_code: string
+}
+
+export interface PlantModelSessionState {
+  draft_count: number
+  latest_draft: PlantModelResult | null
+}
+
+export interface PlantModelTokenUsage {
+  input_tokens: number
+  output_tokens: number
+  estimated_cost: number
+}
+
+export interface PlantModelChatResponse {
+  reply: string
+  status: 'continue' | 'draft' | 'complete'
+  final_result: PlantModelResult | null
+  session_state: PlantModelSessionState
+  usage: PlantModelTokenUsage | null
+  conversation_id: number | null
+}
+
+export interface PlantModelConversationSummary {
+  id: number
+  title: string
+  status: 'active' | 'complete'
+  llm_model: string
+  system_name: string | null
+  user_id?: number | null
+  owner_email?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface PlantModelConversationDetail {
+  id: number
+  title: string
+  status: 'active' | 'complete'
+  llm_model: string
+  messages: PlantModelChatMessage[]
+  session_state: PlantModelSessionState | null
+  final_result: PlantModelResult | null
+  user_id?: number | null
+  owner_email?: string | null
+  created_at: string
+  updated_at: string
+}
+
 export interface RecommenderHandoffResponse {
   file_content: string
   chosen_controller: string
@@ -144,7 +200,7 @@ export interface StreamEvent {
   metadata?: Record<string, unknown>
 }
 
-export type ThemeMode = 'light' | 'dark' | 'system'
+export type ThemeMode = 'light' | 'dark' | 'system' | 'theme_of_day'
 
 export interface AuthUser {
   id: number

@@ -44,16 +44,14 @@ export function HomePage() {
   const [editMode, setEditMode] = useState(false)
 
   useEffect(() => {
-    pipeline.reset()
+    // Keep any model already loaded from Design with AI; only reset stage UI.
     setStage('upload')
     setEditMode(false)
     setError(null)
-    // Fresh studio session only — do not resume another project's workspace.
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset once on mount
   }, [])
 
   useEffect(() => {
-    healthApi.models().then((res) => setModels(res.llm_models)).catch(() => { })
+    healthApi.models().then((res) => setModels(res.llm_models)).catch(() => {})
   }, [])
 
   const handleFileSelect = async (file: File) => {
@@ -192,7 +190,16 @@ export function HomePage() {
         <div className="setup-hero__content">
           <h2 className="setup-hero__title">Control Design Setup</h2>
           <p className={`${pageIntro} setup-hero__intro`}>
-            Upload a system definition file, choose a pipeline, and start the design process.
+            Upload a system definition file, choose a pipeline, and start the design process. Or
+            build a plant model first with{' '}
+            <button
+              type="button"
+              className="setup-hero__inline-link"
+              onClick={() => navigate('/design')}
+            >
+              Design with AI
+            </button>
+            .
           </p>
         </div>
       </header>
@@ -204,7 +211,7 @@ export function HomePage() {
       {stage === 'upload' && (
         <div className="setup-stage setup-animate-in">
           <div className={`${cardPanel} setup-panel`}>
-            <div className="grid grid-cols-1 gap-4 max-md:grid-cols-1">
+            <div className="grid grid-cols-1 gap-4">
               {pipeline.fileContent && (
                 <StatusMessage
                   type="success"

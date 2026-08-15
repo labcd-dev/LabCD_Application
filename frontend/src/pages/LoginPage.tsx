@@ -18,7 +18,7 @@ export function LoginPage() {
   const [resending, setResending] = useState(false)
   const [ssoProviders, setSsoProviders] = useState<SsoProviderPublic[]>([])
 
-  const from = (location.state as { from?: string; notice?: string } | null)?.from ?? '/studio'
+  const from = (location.state as { from?: string; notice?: string } | null)?.from ?? '/design'
   const notice = (location.state as { notice?: string } | null)?.notice
 
   useEffect(() => {

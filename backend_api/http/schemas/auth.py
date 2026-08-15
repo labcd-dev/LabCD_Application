@@ -9,7 +9,7 @@ from pydantic import BaseModel, EmailStr, Field
 
 from backend_api.http.services.password_policy import MIN_PASSWORD_LENGTH
 
-ThemeMode = Literal["light", "dark", "system"]
+ThemeMode = Literal["light", "dark", "system", "theme_of_day"]
 
 
 class LoginRequest(BaseModel):

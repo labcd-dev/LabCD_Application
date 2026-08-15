@@ -15,17 +15,9 @@ import { PasswordStrengthMeter } from '../components/PasswordStrengthMeter'
 import { StatusMessage } from '../components/StatusMessage'
 import { useAuth } from '../context/AuthContext'
 import { useTheme, type ThemeMode } from '../context/ThemeContext'
-import {
-  btnBase,
-  btnPrimary,
-  cardPanel,
-  fieldInput,
-  fieldLabel,
-  pageIntro,
-  pageSection,
-  pageTitle,
-} from '../lib/classes'
+import { btnBase, btnPrimary, fieldInput, fieldLabel } from '../lib/classes'
 import { passwordMeetsPolicy, passwordPolicyError } from '../lib/passwordStrength'
+import { getThemeOfDay } from '../lib/themeOfDay'
 
 type ProfileSection = 'account' | 'photo' | 'appearance' | 'security' | 'devices' | 'about'
 
@@ -47,7 +39,20 @@ const THEME_OPTIONS: { value: ThemeMode; label: string; description: string }[] 
   { value: 'light', label: 'Light', description: 'Always use the light theme' },
   { value: 'dark', label: 'Dark', description: 'Always use the dark theme' },
   { value: 'system', label: 'System', description: 'Match your device preference' },
+  {
+    value: 'theme_of_day',
+    label: 'Theme of the day',
+    description: `Dark base with today’s accent — ${getThemeOfDay().name}`,
+  },
 ]
+
+function themeDisplayLabel(theme: ThemeMode, dayName: string): string {
+  if (theme === 'system') return 'System'
+  if (theme === 'theme_of_day') return `Theme of the day · ${dayName}`
+  if (theme === 'light') return 'Light'
+  if (theme === 'dark') return 'Dark'
+  return theme
+}
 
 function userInitials(user: { display_name: string | null; email: string }): string {
   const source = user.display_name?.trim() || user.email
@@ -58,18 +63,10 @@ function userInitials(user: { display_name: string | null; email: string }): str
   return source.slice(0, 2).toUpperCase()
 }
 
-function sectionNavClass(active: boolean) {
-  return `group flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition-all duration-150 ${
-    active
-      ? 'bg-[color-mix(in_srgb,var(--app-primary)_14%,transparent)] text-primary shadow-sm'
-      : 'text-muted-text hover:bg-surface-hover hover:text-foreground'
-  }`
-}
-
 export function ProfilePage() {
   const { user, refreshUser, logout } = useAuth()
   const navigate = useNavigate()
-  const { theme, setTheme } = useTheme()
+  const { theme, setTheme, themeOfDayName } = useTheme()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [section, setSection] = useState<ProfileSection>('account')
@@ -121,6 +118,7 @@ export function ProfilePage() {
     (displayName.trim() || null) !== (user.display_name ?? null) || emailChanged
   const themeChanged = selectedTheme !== user.theme
   const activeSection = SECTIONS.find((item) => item.id === section) ?? SECTIONS[0]
+  const initials = userInitials(user)
 
   const handleProfileSubmit = async (event: FormEvent) => {
     event.preventDefault()
@@ -257,406 +255,368 @@ export function ProfilePage() {
   }
 
   return (
-    <section className={pageSection}>
-      <header>
-        <h1 className={pageTitle}>Profile</h1>
-        <p className={pageIntro}>
-          Manage your account details, profile picture, password, and default appearance.
-        </p>
-      </header>
-
-      <div className="grid gap-4 lg:grid-cols-[240px_minmax(0,1fr)] lg:items-start xl:grid-cols-[260px_minmax(0,1fr)]">
-        {/* Left navigation */}
-        <aside className={`${cardPanel} space-y-4 p-3 sm:p-4 lg:sticky lg:top-20`}>
-          <div className="flex items-center gap-3 rounded-xl bg-surface-muted/80 px-3 py-3">
-            <div className="relative flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-surface-elevated text-sm font-semibold text-primary">
-              {user.avatar_url ? (
-                <img src={user.avatar_url} alt="" className="size-full object-cover" />
-              ) : (
-                <span aria-hidden>{userInitials(user)}</span>
-              )}
-            </div>
-            <div className="min-w-0">
-              <p className="m-0 truncate text-sm font-semibold text-foreground">
-                {user.display_name?.trim() || 'Your profile'}
-              </p>
-              <p className="m-0 truncate text-xs text-muted-text">{user.email}</p>
-            </div>
-          </div>
-
-          {/* Mobile: horizontal chips */}
+    <div className="flex min-h-0 flex-1 flex-col text-foreground lg:flex-row">
           <nav
-            className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 lg:hidden"
+            className="flex shrink-0 gap-1 overflow-x-auto border-b border-border px-4 py-3 lg:w-[220px] lg:flex-col lg:overflow-visible lg:border-b-0 lg:border-r lg:border-border lg:px-4 lg:py-5"
             aria-label="Profile sections"
           >
-            {SECTIONS.map(({ id, label, icon: Icon }) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setSection(id)}
-                className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-                  section === id
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-surface-muted text-muted-text hover:bg-surface-hover hover:text-foreground'
-                }`}
-              >
-                <Icon className="size-3.5" aria-hidden />
-                {label}
-              </button>
-            ))}
-          </nav>
-
-          {/* Desktop: vertical list */}
-          <nav className="hidden flex-col gap-0.5 lg:flex" aria-label="Profile sections">
-            {SECTIONS.map(({ id, label, description, icon: Icon }) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setSection(id)}
-                className={sectionNavClass(section === id)}
-                aria-current={section === id ? 'page' : undefined}
-              >
-                <Icon
-                  className={`mt-0.5 size-4 shrink-0 ${
-                    section === id ? 'opacity-100' : 'opacity-80 group-hover:opacity-100'
+            {SECTIONS.map(({ id, label, description, icon: Icon }) => {
+              const active = section === id
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setSection(id)}
+                  aria-current={active ? 'page' : undefined}
+                  className={`flex min-w-[9.5rem] items-start gap-2.5 rounded-[10px] border px-3 py-2.5 text-left transition-all duration-150 lg:min-w-0 ${
+                    active
+                      ? 'border-[color-mix(in_srgb,var(--app-primary)_28%,transparent)] bg-[color-mix(in_srgb,var(--app-primary)_12%,transparent)] text-primary'
+                      : 'border-transparent text-muted-text hover:bg-surface-hover hover:text-foreground'
                   }`}
-                  aria-hidden
-                />
-                <span className="min-w-0">
-                  <span className="block text-sm font-medium">{label}</span>
-                  <span
-                    className={`mt-0.5 block text-xs ${
-                      section === id ? 'text-primary/80' : 'text-muted'
-                    }`}
-                  >
-                    {description}
-                  </span>
-                </span>
-              </button>
-            ))}
-          </nav>
-        </aside>
-
-        {/* Right content */}
-        <div className={`${cardPanel} min-h-[28rem] space-y-5 sm:p-5`}>
-          <div className="border-b border-border pb-4">
-            <h2 className="m-0 text-lg font-semibold tracking-tight text-foreground">
-              {activeSection.label}
-            </h2>
-            <p className="mt-1 mb-0 text-sm text-muted-text">{activeSection.description}</p>
-          </div>
-
-          {section === 'account' && (
-            <div className="max-w-lg space-y-4">
-              {profileMessage && <StatusMessage type="success" message={profileMessage} />}
-              {profileError && <StatusMessage type="error" message={profileError} />}
-
-              <form onSubmit={(e) => void handleProfileSubmit(e)} className="space-y-1">
-                <label className={fieldLabel}>
-                  <span>Display name</span>
-                  <input
-                    className={fieldInput}
-                    type="text"
-                    maxLength={100}
-                    placeholder="Optional"
-                    value={displayName}
-                    onChange={(e) => setDisplayName(e.target.value)}
-                  />
-                </label>
-                <label className={fieldLabel}>
-                  <span>Email</span>
-                  <input
-                    className={fieldInput}
-                    type="email"
-                    autoComplete="username"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                  />
-                </label>
-                {emailChanged && (
-                  <label className={fieldLabel}>
-                    <span>Current password</span>
-                    <input
-                      className={fieldInput}
-                      type="password"
-                      autoComplete="current-password"
-                      required
-                      value={emailPassword}
-                      onChange={(e) => setEmailPassword(e.target.value)}
-                    />
-                    <span className="text-xs font-normal text-muted-text">
-                      Required to confirm your email change. You will need to verify the new
-                      address.
+                >
+                  <Icon className="mt-0.5 size-4 shrink-0" aria-hidden />
+                  <span className="min-w-0">
+                    <span className="block text-[13px] font-semibold">{label}</span>
+                    <span className="mt-0.5 hidden text-[11.5px] leading-snug text-muted lg:block">
+                      {description}
                     </span>
-                  </label>
-                )}
-                <div className="pt-2">
-                  <button
-                    type="submit"
-                    className={btnPrimary}
-                    disabled={savingProfile || !accountChanged}
-                  >
-                    {savingProfile ? 'Saving…' : 'Save account'}
-                  </button>
-                </div>
-              </form>
-            </div>
-          )}
+                  </span>
+                </button>
+              )
+            })}
+          </nav>
 
-          {section === 'photo' && (
-            <div className="max-w-lg space-y-5">
-              <div className="flex flex-col items-start gap-5 sm:flex-row sm:items-center">
-                <div className="relative flex size-28 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-border bg-surface-muted text-2xl font-semibold text-primary shadow-sm">
-                  {user.avatar_url ? (
-                    <img
-                      src={user.avatar_url}
-                      alt=""
-                      className="size-full object-cover"
-                    />
-                  ) : (
-                    <span aria-hidden>{userInitials(user)}</span>
+          <div className="min-w-0 flex-1 overflow-y-auto px-5 py-6 sm:px-8">
+            <header className="mb-6 max-w-xl">
+              <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.05em] text-muted">
+                Settings
+              </p>
+              <h1 className="m-0 text-[clamp(22px,3vw,28px)] font-bold tracking-[-0.03em] text-foreground">
+                {activeSection.label}
+              </h1>
+              <p className="mt-1.5 mb-0 max-w-md text-[14px] leading-relaxed text-muted-text">
+                {activeSection.description}
+              </p>
+            </header>
+
+            <div className="max-w-xl">
+              {section === 'account' && (
+                <div className="space-y-4">
+                  {profileMessage && (
+                    <StatusMessage type="success" message={profileMessage} />
                   )}
-                </div>
-                <div className="space-y-3">
-                  <p className="m-0 mb-2 text-sm leading-relaxed text-muted-text">
-                    Upload a JPEG, PNG, WebP, or GIF up to 2 MB. A clear square photo works
-                    best.
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      className={btnPrimary}
-                      disabled={uploadingAvatar}
-                      onClick={() => fileInputRef.current?.click()}
-                    >
-                      <Camera className="size-4" aria-hidden />
-                      {uploadingAvatar ? 'Uploading…' : 'Upload photo'}
-                    </button>
-                    {user.avatar_url && (
-                      <button
-                        type="button"
-                        className={btnBase}
-                        disabled={uploadingAvatar}
-                        onClick={() => void handleRemoveAvatar()}
-                      >
-                        <Trash2 className="size-4" aria-hidden />
-                        Remove
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-              {avatarError && <StatusMessage type="error" message={avatarError} />}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/jpeg,image/png,image/webp,image/gif"
-                className="hidden"
-                onChange={(e) => void handleAvatarSelect(e)}
-              />
-            </div>
-          )}
+                  {profileError && <StatusMessage type="error" message={profileError} />}
 
-          {section === 'appearance' && (
-            <div className="max-w-xl space-y-4">
-              {profileMessage && <StatusMessage type="success" message={profileMessage} />}
-              {profileError && <StatusMessage type="error" message={profileError} />}
-
-              <form onSubmit={(e) => void handleProfileSubmit(e)} className="space-y-4">
-                <fieldset className="border-none p-0">
-                  <legend className="mb-3 text-sm font-medium text-foreground">
-                    Default theme
-                  </legend>
-                  <div className="grid gap-2 sm:grid-cols-3">
-                    {THEME_OPTIONS.map((option) => (
-                      <label
-                        key={option.value}
-                        className={`cursor-pointer rounded-xl border px-3 py-3.5 transition-all duration-150 ${
-                          selectedTheme === option.value
-                            ? 'border-primary bg-[color-mix(in_srgb,var(--app-primary)_10%,transparent)] shadow-sm'
-                            : 'border-border-input bg-surface-muted/50 hover:border-primary/50 hover:bg-surface-hover'
-                        }`}
-                      >
+                  <form onSubmit={(e) => void handleProfileSubmit(e)} className="space-y-1">
+                    <label className={fieldLabel}>
+                      <span>Display name</span>
+                      <input
+                        className={fieldInput}
+                        type="text"
+                        maxLength={100}
+                        placeholder="Optional"
+                        value={displayName}
+                        onChange={(e) => setDisplayName(e.target.value)}
+                      />
+                    </label>
+                    <label className={fieldLabel}>
+                      <span>Email</span>
+                      <input
+                        className={fieldInput}
+                        type="email"
+                        autoComplete="username"
+                        required
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                      />
+                    </label>
+                    {emailChanged && (
+                      <label className={fieldLabel}>
+                        <span>Current password</span>
                         <input
-                          type="radio"
-                          name="theme"
-                          value={option.value}
-                          checked={selectedTheme === option.value}
-                          onChange={() => setSelectedTheme(option.value)}
-                          className="sr-only"
+                          className={fieldInput}
+                          type="password"
+                          autoComplete="current-password"
+                          required
+                          value={emailPassword}
+                          onChange={(e) => setEmailPassword(e.target.value)}
                         />
-                        <span className="block text-sm font-medium text-foreground">
-                          {option.label}
-                        </span>
-                        <span className="mt-1 block text-xs leading-relaxed text-muted-text">
-                          {option.description}
+                        <span className="text-xs font-normal text-muted">
+                          Required to confirm your email change. You will need to verify the
+                          new address.
                         </span>
                       </label>
-                    ))}
-                  </div>
-                  <p className="mt-3 mb-0 text-xs text-muted-text">
-                    Current appearance:{' '}
-                    <span className="font-medium text-foreground">
-                      {theme === 'system' ? 'System' : theme}
-                    </span>
-                  </p>
-                </fieldset>
-                <button
-                  type="submit"
-                  className={btnPrimary}
-                  disabled={savingProfile || !themeChanged}
-                >
-                  {savingProfile ? 'Saving…' : 'Save appearance'}
-                </button>
-              </form>
-            </div>
-          )}
-
-          {section === 'security' && (
-            <div className="max-w-lg space-y-4">
-              {passwordMessage && <StatusMessage type="success" message={passwordMessage} />}
-              {passwordError && <StatusMessage type="error" message={passwordError} />}
-
-              <form onSubmit={(e) => void handlePasswordSubmit(e)} className="space-y-1">
-                <label className={fieldLabel}>
-                  <span>Current password</span>
-                  <input
-                    className={fieldInput}
-                    type="password"
-                    autoComplete="current-password"
-                    required
-                    value={currentPassword}
-                    onChange={(e) => setCurrentPassword(e.target.value)}
-                  />
-                </label>
-                <label className={fieldLabel}>
-                  <span>New password</span>
-                  <input
-                    className={fieldInput}
-                    type="password"
-                    autoComplete="new-password"
-                    required
-                    minLength={12}
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                  />
-                  <PasswordStrengthMeter
-                    password={newPassword}
-                    email={user.email}
-                    displayName={user.display_name}
-                  />
-                </label>
-                <label className={fieldLabel}>
-                  <span>Confirm new password</span>
-                  <input
-                    className={fieldInput}
-                    type="password"
-                    autoComplete="new-password"
-                    required
-                    minLength={12}
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                  />
-                </label>
-                <div className="pt-2">
-                  <button type="submit" className={btnPrimary} disabled={savingPassword}>
-                    {savingPassword ? 'Updating…' : 'Update password'}
-                  </button>
-                </div>
-              </form>
-            </div>
-          )}
-
-          {section === 'devices' && (
-            <div className="space-y-4">
-              <p className="m-0 text-sm leading-relaxed text-muted-text">
-                Active sessions for your account. Logging out a device revokes its access
-                immediately.
-              </p>
-              {sessionsError && <StatusMessage type="error" message={sessionsError} />}
-              {sessions.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-border bg-surface-muted/50 px-4 py-8 text-center">
-                  <Monitor className="mx-auto size-8 text-muted" aria-hidden />
-                  <p className="mt-3 mb-0 text-sm text-muted-text">No active sessions.</p>
-                </div>
-              ) : (
-                <ul className="m-0 list-none space-y-3 p-0">
-                  {sessions.map((session) => (
-                    <li
-                      key={session.id}
-                      className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-border bg-surface-muted/40 px-4 py-3.5 transition-colors hover:bg-surface-muted/70"
-                    >
-                      <div className="min-w-0 space-y-1.5 text-sm">
-                        <p className="m-0 flex flex-wrap items-center gap-2 font-medium text-foreground">
-                          <span>
-                            {session.is_current ? 'This device' : 'Other device'}
-                            {session.ip_address ? ` · ${session.ip_address}` : ''}
-                          </span>
-                          {session.is_current && (
-                            <span className="rounded-md bg-[color-mix(in_srgb,var(--app-primary)_14%,transparent)] px-1.5 py-0.5 text-[0.7rem] font-semibold text-primary">
-                              Current
-                            </span>
-                          )}
-                        </p>
-                        <p className="m-0 break-all text-muted-text">
-                          {session.user_agent || 'Unknown browser'}
-                        </p>
-                        <p className="m-0 text-xs text-muted">
-                          Last seen {new Date(session.last_seen_at).toLocaleString()}
-                        </p>
-                      </div>
+                    )}
+                    <div className="pt-2">
                       <button
-                        type="button"
-                        className={btnBase}
-                        disabled={sessionsBusy}
-                        onClick={() => void handleRevokeSession(session.id)}
+                        type="submit"
+                        className={btnPrimary}
+                        disabled={savingProfile || !accountChanged}
                       >
-                        Log out
+                        {savingProfile ? 'Saving…' : 'Save account'}
                       </button>
-                    </li>
-                  ))}
-                </ul>
+                    </div>
+                  </form>
+                </div>
+              )}
+
+              {section === 'photo' && (
+                <div className="space-y-5">
+                  <div className="flex flex-col items-start gap-5 sm:flex-row sm:items-center">
+                    <div className="relative flex size-28 shrink-0 items-center justify-center overflow-hidden rounded-[18px] border border-border bg-surface-muted text-2xl font-semibold text-primary">
+                      {user.avatar_url ? (
+                        <img
+                          src={user.avatar_url}
+                          alt=""
+                          className="size-full object-cover"
+                        />
+                      ) : (
+                        <span aria-hidden>{initials}</span>
+                      )}
+                    </div>
+                    <div className="space-y-3">
+                      <p className="m-0 mb-2 text-sm leading-relaxed text-muted-text">
+                        Upload a JPEG, PNG, WebP, or GIF up to 2 MB. A clear square photo
+                        works best.
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          className={btnPrimary}
+                          disabled={uploadingAvatar}
+                          onClick={() => fileInputRef.current?.click()}
+                        >
+                          <Camera className="size-3.5" aria-hidden />
+                          {uploadingAvatar ? 'Uploading…' : 'Upload photo'}
+                        </button>
+                        {user.avatar_url && (
+                          <button
+                            type="button"
+                            className={btnBase}
+                            disabled={uploadingAvatar}
+                            onClick={() => void handleRemoveAvatar()}
+                          >
+                            <Trash2 className="size-3.5" aria-hidden />
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  {avatarError && <StatusMessage type="error" message={avatarError} />}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    className="hidden"
+                    onChange={(e) => void handleAvatarSelect(e)}
+                  />
+                </div>
+              )}
+
+              {section === 'appearance' && (
+                <div className="space-y-4">
+                  {profileMessage && (
+                    <StatusMessage type="success" message={profileMessage} />
+                  )}
+                  {profileError && <StatusMessage type="error" message={profileError} />}
+
+                  <form onSubmit={(e) => void handleProfileSubmit(e)} className="space-y-4">
+                    <fieldset className="border-none p-0">
+                      <legend className="mb-3 text-sm font-medium text-foreground">
+                        Default theme
+                      </legend>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        {THEME_OPTIONS.map((option) => (
+                          <label
+                            key={option.value}
+                            className={`cursor-pointer rounded-xl border px-3 py-3.5 transition-all duration-150 ${
+                              selectedTheme === option.value
+                                ? 'border-[color-mix(in_srgb,var(--app-primary)_28%,transparent)] bg-[color-mix(in_srgb,var(--app-primary)_12%,transparent)]'
+                                : 'border-border bg-surface-muted/50 hover:border-[color-mix(in_srgb,var(--app-primary)_28%,transparent)] hover:bg-surface-hover'
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name="theme"
+                              value={option.value}
+                              checked={selectedTheme === option.value}
+                              onChange={() => setSelectedTheme(option.value)}
+                              className="sr-only"
+                            />
+                            <span className="block text-sm font-medium text-foreground">
+                              {option.label}
+                            </span>
+                            <span className="mt-1 block text-xs leading-relaxed text-muted">
+                              {option.description}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                      <p className="mt-3 mb-0 text-xs text-muted">
+                        Current appearance:{' '}
+                        <span className="font-medium text-foreground">
+                          {themeDisplayLabel(theme, themeOfDayName)}
+                        </span>
+                      </p>
+                    </fieldset>
+                    <button
+                      type="submit"
+                      className={btnPrimary}
+                      disabled={savingProfile || !themeChanged}
+                    >
+                      {savingProfile ? 'Saving…' : 'Save appearance'}
+                    </button>
+                  </form>
+                </div>
+              )}
+
+              {section === 'security' && (
+                <div className="space-y-4">
+                  {passwordMessage && (
+                    <StatusMessage type="success" message={passwordMessage} />
+                  )}
+                  {passwordError && <StatusMessage type="error" message={passwordError} />}
+
+                  <form onSubmit={(e) => void handlePasswordSubmit(e)} className="space-y-1">
+                    <label className={fieldLabel}>
+                      <span>Current password</span>
+                      <input
+                        className={fieldInput}
+                        type="password"
+                        autoComplete="current-password"
+                        required
+                        value={currentPassword}
+                        onChange={(e) => setCurrentPassword(e.target.value)}
+                      />
+                    </label>
+                    <label className={fieldLabel}>
+                      <span>New password</span>
+                      <input
+                        className={fieldInput}
+                        type="password"
+                        autoComplete="new-password"
+                        required
+                        minLength={12}
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                      />
+                      <PasswordStrengthMeter
+                        password={newPassword}
+                        email={user.email}
+                        displayName={user.display_name}
+                      />
+                    </label>
+                    <label className={fieldLabel}>
+                      <span>Confirm new password</span>
+                      <input
+                        className={fieldInput}
+                        type="password"
+                        autoComplete="new-password"
+                        required
+                        minLength={12}
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                      />
+                    </label>
+                    <div className="pt-2">
+                      <button type="submit" className={btnPrimary} disabled={savingPassword}>
+                        {savingPassword ? 'Updating…' : 'Update password'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              )}
+
+              {section === 'devices' && (
+                <div className="space-y-4">
+                  <p className="m-0 text-sm leading-relaxed text-muted-text">
+                    Active sessions for your account. Logging out a device revokes its
+                    access immediately.
+                  </p>
+                  {sessionsError && <StatusMessage type="error" message={sessionsError} />}
+                  {sessions.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-border bg-surface-muted/50 px-4 py-8 text-center">
+                      <Monitor className="mx-auto size-8 text-muted" aria-hidden />
+                      <p className="mt-3 mb-0 text-sm text-muted-text">No active sessions.</p>
+                    </div>
+                  ) : (
+                    <ul className="m-0 list-none space-y-3 p-0">
+                      {sessions.map((session) => (
+                        <li
+                          key={session.id}
+                          className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-border-subtle bg-surface-muted px-4 py-3.5 transition-colors hover:bg-surface-hover"
+                        >
+                          <div className="min-w-0 space-y-1.5 text-sm">
+                            <p className="m-0 flex flex-wrap items-center gap-2 font-medium text-foreground">
+                              <span>
+                                {session.is_current ? 'This device' : 'Other device'}
+                                {session.ip_address ? ` · ${session.ip_address}` : ''}
+                              </span>
+                              {session.is_current && (
+                                <span className="rounded-full bg-[color-mix(in_srgb,var(--app-primary)_12%,transparent)] px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide text-primary">
+                                  Current
+                                </span>
+                              )}
+                            </p>
+                            <p className="m-0 break-all text-muted-text">
+                              {session.user_agent || 'Unknown browser'}
+                            </p>
+                            <p className="m-0 text-xs text-muted">
+                              Last seen {new Date(session.last_seen_at).toLocaleString()}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            className={btnBase}
+                            disabled={sessionsBusy}
+                            onClick={() => void handleRevokeSession(session.id)}
+                          >
+                            Log out
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+
+              {section === 'about' && (
+                <div className="max-w-md space-y-3">
+                  <dl className="m-0 grid gap-3">
+                    <div className="rounded-xl border border-border-subtle bg-surface-muted px-4 py-3">
+                      <dt className="text-[11px] font-semibold uppercase tracking-[0.05em] text-muted">
+                        Role
+                      </dt>
+                      <dd className="mt-1 mb-0 font-mono text-[12.5px] font-medium text-foreground">
+                        {user.role_name || (user.is_admin ? 'Administrator' : 'User')}
+                      </dd>
+                    </div>
+                    <div className="rounded-xl border border-border-subtle bg-surface-muted px-4 py-3">
+                      <dt className="text-[11px] font-semibold uppercase tracking-[0.05em] text-muted">
+                        Member since
+                      </dt>
+                      <dd className="mt-1 mb-0 font-mono text-[12.5px] font-medium text-foreground">
+                        {new Date(user.created_at).toLocaleDateString(undefined, {
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric',
+                        })}
+                      </dd>
+                    </div>
+                    <div className="rounded-xl border border-border-subtle bg-surface-muted px-4 py-3">
+                      <dt className="text-[11px] font-semibold uppercase tracking-[0.05em] text-muted">
+                        Email
+                      </dt>
+                      <dd className="mt-1 mb-0 break-all font-mono text-[12.5px] font-medium text-foreground">
+                        {user.email}
+                      </dd>
+                    </div>
+                  </dl>
+                </div>
               )}
             </div>
-          )}
-
-          {section === 'about' && (
-            <div className="max-w-md space-y-4">
-              <dl className="m-0 grid gap-3">
-                <div className="rounded-xl border border-border bg-surface-muted/40 px-4 py-3">
-                  <dt className="text-xs font-medium uppercase tracking-wide text-muted">
-                    Role
-                  </dt>
-                  <dd className="mt-1 mb-0 text-sm font-medium text-foreground">
-                    {user.role_name || (user.is_admin ? 'Administrator' : 'User')}
-                  </dd>
-                </div>
-                <div className="rounded-xl border border-border bg-surface-muted/40 px-4 py-3">
-                  <dt className="text-xs font-medium uppercase tracking-wide text-muted">
-                    Member since
-                  </dt>
-                  <dd className="mt-1 mb-0 text-sm font-medium text-foreground">
-                    {new Date(user.created_at).toLocaleDateString(undefined, {
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric',
-                    })}
-                  </dd>
-                </div>
-                <div className="rounded-xl border border-border bg-surface-muted/40 px-4 py-3">
-                  <dt className="text-xs font-medium uppercase tracking-wide text-muted">
-                    Email
-                  </dt>
-                  <dd className="mt-1 mb-0 break-all text-sm font-medium text-foreground">
-                    {user.email}
-                  </dd>
-                </div>
-              </dl>
-            </div>
-          )}
-        </div>
-      </div>
-    </section>
+          </div>
+    </div>
   )
 }

@@ -20,7 +20,7 @@ ALLOWED_AVATAR_TYPES = {
     "image/gif": ".gif",
 }
 MAX_AVATAR_BYTES = 2 * 1024 * 1024
-VALID_THEMES = {"light", "dark", "system"}
+VALID_THEMES = {"light", "dark", "system", "theme_of_day"}
 
 
 def user_out(user: User) -> UserOut:

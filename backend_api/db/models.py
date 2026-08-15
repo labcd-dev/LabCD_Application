@@ -177,6 +177,12 @@ class User(Base):
         cascade="all, delete-orphan",
         lazy="noload",
     )
+    plant_model_conversations: Mapped[list["PlantModelConversation"]] = relationship(
+        "PlantModelConversation",
+        back_populates="owner",
+        cascade="all, delete-orphan",
+        lazy="noload",
+    )
     feedback_surveys: Mapped[list[FeedbackSurveyResponse]] = relationship(
         "FeedbackSurveyResponse",
         back_populates="user",
@@ -344,6 +350,70 @@ class Project(Base):
     )
 
     owner: Mapped[User] = relationship("User", back_populates="projects")
+
+
+class PlantModelConversation(Base):
+    """Persisted plant-model chat thread for a user."""
+
+    __tablename__ = "plant_model_conversations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    title: Mapped[str] = mapped_column(String(200), nullable=False, default="New chat")
+    llm_model: Mapped[str] = mapped_column(String(100), default="gpt-4o-mini", nullable=False)
+    status: Mapped[str] = mapped_column(String(40), default="active", nullable=False, index=True)
+    session_state: Mapped[dict[str, Any] | None] = mapped_column(JsonDict, nullable=True)
+    final_system_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    final_python_code: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    owner: Mapped[User] = relationship("User", back_populates="plant_model_conversations")
+    messages: Mapped[list["PlantModelMessage"]] = relationship(
+        "PlantModelMessage",
+        back_populates="conversation",
+        cascade="all, delete-orphan",
+        order_by="PlantModelMessage.id",
+        lazy="selectin",
+    )
+
+
+class PlantModelMessage(Base):
+    """Single user or assistant turn in a plant-model conversation."""
+
+    __tablename__ = "plant_model_messages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    conversation_id: Mapped[int] = mapped_column(
+        ForeignKey("plant_model_conversations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    role: Mapped[str] = mapped_column(String(20), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    conversation: Mapped[PlantModelConversation] = relationship(
+        "PlantModelConversation",
+        back_populates="messages",
+    )
 
 
 class FeedbackSurveyResponse(Base):

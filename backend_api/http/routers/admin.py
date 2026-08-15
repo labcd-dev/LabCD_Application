@@ -53,6 +53,10 @@ from backend_api.http.schemas.analytics import (
 )
 from backend_api.http.schemas.monitoring import MonitoringResponse
 from backend_api.http.schemas.projects import ProjectDetail, ProjectSummary, ProjectUpdateRequest
+from backend_api.http.schemas.plant_model import (
+    PlantModelConversationDetail,
+    PlantModelConversationSummary,
+)
 from backend_api.http.services import (
     analytics_service,
     api_key_service,
@@ -65,6 +69,7 @@ from backend_api.http.services import (
     sso_service,
     telegram_analytics_service,
 )
+from backend_api.http.services import plant_model_chat_service
 from backend_api.http.services.auth_service import (
     create_user,
     get_user_by_email,
@@ -1108,6 +1113,69 @@ def delete_any_project(
         actor=admin,
         resource_type="project",
         resource_id=project_id,
+        success=True,
+        details={"title": title},
+    )
+@router.get("/plant-model/conversations", response_model=list[PlantModelConversationSummary])
+def list_all_plant_model_conversations(
+    _: User = Depends(require_action("admin:plant_model")),
+    db: Session = Depends(get_db),
+    user_id: int | None = Query(default=None),
+    status_filter: str | None = Query(default=None, alias="status"),
+) -> list[PlantModelConversationSummary]:
+    conversations = plant_model_chat_service.list_all_conversations(
+        db,
+        user_id=user_id,
+        status=status_filter,
+    )
+    return [
+        PlantModelConversationSummary(
+            **plant_model_chat_service.conversation_to_summary(c, include_owner=True)
+        )
+        for c in conversations
+    ]
+
+
+@router.get(
+    "/plant-model/conversations/{conversation_id}",
+    response_model=PlantModelConversationDetail,
+)
+def get_any_plant_model_conversation(
+    conversation_id: int,
+    _: User = Depends(require_action("admin:plant_model")),
+    db: Session = Depends(get_db),
+) -> PlantModelConversationDetail:
+    conversation = plant_model_chat_service.get_conversation(db, conversation_id)
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return PlantModelConversationDetail(
+        **plant_model_chat_service.conversation_to_detail(conversation, include_owner=True)
+    )
+
+
+@router.delete(
+    "/plant-model/conversations/{conversation_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_any_plant_model_conversation(
+    conversation_id: int,
+    http_request: Request,
+    admin: User = Depends(require_action("admin:plant_model")),
+    db: Session = Depends(get_db),
+) -> None:
+    conversation = plant_model_chat_service.get_conversation(db, conversation_id)
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    title = conversation.title
+    plant_model_chat_service.delete_conversation(db, conversation)
+    audit_service.record_from_request(
+        db,
+        http_request,
+        action="admin.plant_model.delete",
+        category="admin",
+        actor=admin,
+        resource_type="plant_model_conversation",
+        resource_id=conversation_id,
         success=True,
         details={"title": title},
     )

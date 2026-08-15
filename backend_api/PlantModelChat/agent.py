@@ -6,17 +6,12 @@ three JSON shapes:
 - ``{"status": "continue", "reply": "..."}``
 - ``{"status": "draft", "reply": "...", "system_name": "...", "python_code": "..."}``
 - ``{"status": "complete", "system_name": "...", "python_code": "..."}``
-
-Product rule: once the plant is known, the agent sketches draft dynamics
-code and iterates with the user until they accept it (or a max-draft limit
-is hit). No hardcoded user-facing strings are ever returned by this agent —
-every message shown to the user comes from the model (or is the raw model
-text if JSON parsing fails after a repair attempt).
 """
 
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
@@ -27,12 +22,7 @@ PROMPT_FILE_NAME = "plant_model_agent"
 
 REQUIRED_CODE_KEYS = ("system_name", "python_code")
 
-# After this many draft turns in one conversation, accept the latest draft
-# as complete even without an explicit "finish" from the user.
 DEFAULT_MAX_DRAFTS = 5
-
-# Soft floor: do not accept complete before this many user turns unless the
-# user message itself is an explicit accept/finish after a draft was shown.
 DEFAULT_MIN_USER_TURNS_BEFORE_COMPLETION = 2
 
 _REPAIR_NOTE = (
@@ -49,15 +39,12 @@ _FORCE_DRAFT_NOTE = (
     'finish. Otherwise emit status "continue" with one concrete question. Output ONLY JSON.'
 )
 
-_DIGIT_RE = re.compile(r"\d")
 _FINISH_RE = re.compile(
     r"\b(finish|done|ship\s*it|looks?\s+good|totally\s+good|accept|finalize|finalise|"
     r"good\s+to\s+go|that'?s\s+(fine|good|ok|okay)|perfect|approved)\b",
     re.IGNORECASE,
 )
 
-# Common Greek / unit glyphs the model likes to emit inside python_code.
-# Mapped to plain ASCII so dynamics.py stays executable and editor-safe.
 _ASCII_REPLACEMENTS = (
     ("θ", "theta"),
     ("Θ", "Theta"),
@@ -93,30 +80,46 @@ _ASCII_REPLACEMENTS = (
     ("→", "->"),
     ("←", "<-"),
     ("°", " deg"),
-    ("\u00a0", " "),  # non-breaking space
+    ("\u00a0", " "),
 )
 
 
+@dataclass
+class PlantModelSessionState:
+    draft_count: int = 0
+    latest_draft: Dict[str, str] | None = None
+
+
+def apply_session_state(
+    agent: PlantModelAgent,
+    state: PlantModelSessionState | None,
+) -> None:
+    if state is None:
+        agent.reset_conversation_state()
+        return
+    agent._draft_count = max(0, state.draft_count)
+    agent._latest_draft = dict(state.latest_draft) if state.latest_draft else None
+
+
+def export_session_state(agent: PlantModelAgent) -> PlantModelSessionState:
+    latest = agent._latest_draft
+    return PlantModelSessionState(
+        draft_count=agent._draft_count,
+        latest_draft=dict(latest) if latest else None,
+    )
+
+
 def _to_ascii(text: str) -> str:
-    """Replace common non-ASCII science glyphs, then strip any remaining non-ASCII."""
     if not text:
         return text
     out = text
     for src, dst in _ASCII_REPLACEMENTS:
         out = out.replace(src, dst)
-    # Drop anything still outside printable ASCII (keep tab/newline).
     return "".join(ch if (32 <= ord(ch) <= 126) or ch in "\n\r\t" else "?" for ch in out)
 
 
 class PlantModelAgent(BaseAgent):
-    """Plant-model chatbot with continue / draft / complete structured turns.
-
-    Args:
-        max_drafts: after this many draft responses in one conversation,
-            the latest draft is auto-accepted as complete.
-        min_user_turns_before_completion: soft floor before accepting
-            complete (bypassed when the user explicitly accepts a draft).
-    """
+    """Plant-model chatbot with continue / draft / complete structured turns."""
 
     def __init__(
         self,
@@ -132,20 +135,18 @@ class PlantModelAgent(BaseAgent):
         super().__init__(model=model, temperature=temperature, provider=provider, **base_agent_kwargs)
         self.prompt_library = PromptLibrary(str(prompts_dir))
         self._system_prompt: str = self.prompt_library.get_key(PROMPT_FILE_NAME, "system_prompt")
-        self._user_prompt_template: str = self.prompt_library.get_key(PROMPT_FILE_NAME, "user_prompt_template")
+        self._user_prompt_template: str = self.prompt_library.get_key(
+            PROMPT_FILE_NAME, "user_prompt_template"
+        )
         self.max_drafts = max(1, max_drafts)
         self.min_user_turns_before_completion = max(1, min_user_turns_before_completion)
         self._draft_count = 0
         self._latest_draft: Optional[Dict[str, Any]] = None
 
     def reset_conversation_state(self) -> None:
-        """Clear draft counter / latest draft (call on UI reset)."""
         self._draft_count = 0
         self._latest_draft = None
 
-    # ------------------------------------------------------------------
-    # Prompt rendering
-    # ------------------------------------------------------------------
     @staticmethod
     def format_history(messages: Iterable[Dict[str, str]]) -> str:
         lines = []
@@ -161,20 +162,11 @@ class PlantModelAgent(BaseAgent):
             .replace("{{user_message}}", user_message)
         )
 
-    # ------------------------------------------------------------------
-    # Turn execution
-    # ------------------------------------------------------------------
     def step(
         self,
         history_messages: Iterable[Dict[str, str]],
         user_message: str,
     ) -> Tuple[str, Optional[Dict[str, Any]]]:
-        """Run one turn. Returns ``(display_text, final_result_or_None)``.
-
-        ``display_text`` is always model-authored (reply field, or a rendered
-        draft summary built only from model fields). Never a fixed template
-        string invented by this class.
-        """
         history_messages = list(history_messages)
         history_text = self.format_history(history_messages)
         user_prompt = self.render_user_prompt(history_text, user_message)
@@ -187,7 +179,6 @@ class PlantModelAgent(BaseAgent):
         )
         parsed = self._parse_structured_response(response_text)
 
-        # Repair invalid JSON once.
         if parsed is None:
             response_text, _ = self.invoke_llm(
                 system_prompt=self._system_prompt + _REPAIR_NOTE,
@@ -195,12 +186,9 @@ class PlantModelAgent(BaseAgent):
             )
             parsed = self._parse_structured_response(response_text)
             if parsed is None:
-                # Last resort: show the model's raw text, never a canned line.
                 return response_text.strip() or "(empty model response)", None
 
-        # User explicitly accepts after we already have a draft → complete.
         if user_accepts and self._latest_draft is not None and parsed.get("status") != "complete":
-            # Prefer model's complete if it just emitted one; else promote latest draft.
             if parsed.get("status") == "complete" and self._has_code(parsed):
                 return self._accept_complete(parsed)
             return self._accept_complete(self._latest_draft)
@@ -211,7 +199,6 @@ class PlantModelAgent(BaseAgent):
             reply = _to_ascii((parsed.get("reply") or "").strip())
             if reply:
                 return reply, None
-            # Model sent continue without reply — one forced repair, then raw.
             response_text, _ = self.invoke_llm(
                 system_prompt=self._system_prompt + _FORCE_DRAFT_NOTE,
                 user_prompt=user_prompt,
@@ -223,7 +210,6 @@ class PlantModelAgent(BaseAgent):
             if status == "continue":
                 reply = (parsed.get("reply") or "").strip()
                 return reply or response_text.strip(), None
-            # fall through if repair produced draft/complete
 
         if status == "draft" and self._has_code(parsed):
             parsed = self._sanitize_code_fields(parsed)
@@ -238,14 +224,12 @@ class PlantModelAgent(BaseAgent):
             return display, None
 
         if status == "complete" and self._has_code(parsed):
-            # Accept if user is finishing, or min turns satisfied, or we already drafted.
             if (
                 user_accepts
                 or self._latest_draft is not None
                 or user_turns >= self.min_user_turns_before_completion
             ):
                 return self._accept_complete(parsed)
-            # Premature complete: force a draft instead of inventing text.
             response_text, _ = self.invoke_llm(
                 system_prompt=self._system_prompt + _FORCE_DRAFT_NOTE,
                 user_prompt=(
@@ -268,11 +252,9 @@ class PlantModelAgent(BaseAgent):
                 reply = (parsed.get("reply") or "").strip()
                 return reply or response_text.strip(), None
             if parsed.get("status") == "complete" and self._has_code(parsed):
-                # Model insists — accept rather than loop forever.
                 return self._accept_complete(parsed)
             return response_text.strip(), None
 
-        # Unknown shape: show model text only.
         reply = (parsed.get("reply") or "").strip()
         if reply:
             return reply, None
@@ -285,12 +267,10 @@ class PlantModelAgent(BaseAgent):
             "python_code": payload["python_code"],
         }
         self._latest_draft = final
-        # Display text still comes from structured fields only (system_name).
         return f"Model ready — **{final['system_name']}**.", final
 
     @staticmethod
     def _sanitize_code_fields(data: Dict[str, Any]) -> Dict[str, Any]:
-        """Ensure system_name and python_code are pure ASCII."""
         out = dict(data)
         if isinstance(out.get("system_name"), str):
             out["system_name"] = _to_ascii(out["system_name"])
@@ -302,7 +282,6 @@ class PlantModelAgent(BaseAgent):
 
     @staticmethod
     def _format_draft_display(parsed: Dict[str, Any]) -> str:
-        """Build the chat message for a draft turn from model fields only."""
         reply = (parsed.get("reply") or "").strip()
         name = parsed.get("system_name", "draft")
         code = parsed.get("python_code", "")
@@ -318,9 +297,6 @@ class PlantModelAgent(BaseAgent):
     def _has_code(data: Dict[str, Any]) -> bool:
         return all(isinstance(data.get(k), str) and data[k].strip() for k in REQUIRED_CODE_KEYS)
 
-    # ------------------------------------------------------------------
-    # Parsing
-    # ------------------------------------------------------------------
     @staticmethod
     def _parse_structured_response(text: str) -> Optional[Dict[str, Any]]:
         try:
@@ -332,7 +308,6 @@ class PlantModelAgent(BaseAgent):
         status = data.get("status")
         if status in ("continue", "draft", "complete"):
             return data
-        # Legacy: bare final object without status.
         if all(k in data for k in REQUIRED_CODE_KEYS) and "reply" not in data:
             out = dict(data)
             out["status"] = "complete"
