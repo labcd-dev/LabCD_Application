@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Literal
 
+from backend_api.common.datetime_utils import utc_iso
+
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
@@ -274,7 +276,7 @@ def list_errors(
 def _event_row(event: ErrorEvent) -> dict[str, Any]:
     return {
         "id": event.id,
-        "created_at": event.created_at.isoformat() if event.created_at else "",
+        "created_at": utc_iso(event.created_at) if event.created_at else "",
         "source": event.source,
         "message": event.message,
         "stack_trace": event.stack_trace or "",
@@ -339,5 +341,5 @@ def event_to_dict(event: ErrorEvent) -> dict[str, Any]:
         "user_agent": event.user_agent,
         "page_url": event.page_url,
         "extra": event.extra,
-        "created_at": created.isoformat() if created else None,
+        "created_at": utc_iso(created) if created else None,
     }

@@ -234,10 +234,11 @@ def get_monitoring(_: User = Depends(require_action("admin:monitoring"))) -> Mon
 @router.get("/analytics", response_model=AnalyticsResponse)
 def get_analytics(
     days: int = Query(default=30, ge=1, le=90),
+    tz: str | None = Query(default=None, max_length=64),
     db: Session = Depends(get_db),
     _: User = Depends(require_action("admin:analytics")),
 ) -> AnalyticsResponse:
-    return AnalyticsResponse(**analytics_service.get_analytics(db, days=days))
+    return AnalyticsResponse(**analytics_service.get_analytics(db, days=days, tz_name=tz))
 
 
 @router.get("/analytics/telegram", response_model=TelegramAnalyticsSettings)

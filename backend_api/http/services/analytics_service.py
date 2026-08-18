@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from backend_api.common.datetime_utils import as_utc, resolve_timezone, utcnow
 from backend_api.db.models import AnalyticsEvent, User
 from backend_api.db.session import SessionLocal
 
@@ -19,16 +21,20 @@ MAX_LLM_MODEL_LEN = 100
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return utcnow()
 
 
 def _utc_day_start(moment: datetime | None = None) -> datetime:
-    now = moment or _utcnow()
-    if now.tzinfo is None:
-        now = now.replace(tzinfo=timezone.utc)
-    else:
-        now = now.astimezone(timezone.utc)
+    now = as_utc(moment or _utcnow())
     return now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+
+def _calendar_date(moment: datetime, tz: ZoneInfo) -> date:
+    return as_utc(moment).astimezone(tz).date()
+
+
+def _local_midnight_utc(day: date, tz: ZoneInfo) -> datetime:
+    return datetime.combine(day, time.min, tzinfo=tz).astimezone(timezone.utc)
 
 
 def record_active_day(db: Session, user_id: int) -> None:
@@ -135,8 +141,7 @@ def _cohort_retention(db: Session, *, retention_days: int, now: datetime) -> flo
 
     retained = 0
     for user_id, created_at in cohort_users:
-        if created_at.tzinfo is None:
-            created_at = created_at.replace(tzinfo=timezone.utc)
+        created_at = as_utc(created_at)
         threshold = created_at + timedelta(days=retention_days)
         hit = (
             db.query(AnalyticsEvent.id)
@@ -152,20 +157,23 @@ def _cohort_retention(db: Session, *, retention_days: int, now: datetime) -> flo
     return retained / len(cohort_users)
 
 
-def get_analytics(db: Session, days: int = 30) -> dict:
+def get_analytics(db: Session, days: int = 30, tz_name: str | None = None) -> dict:
     """Aggregate DAU/MAU series, retention, and module usage for the admin UI."""
     days = max(1, min(int(days), 90))
+    tz = resolve_timezone(tz_name)
     now = _utcnow()
-    today_start = _utc_day_start(now)
-    tomorrow = today_start + timedelta(days=1)
-    range_start = today_start - timedelta(days=days - 1)
-    mau_window_start = today_start - timedelta(days=29)
+    today_local = _calendar_date(now, tz)
+    today_start = _local_midnight_utc(today_local, tz)
+    tomorrow = _local_midnight_utc(today_local + timedelta(days=1), tz)
+    range_start_date = today_local - timedelta(days=days - 1)
+    range_start = _local_midnight_utc(range_start_date, tz)
+    mau_window_start = _local_midnight_utc(today_local - timedelta(days=29), tz)
 
     dau_today = _distinct_active_count(db, today_start, tomorrow)
     mau = _distinct_active_count(db, mau_window_start, tomorrow)
 
     # Preload active events spanning MAU lookback for the earliest series day.
-    series_lookback_start = range_start - timedelta(days=29)
+    series_lookback_start = _local_midnight_utc(range_start_date - timedelta(days=29), tz)
     active_rows = (
         db.query(AnalyticsEvent.user_id, AnalyticsEvent.created_at)
         .filter(
@@ -175,19 +183,15 @@ def get_analytics(db: Session, days: int = 30) -> dict:
         )
         .all()
     )
-    # user_id -> set of UTC dates with activity
+    # user_id -> set of viewer-local calendar dates with activity
     activity_by_user: dict[int, set[date]] = {}
     for user_id, created_at in active_rows:
-        if created_at.tzinfo is None:
-            created_at = created_at.replace(tzinfo=timezone.utc)
-        else:
-            created_at = created_at.astimezone(timezone.utc)
-        activity_by_user.setdefault(user_id, set()).add(created_at.date())
+        activity_by_user.setdefault(user_id, set()).add(_calendar_date(created_at, tz))
 
     dau_series: list[dict] = []
     mau_series: list[dict] = []
     for offset in range(days):
-        day = (range_start + timedelta(days=offset)).date()
+        day = range_start_date + timedelta(days=offset)
         day_users = {
             user_id
             for user_id, days_set in activity_by_user.items()

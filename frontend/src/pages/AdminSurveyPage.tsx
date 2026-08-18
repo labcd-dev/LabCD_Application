@@ -22,13 +22,7 @@ import {
   pageSection,
   pageTitle,
 } from '../lib/classes'
-
-function formatWhen(iso: string | null): string {
-  if (!iso) return '—'
-  const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) return iso
-  return date.toLocaleString()
-}
+import { formatDateTime } from '../lib/formatDateTime'
 
 export function AdminSurveyPage() {
   const { hasAction } = useAuth()
@@ -177,7 +171,7 @@ export function AdminSurveyPage() {
                       <td className="px-2 py-2">{row.major ?? '—'}</td>
                       <td className="px-2 py-2">{row.matlab_experience ?? '—'}</td>
                       <td className="px-2 py-2">{row.control_design_experience ?? '—'}</td>
-                      <td className="px-2 py-2">{formatWhen(row.completed_at)}</td>
+                      <td className="px-2 py-2">{formatDateTime(row.completed_at)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -252,7 +246,7 @@ export function AdminSurveyPage() {
                       <td className="max-w-[200px] truncate px-2 py-2" title={row.main_problems}>
                         {row.main_problems || '—'}
                       </td>
-                      <td className="px-2 py-2">{formatWhen(row.created_at)}</td>
+                      <td className="px-2 py-2">{formatDateTime(row.created_at)}</td>
                     </tr>
                   ))}
                 </tbody>

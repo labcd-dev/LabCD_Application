@@ -22,6 +22,7 @@ import {
   pageSection,
 } from '../lib/classes'
 import { pipelineLabel, statusBadgeClass } from '../lib/projectLabels'
+import { formatDateTime } from '../lib/formatDateTime'
 import { canRetryProject, retryProject } from '../lib/retryProject'
 
 export function ProjectDetailPage() {
@@ -238,7 +239,7 @@ export function ProjectDetailPage() {
               </h2>
               <p className={`${pageIntro} m-0`}>
                 {pipelineLabel(project.pipeline_type)} · Updated{' '}
-                {new Date(project.updated_at).toLocaleString()}
+                {formatDateTime(project.updated_at)}
               </p>
               <div className="flex flex-wrap gap-2">
                 <span className={statusBadgeClass(project.status)}>{project.status}</span>

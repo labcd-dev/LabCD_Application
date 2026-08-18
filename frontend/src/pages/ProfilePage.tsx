@@ -18,6 +18,7 @@ import { useTheme, type ThemeMode } from '../context/ThemeContext'
 import { btnBase, btnPrimary, fieldInput, fieldLabel } from '../lib/classes'
 import { passwordMeetsPolicy, passwordPolicyError } from '../lib/passwordStrength'
 import { getThemeOfDay } from '../lib/themeOfDay'
+import { formatDate, formatDateTime } from '../lib/formatDateTime'
 
 type ProfileSection = 'account' | 'photo' | 'appearance' | 'security' | 'devices' | 'about'
 
@@ -563,7 +564,7 @@ export function ProfilePage() {
                               {session.user_agent || 'Unknown browser'}
                             </p>
                             <p className="m-0 text-xs text-muted">
-                              Last seen {new Date(session.last_seen_at).toLocaleString()}
+                              Last seen {formatDateTime(session.last_seen_at)}
                             </p>
                           </div>
                           <button
@@ -597,11 +598,7 @@ export function ProfilePage() {
                         Member since
                       </dt>
                       <dd className="mt-1 mb-0 font-mono text-[12.5px] font-medium text-foreground">
-                        {new Date(user.created_at).toLocaleDateString(undefined, {
-                          year: 'numeric',
-                          month: 'long',
-                          day: 'numeric',
-                        })}
+                        {formatDate(user.created_at, { year: 'numeric', month: 'long', day: 'numeric' })}
                       </dd>
                     </div>
                     <div className="rounded-xl border border-border-subtle bg-surface-muted px-4 py-3">

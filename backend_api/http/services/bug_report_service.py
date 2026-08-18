@@ -14,6 +14,7 @@ from backend_api.db.models import BugReport, User
 from backend_api.http.config import API_PREFIX, UPLOADS_DIR
 from backend_api.http.schemas.bug_reports import BugReportSettings
 from backend_api.http.services import plan_service
+from backend_api.common.datetime_utils import utc_iso
 
 SETTING_ENABLED = "bug_reports.enabled"
 
@@ -158,8 +159,8 @@ def export_csv(db: Session, *, status: str | None = None) -> str:
         writer.writerow(
             {
                 "id": report.id,
-                "created_at": report.created_at.isoformat() if report.created_at else "",
-                "fixed_at": report.fixed_at.isoformat() if report.fixed_at else "",
+                "created_at": utc_iso(report.created_at) if report.created_at else "",
+                "fixed_at": utc_iso(report.fixed_at) if report.fixed_at else "",
                 "status": report.status,
                 "user_id": report.user_id,
                 "user_email": report.user.email if report.user is not None else "",

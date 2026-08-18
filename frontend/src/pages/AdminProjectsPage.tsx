@@ -17,6 +17,7 @@ import {
   fieldLabel,
 } from '../lib/classes'
 import { pipelineLabel, statusBadgeClass } from '../lib/projectLabels'
+import { formatDateTime } from '../lib/formatDateTime'
 
 export function AdminProjectsPage() {
   const { hasAction } = useAuth()
@@ -223,7 +224,7 @@ export function AdminProjectsPage() {
                       <span className={statusBadgeClass(project.status)}>{project.status}</span>
                     </td>
                     <td className="px-4 py-3 text-muted-text">
-                      {new Date(project.updated_at).toLocaleString()}
+                      {formatDateTime(project.updated_at)}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex gap-2">

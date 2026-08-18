@@ -24,19 +24,13 @@ import {
   installGlobalErrorHandlers,
   setErrorTrackingConfig,
 } from '../lib/errorTracking'
+import { formatDateTime } from '../lib/formatDateTime'
 
 const emptySettings: ErrorTrackingSettings = {
   enabled: false,
   frontend: false,
   backend: false,
   api: false,
-}
-
-function formatWhen(iso: string | null): string {
-  if (!iso) return '—'
-  const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) return iso
-  return date.toLocaleString()
 }
 
 export function AdminErrorsPage() {
@@ -273,7 +267,7 @@ export function AdminErrorsPage() {
                   {pagination.pageItems.map((event) => (
                     <tr key={event.id} className="border-b border-border-subtle align-top">
                       <td className="whitespace-nowrap px-2 py-2 text-muted-text">
-                        {formatWhen(event.created_at)}
+                        {formatDateTime(event.created_at)}
                       </td>
                       <td className="px-2 py-2 font-medium text-foreground">{event.source}</td>
                       <td className="px-2 py-2 text-foreground">{event.status_code ?? '—'}</td>

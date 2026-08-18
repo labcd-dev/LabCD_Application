@@ -15,6 +15,7 @@ import {
   fieldLabel,
 } from '../lib/classes'
 import { statusBadgeClass } from '../lib/projectLabels'
+import { formatDateTime } from '../lib/formatDateTime'
 
 export function AdminPlantModelChatsPage() {
   const { hasAction } = useAuth()
@@ -187,7 +188,7 @@ export function AdminPlantModelChatsPage() {
                       <span className={statusBadgeClass(chat.status)}>{chat.status}</span>
                     </td>
                     <td className="px-4 py-3 text-muted-text">
-                      {new Date(chat.updated_at).toLocaleString()}
+                      {formatDateTime(chat.updated_at)}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex gap-2">

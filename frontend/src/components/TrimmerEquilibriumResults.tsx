@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { cardPanel } from '../lib/classes'
+import { formatDateTime } from '../lib/formatDateTime'
 import { JsonViewer } from './JsonViewer'
 
 interface EquilibriumPayload {
@@ -307,7 +308,7 @@ export function TrimmerEquilibriumResults({ result }: TrimmerEquilibriumResultsP
         </div>
         {diagnostics.timestamp && (
           <div className="text-xs text-foreground-secondary">
-            Timestamp: {diagnostics.timestamp}
+            Timestamp: {formatDateTime(diagnostics.timestamp)}
           </div>
         )}
       </Section>

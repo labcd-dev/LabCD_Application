@@ -16,6 +16,7 @@ import {
 } from '../lib/classes'
 import { pipelineLabel, statusBadgeClass } from '../lib/projectLabels'
 import { canRetryProject, retryProject } from '../lib/retryProject'
+import { formatDateTime } from '../lib/formatDateTime'
 
 export function ProjectsPage() {
   const navigate = useNavigate()
@@ -149,7 +150,7 @@ export function ProjectsPage() {
                 </div>
                 <p className="m-0 text-sm text-muted-text">
                   File: {project.file_name || '—'} · Updated{' '}
-                  {new Date(project.updated_at).toLocaleString()}
+                  {formatDateTime(project.updated_at)}
                   {project.has_results ? ' · Has results' : ''}
                 </p>
               </div>

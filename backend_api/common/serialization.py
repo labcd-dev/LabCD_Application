@@ -3,7 +3,10 @@
 import ast
 import json
 import math
+from datetime import date, datetime
 from typing import Any, Optional
+
+from backend_api.common.datetime_utils import utc_iso
 
 
 def _sanitize_number(value: float) -> Any:
@@ -30,6 +33,10 @@ def make_serializable(obj: Any) -> Any:
         return obj
     if isinstance(obj, float):
         return _sanitize_number(obj)
+    if isinstance(obj, datetime):
+        return utc_iso(obj)
+    if isinstance(obj, date):
+        return obj.isoformat()
     if isinstance(obj, dict):
         return {key: make_serializable(value) for key, value in obj.items()}
     if isinstance(obj, list):

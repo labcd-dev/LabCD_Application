@@ -9,13 +9,7 @@ import { useAuth } from '../context/AuthContext'
 import { useClientPagination } from '../hooks/useClientPagination'
 import { btnBase, btnCompact, cardPanel } from '../lib/classes'
 import { pipelineLabel, statusBadgeClass } from '../lib/projectLabels'
-
-function formatWhen(iso: string | null | undefined): string {
-  if (!iso) return '—'
-  const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) return iso
-  return date.toLocaleString()
-}
+import { formatDateTime } from '../lib/formatDateTime'
 
 function formatFailureReason(reason: string | null): string {
   if (!reason) return '—'
@@ -280,7 +274,7 @@ export function AdminUserDetailPage() {
             label="Email verified"
             value={user.email_verified === false ? 'No' : 'Yes'}
           />
-          <DetailRow label="Joined" value={formatWhen(user.created_at)} />
+          <DetailRow label="Joined" value={formatDateTime(user.created_at)} />
           <DetailRow
             label="Profile survey"
             value={user.profile_survey_completed ? 'Completed' : 'Not completed'}
@@ -332,10 +326,10 @@ export function AdminUserDetailPage() {
                       {truncateAgent(session.user_agent)}
                     </td>
                     <td className="px-2 py-2 whitespace-nowrap text-muted-text">
-                      {formatWhen(session.created_at)}
+                      {formatDateTime(session.created_at)}
                     </td>
                     <td className="px-2 py-2 whitespace-nowrap text-muted-text">
-                      {formatWhen(session.last_seen_at)}
+                      {formatDateTime(session.last_seen_at)}
                     </td>
                     <td className="px-2 py-2 text-right">
                       <button
@@ -378,7 +372,7 @@ export function AdminUserDetailPage() {
                   {loginPagination.pageItems.map((entry) => (
                     <tr key={entry.id} className="border-b border-border-subtle align-top">
                       <td className="px-2 py-2 whitespace-nowrap text-muted-text">
-                        {formatWhen(entry.created_at)}
+                        {formatDateTime(entry.created_at)}
                       </td>
                       <td className="px-2 py-2">
                         <span
@@ -434,7 +428,7 @@ export function AdminUserDetailPage() {
               label="Control design experience"
               value={profile_survey.control_design_experience ?? '—'}
             />
-            <DetailRow label="Completed" value={formatWhen(profile_survey.completed_at)} />
+            <DetailRow label="Completed" value={formatDateTime(profile_survey.completed_at)} />
           </dl>
         )}
       </div>
@@ -470,7 +464,7 @@ export function AdminUserDetailPage() {
                       )
                     }
                   />
-                  <DetailRow label="Submitted" value={formatWhen(feedback_survey.created_at)} />
+                  <DetailRow label="Submitted" value={formatDateTime(feedback_survey.created_at)} />
                 </dl>
               </div>
             ))}
@@ -508,7 +502,7 @@ export function AdminUserDetailPage() {
                       </td>
                       <td className="px-2 py-2 text-muted-text">{project.file_name || '—'}</td>
                       <td className="px-2 py-2 whitespace-nowrap text-muted-text">
-                        {formatWhen(project.updated_at)}
+                        {formatDateTime(project.updated_at)}
                       </td>
                       <td className="px-2 py-2 text-right">
                         <Link
@@ -558,7 +552,7 @@ export function AdminUserDetailPage() {
                   {errorsPagination.pageItems.map((event) => (
                     <tr key={event.id} className="border-b border-border-subtle align-top">
                       <td className="px-2 py-2 whitespace-nowrap text-muted-text">
-                        {formatWhen(event.created_at)}
+                        {formatDateTime(event.created_at)}
                       </td>
                       <td className="px-2 py-2">{event.source}</td>
                       <td className="px-2 py-2">{event.status_code ?? '—'}</td>

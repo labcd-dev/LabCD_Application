@@ -63,6 +63,7 @@ import type {
   SsoProviderPublic,
   SsoProviderUpdate,
 } from './types'
+import { viewerTimeZone } from '../lib/formatDateTime'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '/api/v1'
 
@@ -195,8 +196,13 @@ export const authApi = {
 
 export const adminApi = {
   getMonitoring: () => apiFetch<MonitoringResponse>('/admin/monitoring'),
-  getAnalytics: (days = 30) =>
-    apiFetch<AnalyticsResponse>(`/admin/analytics?days=${encodeURIComponent(String(days))}`),
+  getAnalytics: (days = 30, tz = viewerTimeZone()) => {
+    const query = new URLSearchParams({
+      days: String(days),
+      tz,
+    })
+    return apiFetch<AnalyticsResponse>(`/admin/analytics?${query.toString()}`)
+  },
   getTelegramAnalyticsSettings: () =>
     apiFetch<TelegramAnalyticsSettings>('/admin/analytics/telegram'),
   updateTelegramAnalyticsSettings: (body: TelegramAnalyticsSettingsUpdate) =>

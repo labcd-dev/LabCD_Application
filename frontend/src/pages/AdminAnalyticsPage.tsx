@@ -290,7 +290,7 @@ export function AdminAnalyticsPage() {
         <MetricCard
           label="Daily active users"
           value={formatCount(data?.dau_today, loading)}
-          hint="Distinct users active today (UTC)"
+          hint="Distinct users active today"
           icon={Users}
         />
         <MetricCard

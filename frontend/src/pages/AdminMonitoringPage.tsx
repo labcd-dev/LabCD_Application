@@ -18,6 +18,7 @@ import { StatusMessage } from '../components/StatusMessage'
 import { useAuth } from '../context/AuthContext'
 import { downloadCsv } from '../lib/downloadCsv'
 import { btnBase, btnCompact, cardPanel } from '../lib/classes'
+import { parseApiDate } from '../lib/formatDateTime'
 import { Navigate } from 'react-router-dom'
 
 const POLL_MS = 5000
@@ -48,7 +49,9 @@ function formatRate(bps: number): string {
 
 function formatAgo(iso: string | null): string {
   if (!iso) return '—'
-  const ms = Date.now() - new Date(iso).getTime()
+  const date = parseApiDate(iso)
+  if (!date) return '—'
+  const ms = Date.now() - date.getTime()
   if (Number.isNaN(ms) || ms < 0) return 'just now'
   const secs = Math.floor(ms / 1000)
   if (secs < 2) return 'just now'

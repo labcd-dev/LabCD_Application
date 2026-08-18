@@ -8,6 +8,7 @@ import { AdminPagination } from '../components/admin/AdminPagination'
 import { useAuth } from '../context/AuthContext'
 import { useClientPagination } from '../hooks/useClientPagination'
 import { btnBase, btnPrimary, pageIntro, pageSection, pageTitle } from '../lib/classes'
+import { formatDateTime } from '../lib/formatDateTime'
 
 export function AdminBlogPage() {
   const { hasAction } = useAuth()
@@ -91,7 +92,7 @@ export function AdminBlogPage() {
                       <div className="text-xs text-muted">/{post.slug}</div>
                     </td>
                     <td className="px-4 py-3 capitalize">{post.status}</td>
-                    <td className="px-4 py-3">{new Date(post.updated_at).toLocaleString()}</td>
+                    <td className="px-4 py-3">{formatDateTime(post.updated_at)}</td>
                     <td className="px-4 py-3">
                       <div className="flex gap-2">
                         <Link to={`/admin/blog/${post.id}`} className={`${btnBase} inline-flex items-center gap-1`}>

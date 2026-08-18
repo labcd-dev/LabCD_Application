@@ -2,14 +2,17 @@
 
 from contextlib import asynccontextmanager
 import traceback
+from datetime import datetime
 
 from fastapi import FastAPI, Request
+from fastapi.encoders import ENCODERS_BY_TYPE
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 import anyio.to_thread
 
+from backend_api.common.datetime_utils import utc_iso
 from backend_api.db.session import init_db
 from backend_api.http.config import API_PREFIX, API_THREAD_LIMIT, CORS_ORIGINS, UPLOADS_DIR
 from backend_api.http.middleware.error_tracking import ErrorTrackingMiddleware
@@ -63,6 +66,7 @@ async def lifespan(_app: FastAPI):
 
 
 def create_app() -> FastAPI:
+    ENCODERS_BY_TYPE[datetime] = utc_iso
     app = FastAPI(
         title="LabCD API",
         description="FastAPI backend for LabCD control-system design pipelines.",

@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime
+
+from backend_api.common.datetime_utils import utc_iso
 from typing import Any
 
 from fastapi import Request
@@ -166,7 +168,7 @@ def entry_to_dict(entry: AuditLog) -> dict[str, Any]:
         "ip_address": entry.ip_address,
         "user_agent": entry.user_agent,
         "details": entry.details,
-        "created_at": created.isoformat() if created else None,
+        "created_at": utc_iso(created) if created else None,
     }
 
 
@@ -179,7 +181,7 @@ def _csv_row(entry: AuditLog) -> dict[str, Any]:
             details = str(entry.details)
     return {
         "id": entry.id,
-        "created_at": entry.created_at.isoformat() if entry.created_at else "",
+        "created_at": utc_iso(entry.created_at) if entry.created_at else "",
         "category": entry.category,
         "action": entry.action,
         "actor_user_id": entry.actor_user_id if entry.actor_user_id is not None else "",

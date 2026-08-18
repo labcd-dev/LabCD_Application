@@ -10,6 +10,7 @@ import type {
 } from '../api/types'
 import { useAuth } from '../context/AuthContext'
 import { AUTO_MODEL, resolveChatModel } from '../lib/modelPicker'
+import { formatDateTime } from '../lib/formatDateTime'
 import { btnBase, btnCompact, btnPrimary } from '../lib/classes'
 import { CodePreview } from './CodePreview'
 import { ComposerModelPicker } from './ComposerModelPicker'
@@ -61,9 +62,7 @@ function autoresize(el: HTMLTextAreaElement) {
 }
 
 function formatUpdatedAt(value: string): string {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return ''
-  return date.toLocaleString(undefined, {
+  return formatDateTime(value, '', {
     month: 'short',
     day: 'numeric',
     hour: 'numeric',

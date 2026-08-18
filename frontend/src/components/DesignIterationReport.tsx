@@ -17,6 +17,7 @@ import {
   codeBlock,
   mutedText,
 } from '../lib/classes'
+import { formatClock } from '../lib/formatDateTime'
 
 interface DesignIterationReportProps {
   responses: LlmResponseEntry[]
@@ -138,7 +139,7 @@ function IterationCard({
           <span className="text-lg font-bold text-primary">#{cycle.iteration}</span>
           <span className="font-semibold text-foreground-secondary">Iteration</span>
           {cycle.timestamp && (
-            <span className="text-xs text-foreground-subtle font-mono">{cycle.timestamp}</span>
+            <span className="text-xs text-foreground-subtle font-mono">{formatClock(cycle.timestamp)}</span>
           )}
         </div>
         <div className="flex gap-1.5 flex-wrap justify-end">
@@ -203,7 +204,7 @@ function AgentPanel({ agentKey, raw, children }: AgentPanelProps) {
         </div>
         {typeof raw.timestamp === 'string' && (
           <time className="text-xs text-foreground-faint font-mono whitespace-nowrap">
-            {raw.timestamp}
+            {formatClock(raw.timestamp)}
           </time>
         )}
       </header>

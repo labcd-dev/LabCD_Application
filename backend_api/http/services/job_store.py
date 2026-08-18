@@ -6,10 +6,10 @@ import queue
 import threading
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, Optional
 
+from backend_api.common.datetime_utils import utc_iso, utcnow
 from backend_api.common.serialization import make_serializable
 
 INTERNAL_METADATA_KEYS = frozenset(
@@ -38,8 +38,8 @@ class Job:
     id: str
     module: str
     status: JobStatus = JobStatus.PENDING
-    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
-    updated_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    created_at: str = field(default_factory=lambda: utc_iso(utcnow()))
+    updated_at: str = field(default_factory=lambda: utc_iso(utcnow()))
     event_queue: queue.Queue = field(default_factory=queue.Queue)
     metadata: Dict[str, Any] = field(default_factory=dict)
     error: Optional[str] = None
@@ -50,7 +50,7 @@ class Job:
     def touch(self, status: Optional[JobStatus] = None) -> None:
         if status is not None:
             self.status = status
-        self.updated_at = datetime.now(timezone.utc).isoformat()
+        self.updated_at = utc_iso(utcnow())
 
 
 class JobStore:

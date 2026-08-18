@@ -13,6 +13,7 @@ import {
   type TargetMetrics,
 } from '../lib/monitorStateParser'
 import { badgeStyles, cardPanel, fieldInput, mutedText } from '../lib/classes'
+import { formatClock } from '../lib/formatDateTime'
 
 interface DesignMonitorDashboardProps {
   stateHistory: StateHistoryEntry[]
@@ -583,7 +584,7 @@ function IterationsTable({
                     )}
                   </td>
                   <td className="py-2.5 font-mono text-xs text-foreground-subtle">
-                    {step.timestamp || '—'}
+                    {formatClock(step.timestamp)}
                   </td>
                 </tr>
               )

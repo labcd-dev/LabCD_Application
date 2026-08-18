@@ -1,5 +1,6 @@
 import { cleanStatusLabel } from './statusText'
 import { extractJsonFromResponse } from './llmResponseParser'
+import { localizeLeadingTimestamp } from './formatDateTime'
 
 export type AgentKind =
   | 'equation'
@@ -88,7 +89,7 @@ export function resolveAgentKind(agentTag: string): AgentKind {
 }
 
 function normalizeContent(content: unknown): string {
-  if (typeof content === 'string') return content
+  if (typeof content === 'string') return localizeLeadingTimestamp(content)
   if (content == null) return ''
   if (typeof content === 'object' && 'log_history' in (content as Record<string, unknown>)) {
     const nested = (content as Record<string, unknown>).log_history

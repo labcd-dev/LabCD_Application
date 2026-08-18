@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { blogApi } from '../api/endpoints'
 import type { BlogPostListItem } from '../api/types'
 import { LandingLink } from '../components/landing/landingUtils'
+import { formatDate } from '../lib/formatDateTime'
 import '../components/landing/landing.css'
 
 export function BlogListPage() {
@@ -41,7 +42,7 @@ export function BlogListPage() {
               </h2>
               {post.published_at && (
                 <p className="mt-2 text-sm text-white/45">
-                  {new Date(post.published_at).toLocaleDateString()}
+                  {formatDate(post.published_at)}
                 </p>
               )}
               <p className="mt-4 text-white/65">{post.excerpt}</p>

@@ -9,6 +9,8 @@ from collections import defaultdict
 from datetime import datetime
 from typing import Any
 
+from backend_api.common.datetime_utils import utc_iso
+
 from sqlalchemy.orm import Session
 
 from backend_api.common.csv_utils import rows_to_csv
@@ -199,9 +201,7 @@ def _blank_overview_summary_fields() -> dict[str, Any]:
 
 
 def _iso(value: datetime | None) -> str:
-    if value is None:
-        return ""
-    return value.isoformat()
+    return utc_iso(value)
 
 
 def _join(values: list[str] | None) -> str:

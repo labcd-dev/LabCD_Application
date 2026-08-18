@@ -19,6 +19,7 @@ import {
   pageSection,
   pageTitle,
 } from '../lib/classes'
+import { formatDateTime } from '../lib/formatDateTime'
 
 type StatusFilter = 'open' | 'fixed' | 'all'
 
@@ -27,13 +28,6 @@ const FILTERS: { value: StatusFilter; label: string }[] = [
   { value: 'fixed', label: 'Fixed' },
   { value: 'all', label: 'All' },
 ]
-
-function formatWhen(iso: string | null): string {
-  if (!iso) return '—'
-  const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) return iso
-  return date.toLocaleString()
-}
 
 function truncate(text: string, max = 120): string {
   const cleaned = text.trim()
@@ -235,7 +229,7 @@ export function AdminBugReportsPage() {
                       }`}
                     >
                       <td className="whitespace-nowrap px-2 py-2 text-muted-text">
-                        {formatWhen(report.created_at)}
+                        {formatDateTime(report.created_at)}
                       </td>
                       <td className="px-2 py-2 text-foreground">
                         {report.user_email ?? '—'}
@@ -319,11 +313,11 @@ export function AdminBugReportsPage() {
           <dl className="grid gap-3 text-sm sm:grid-cols-2">
             <div>
               <dt className="text-muted-text">Submitted</dt>
-              <dd className="text-foreground">{formatWhen(selected.created_at)}</dd>
+              <dd className="text-foreground">{formatDateTime(selected.created_at)}</dd>
             </div>
             <div>
               <dt className="text-muted-text">Fixed at</dt>
-              <dd className="text-foreground">{formatWhen(selected.fixed_at)}</dd>
+              <dd className="text-foreground">{formatDateTime(selected.fixed_at)}</dd>
             </div>
             <div>
               <dt className="text-muted-text">User</dt>

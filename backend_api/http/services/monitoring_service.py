@@ -6,11 +6,11 @@ import statistics
 import threading
 import time
 from collections import deque
-from datetime import datetime, timezone
 from typing import Deque, Dict, List, Optional, Tuple
 
 import psutil
 
+from backend_api.common.datetime_utils import utc_iso, utcnow
 from backend_api.http.config import API_PREFIX
 
 HISTORY_SIZE = 60
@@ -28,7 +28,7 @@ _prev_net: Optional[Tuple[float, int, int]] = None
 
 
 def _utc_now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return utc_iso(utcnow())
 
 
 def _should_track_path(path: str) -> bool:

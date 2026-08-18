@@ -1,9 +1,11 @@
 import copy
 import json
-from datetime import datetime
-from typing import Any, Dict, Optional
-from langchain_cerebras import ChatCerebras
 import os
+from typing import Any, Dict, Optional
+
+from langchain_cerebras import ChatCerebras
+
+from backend_api.common.datetime_utils import utc_iso, utcnow
 
 from backend_api.SiloDesigner.src.controllers import run_optimization, initialize_state, create_optimization_graph
 from backend_api.SiloDesigner.src.utils import log_to_file
@@ -151,7 +153,7 @@ class DesignMonitor:
 
     def add_progress(self, message: str, data: Dict = None):
         """Add progress update to history list"""
-        timestamp = datetime.now().strftime("%H:%M:%S")
+        timestamp = utc_iso(utcnow())
         self.progress_history.append({
             'timestamp': timestamp,
             'message': message,
@@ -161,7 +163,7 @@ class DesignMonitor:
     def add_llm_response(self, agent_name: str, prompt: str, response: str):
         """Add LLM response for monitoring"""
         self.llm_responses.append({
-            'timestamp': datetime.now().strftime("%H:%M:%S"),
+            'timestamp': utc_iso(utcnow()),
             'agent': agent_name,
             'prompt': prompt[:200] + "..." if len(prompt) > 200 else prompt,
             'response': response
@@ -174,7 +176,7 @@ class DesignMonitor:
 
         if 'iteration' in update:
             self.state_history.append({
-                'timestamp': datetime.now().strftime("%H:%M:%S"),
+                'timestamp': utc_iso(utcnow()),
                 'state': lightweight_monitor_snapshot(self.current_state),
             })
             if len(self.state_history) > MAX_MONITOR_HISTORY:
@@ -190,7 +192,7 @@ class DesignMonitor:
 
     def add_scenario_metrics(self, scenario_level: int, metrics: Dict):
         """NEW: Add per-scenario computational metrics to history"""
-        timestamp = datetime.now().strftime("%H:%M:%S")
+        timestamp = utc_iso(utcnow())
         entry = {
             'scenario_level': scenario_level,
             'timestamp': timestamp,
@@ -289,7 +291,7 @@ def run_design_with_monitoring(config: Dict, monitor: DesignMonitor):
             initial_state = initialize_state(**init_kwargs)
             monitor.current_state = initial_state.copy()
 
-            log_to_file(f"=== CONTROL DESIGN LOG - {datetime.now()} ===\n\n", True)
+            log_to_file(f"=== CONTROL DESIGN LOG - {utc_iso(utcnow())} ===\n\n", True)
 
             # Stream the graph execution with monitoring
             step_count = 0

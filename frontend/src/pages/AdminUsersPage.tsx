@@ -30,6 +30,7 @@ import {
   fieldLabel,
 } from '../lib/classes'
 import { passwordMeetsPolicy, passwordPolicyError } from '../lib/passwordStrength'
+import { formatDate } from '../lib/formatDateTime'
 
 export function AdminUsersPage() {
   const { user: currentUser, hasAction } = useAuth()
@@ -404,11 +405,7 @@ export function AdminUsersPage() {
                         )}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-muted-text">
-                        {new Date(user.created_at).toLocaleDateString(undefined, {
-                          year: 'numeric',
-                          month: 'short',
-                          day: 'numeric',
-                        })}
+                        {formatDate(user.created_at)}
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex flex-wrap justify-end gap-2">

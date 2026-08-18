@@ -19,6 +19,7 @@ import {
   pageSection,
   pageTitle,
 } from '../lib/classes'
+import { formatDateTime } from '../lib/formatDateTime'
 
 type CategoryFilter = 'all' | 'auth' | 'admin'
 type SuccessFilter = 'all' | 'success' | 'failure'
@@ -28,13 +29,6 @@ const CATEGORY_FILTERS: { value: CategoryFilter; label: string }[] = [
   { value: 'auth', label: 'Auth' },
   { value: 'admin', label: 'Admin' },
 ]
-
-function formatWhen(iso: string | null): string {
-  if (!iso) return '—'
-  const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) return iso
-  return date.toLocaleString()
-}
 
 function formatDetails(details: Record<string, unknown> | null): string {
   if (!details) return '—'
@@ -230,7 +224,7 @@ export function AdminAuditLogPage() {
                       }
                     >
                       <td className="whitespace-nowrap px-2 py-2 text-muted-text">
-                        {formatWhen(entry.created_at)}
+                        {formatDateTime(entry.created_at)}
                       </td>
                       <td className="px-2 py-2 capitalize text-foreground">{entry.category}</td>
                       <td className="px-2 py-2 font-mono text-[0.8rem] text-foreground">
@@ -275,7 +269,7 @@ export function AdminAuditLogPage() {
           <dl className="grid gap-3 text-sm sm:grid-cols-2">
             <div>
               <dt className="text-muted-text">When</dt>
-              <dd className="text-foreground">{formatWhen(selected.created_at)}</dd>
+              <dd className="text-foreground">{formatDateTime(selected.created_at)}</dd>
             </div>
             <div>
               <dt className="text-muted-text">Result</dt>

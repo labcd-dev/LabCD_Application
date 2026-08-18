@@ -17,7 +17,7 @@ import json
 import matplotlib.pyplot as plt
 from scipy.integrate import odeint
 import sys
-from datetime import datetime
+from backend_api.common.datetime_utils import utc_iso, utcnow
 
 
 def make_serializable(obj):
@@ -595,7 +595,7 @@ def generate_output(state: WorkflowState) -> WorkflowState:
                 "converged": bool(state.get('converged')),
                 "feasible": bool(state.get('feasible')),
                 "equilibrium_match": bool(state.get('equilibrium_match')),
-                "timestamp": datetime.now().isoformat()
+                "timestamp": utc_iso(utcnow())
             }
         }
         if state.get('user_choice') == 'exit':
