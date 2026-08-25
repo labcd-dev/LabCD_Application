@@ -1,11 +1,11 @@
-# Deploy LabCD to Ubuntu (`labcd.ai`)
+# Deploy LabCD to Ubuntu (`app.labcd.ai`)
 
-Zero-to-hero guide: Docker production stack + GitHub Actions CI/CD for **https://labcd.ai**.
+Zero-to-hero guide: Docker production stack + GitHub Actions CI/CD for **https://app.labcd.ai**.
 
 ## Architecture
 
 ```
-Browser → https://labcd.ai
+Browser → https://app.labcd.ai
             │
          Caddy (:80 / :443)     ← automatic HTTPS (Let's Encrypt)
             │
@@ -19,7 +19,7 @@ Browser → https://labcd.ai
 | File | Role |
 |------|------|
 | `docker-compose.prod.yml` | Production services (db, api, frontend, caddy) |
-| `deploy/Caddyfile` | TLS + reverse proxy for `labcd.ai` / `www.labcd.ai` |
+| `deploy/Caddyfile` | TLS + reverse proxy for `app.labcd.ai` |
 | `deploy/env.production.example` | Template for server `.env` |
 | `deploy/deploy.sh` | Pull latest `master` and rebuild stack |
 | `.github/workflows/deploy.yml` | SSH deploy on push to `master` |
@@ -118,14 +118,12 @@ Point the domain at the server (A records):
 
 | Type | Name | Value |
 |------|------|--------|
-| A | `@` | server public IP |
-| A | `www` | server public IP |
+| A | `app` | server public IP |
 
 Verify:
 
 ```bash
-dig +short labcd.ai
-dig +short www.labcd.ai
+dig +short app.labcd.ai
 ```
 
 Both must resolve to the server. Ports **80** and **443** must reach the host (cloud security group + UFW).
@@ -151,10 +149,10 @@ Fill at least:
 - `ADMIN_EMAIL` / `ADMIN_PASSWORD`
 - `POSTGRES_PASSWORD` — `openssl rand -hex 24`
 - At least one LLM API key you use
-- Keep `CORS_ORIGINS=https://labcd.ai,https://www.labcd.ai`
+- Keep `CORS_ORIGINS=https://app.labcd.ai`
+- `APP_PUBLIC_URL=https://app.labcd.ai` and `API_PUBLIC_URL=https://app.labcd.ai` (verify/reset links and OAuth callbacks)
 - SMTP settings for auth emails (see [§4 Email (SMTP)](#4-email-smtp-for-production))
 - Optional `TELEGRAM_BOT_TOKEN` seed for the daily analytics digest (usually set later in Admin → Analytics; see [TELEGRAM_ANALYTICS.md](./TELEGRAM_ANALYTICS.md))
-- `APP_PUBLIC_URL=https://labcd.ai` (used in verify / reset links)
 
 Then:
 
@@ -173,13 +171,13 @@ Wait 1–2 minutes for images and Let's Encrypt.
 docker compose -f docker-compose.prod.yml ps
 docker compose -f docker-compose.prod.yml logs -f caddy
 
-curl -I https://labcd.ai
-curl https://labcd.ai/api/v1/health
+curl -I https://app.labcd.ai
+curl https://app.labcd.ai/api/v1/health
 ```
 
 In the browser:
 
-1. Open https://labcd.ai — landing page loads.
+1. Open https://app.labcd.ai — landing page loads.
 2. Log in with `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
 3. Run a short design job and confirm streaming still works.
 
@@ -215,7 +213,7 @@ SMTP_USER=apikey
 SMTP_PASSWORD=SG.xxxxxxxx
 SMTP_TLS=true
 EMAIL_FROM=noreply@yourdomain.com
-APP_PUBLIC_URL=https://labcd.ai
+APP_PUBLIC_URL=https://app.labcd.ai
 ```
 
 Notes:
@@ -272,7 +270,7 @@ Repo → **Settings → Secrets and variables → Actions** → add:
 
 | Secret | Value |
 |--------|--------|
-| `DEPLOY_HOST` | server IP or `labcd.ai` |
+| `DEPLOY_HOST` | server IP or `app.labcd.ai` |
 | `DEPLOY_USER` | `deploy` |
 | `DEPLOY_SSH_KEY` | private key file contents (`labcd_deploy`, including `BEGIN`/`END` lines) |
 
@@ -343,6 +341,6 @@ Also back up `uploads/` and `results/`.
 2. Clone repo to `/opt/labcd`.  
 3. Copy `deploy/env.production.example` → `.env` and fill secrets (including SMTP + `APP_PUBLIC_URL`).  
 4. `docker compose -f docker-compose.prod.yml --env-file .env up -d --build`.  
-5. Confirm https://labcd.ai and `/api/v1/health`.  
+5. Confirm https://app.labcd.ai and `/api/v1/health`.  
 6. Trigger a register / password-reset and confirm the email arrives.  
 7. Add GitHub deploy secrets; push to `master` for auto-deploy.

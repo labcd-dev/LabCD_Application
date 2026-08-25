@@ -1,4 +1,4 @@
-labcd.ai, www.labcd.ai {
+app.labcd.ai {
 	encode gzip
 	reverse_proxy frontend:80
 }
