@@ -3,6 +3,7 @@ import { AppShell } from './AppShell'
 import { useAuth } from '../context/AuthContext'
 
 const AUTH_PATHS = new Set([
+  '/',
   '/login',
   '/login/sso',
   '/register',

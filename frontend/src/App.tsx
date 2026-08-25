@@ -32,7 +32,6 @@ import { BlogPostPage } from './pages/BlogPostPage'
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 import { HomePage } from './pages/HomePage'
 import { DesignPage } from './pages/DesignPage'
-import { LandingPage } from './pages/LandingPage'
 import { LoginPage } from './pages/LoginPage'
 import { LoginSsoPage } from './pages/LoginSsoPage'
 import { ProfilePage } from './pages/ProfilePage'
@@ -56,11 +55,11 @@ export default function App() {
         <PipelineProvider>
           <BrowserRouter>
             <Routes>
-              <Route path="/" element={<LandingPage />} />
               <Route path="/blog" element={<BlogListPage />} />
               <Route path="/blog/:slug" element={<BlogPostPage />} />
-              <Route element={<Layout />}>
-                <Route path="login" element={<LoginPage />} />
+              <Route path="/" element={<Layout />}>
+                <Route index element={<LoginPage />} />
+                <Route path="login" element={<Navigate to="/" replace />} />
                 <Route path="login/sso" element={<LoginSsoPage />} />
                 <Route path="register" element={<RegisterPage />} />
                 <Route path="verify-email" element={<VerifyEmailPage />} />
