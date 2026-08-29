@@ -200,6 +200,7 @@ See `.env.example`. Important ones:
 | `API_THREAD_LIMIT` | Sync route threadpool size (default 64) |
 | `RESULTS_DIR` / `UPLOADS_DIR` | Artifact paths |
 | `TELEGRAM_BOT_TOKEN` | Optional bot token for daily analytics digests; also settable in Admin → Analytics (see [docs/TELEGRAM_ANALYTICS.md](./docs/TELEGRAM_ANALYTICS.md)) |
+| `VITE_GA_MEASUREMENT_ID` | Optional GA4 measurement ID (`G-…`); set in `frontend/.env` for local dev or root `.env` for Docker builds |
 | `VITE_API_BASE_URL` | Frontend API base (`frontend/.env`) |
 
 Never commit `.env` (ignored). Commit only `.env.example`.

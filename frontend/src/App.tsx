@@ -1,4 +1,5 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { GoogleAnalytics } from './components/GoogleAnalytics'
 import { UserThemeSync } from './components/UserThemeSync'
 import { AdminLayout } from './components/admin/AdminLayout'
 import { Layout } from './components/Layout'
@@ -54,6 +55,7 @@ export default function App() {
         <UserThemeSync />
         <PipelineProvider>
           <BrowserRouter>
+            <GoogleAnalytics />
             <Routes>
               <Route path="/blog" element={<BlogListPage />} />
               <Route path="/blog/:slug" element={<BlogPostPage />} />
