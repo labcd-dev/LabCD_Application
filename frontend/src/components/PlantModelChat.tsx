@@ -1,16 +1,14 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
-import { Link } from 'react-router-dom'
-import { Check, History, Loader2, MoreVertical, Trash2, X } from 'lucide-react'
+import { Link, useLocation, useSearchParams } from 'react-router-dom'
+import { Check, Loader2 } from 'lucide-react'
 import { plantModelApi, triggerBlobDownload } from '../api/endpoints'
 import type {
   PlantModelChatMessage,
-  PlantModelConversationSummary,
   PlantModelResult,
   PlantModelSessionState,
 } from '../api/types'
 import { useAuth } from '../context/AuthContext'
 import { AUTO_MODEL, resolveChatModel } from '../lib/modelPicker'
-import { formatDateTime } from '../lib/formatDateTime'
 import { btnBase, btnCompact, btnPrimary } from '../lib/classes'
 import { CodePreview } from './CodePreview'
 import { ComposerModelPicker } from './ComposerModelPicker'
@@ -61,15 +59,6 @@ function autoresize(el: HTMLTextAreaElement) {
   el.style.height = `${Math.min(el.scrollHeight, 160)}px`
 }
 
-function formatUpdatedAt(value: string): string {
-  return formatDateTime(value, '', {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  })
-}
-
 export function PlantModelChat({
   model: _model = AUTO_MODEL,
   models,
@@ -81,47 +70,27 @@ export function PlantModelChat({
 }: PlantModelChatProps) {
   const { user } = useAuth()
   const initials = userInitials(user)
+  const location = useLocation()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const newChatRequest = (location.state as { newChat?: number } | null)?.newChat
 
   const [messages, setMessages] = useState<PlantModelChatMessage[]>([])
   const [sessionState, setSessionState] = useState<PlantModelSessionState | null>(null)
   const [finalResult, setFinalResult] = useState<PlantModelResult | null>(null)
   const [conversationId, setConversationId] = useState<number | null>(null)
-  const [conversations, setConversations] = useState<PlantModelConversationSummary[]>([])
-  const [historyOpen, setHistoryOpen] = useState(false)
-  const [historyLoading, setHistoryLoading] = useState(false)
-  const [openingId, setOpeningId] = useState<number | null>(null)
-  const [menuOpenId, setMenuOpenId] = useState<number | null>(null)
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [toastOpen, setToastOpen] = useState(false)
   const [selection, setSelection] = useState(AUTO_MODEL)
+  const deepLinkHandled = useRef<string | null>(null)
 
   const listRef = useRef<HTMLDivElement>(null)
   const landingInputRef = useRef<HTMLTextAreaElement>(null)
   const threadInputRef = useRef<HTMLTextAreaElement>(null)
-  const menuRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (menuOpenId == null) return
-    const onPointerDown = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setMenuOpenId(null)
-      }
-    }
-    const onKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === 'Escape') setMenuOpenId(null)
-    }
-    document.addEventListener('mousedown', onPointerDown)
-    document.addEventListener('keydown', onKeyDown)
-    return () => {
-      document.removeEventListener('mousedown', onPointerDown)
-      document.removeEventListener('keydown', onKeyDown)
-    }
-  }, [menuOpenId])
 
   const inChat = messages.length > 0 || finalResult !== null
-  const chatDisabled = disabled || loading || finalResult !== null
+  const chatDisabled = disabled || loading
   const draft = finalResult ?? sessionState?.latest_draft ?? null
   const resolvedModel = resolveChatModel(selection, models)
   const progressPct = finalResult
@@ -138,25 +107,19 @@ export function PlantModelChat({
     })
   }
 
-  const refreshConversations = async () => {
-    setHistoryLoading(true)
-    try {
-      const rows = await plantModelApi.listConversations()
-      setConversations(rows)
-    } catch {
-      // History is non-blocking; keep the chat usable if listing fails.
-    } finally {
-      setHistoryLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    void refreshConversations()
-  }, [])
-
   useEffect(() => {
     scrollToBottom()
   }, [messages, loading, finalResult])
+
+  const syncConversationParam = (id: number | null) => {
+    const current = searchParams.get('conversation')
+    const nextValue = id != null ? String(id) : null
+    if (current === nextValue) return
+    const next = new URLSearchParams(searchParams)
+    if (nextValue) next.set('conversation', nextValue)
+    else next.delete('conversation')
+    setSearchParams(next, { replace: true })
+  }
 
   const handleSelectionChange = (next: string) => {
     setSelection(next)
@@ -171,14 +134,20 @@ export function PlantModelChat({
     setInput('')
     setError(null)
     setToastOpen(false)
-    setHistoryOpen(false)
-    setMenuOpenId(null)
     setSelection(AUTO_MODEL)
+    deepLinkHandled.current = null
+    syncConversationParam(null)
     requestAnimationFrame(() => landingInputRef.current?.focus())
   }
 
+  useEffect(() => {
+    if (newChatRequest == null) return
+    resetConversation()
+    // Reset when the header New chat control fires.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [newChatRequest])
+
   const openConversation = async (id: number) => {
-    setOpeningId(id)
     setError(null)
     try {
       const detail = await plantModelApi.getConversation(id)
@@ -188,57 +157,28 @@ export function PlantModelChat({
       setFinalResult(detail.final_result)
       setToastOpen(false)
       setInput('')
-      setHistoryOpen(false)
+      syncConversationParam(detail.id)
       if (detail.llm_model) {
         setSelection(detail.llm_model)
         onModelChange(detail.llm_model)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to open conversation')
-    } finally {
-      setOpeningId(null)
     }
   }
 
-  const reuseModel = async (id: number) => {
-    setOpeningId(id)
-    setError(null)
-    try {
-      const detail = await plantModelApi.getConversation(id)
-      if (!detail.final_result) {
-        setError('This chat has no completed plant model yet')
-        return
-      }
-      setConversationId(detail.id)
-      setMessages(detail.messages)
-      setSessionState(detail.session_state)
-      setFinalResult(detail.final_result)
-      setToastOpen(false)
-      setInput('')
-      setHistoryOpen(false)
-      if (detail.llm_model) {
-        setSelection(detail.llm_model)
-        onModelChange(detail.llm_model)
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load plant model')
-    } finally {
-      setOpeningId(null)
-    }
-  }
-
-  const removeConversation = async (id: number) => {
-    if (!window.confirm('Delete this chat and its saved plant model?')) return
-    try {
-      await plantModelApi.deleteConversation(id)
-      setConversations((prev) => prev.filter((row) => row.id !== id))
-      if (conversationId === id) {
-        resetConversation()
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete conversation')
-    }
-  }
+  useEffect(() => {
+    const raw = searchParams.get('conversation')
+    if (!raw) return
+    if (deepLinkHandled.current === raw) return
+    const id = Number(raw)
+    if (!Number.isFinite(id) || id <= 0) return
+    deepLinkHandled.current = raw
+    if (conversationId === id) return
+    void openConversation(id)
+    // Intentionally only when the query param changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
 
   const sendMessage = async (raw?: string) => {
     const trimmed = (raw ?? input).trim()
@@ -268,13 +208,17 @@ export function PlantModelChat({
 
       if (response.conversation_id != null) {
         setConversationId(response.conversation_id)
+        deepLinkHandled.current = String(response.conversation_id)
+        syncConversationParam(response.conversation_id)
       }
       setMessages((prev) => [...prev, { role: 'assistant', content: response.reply }])
       setSessionState(response.session_state)
       if (response.final_result) {
         setFinalResult(response.final_result)
+      } else if (response.status !== 'complete') {
+        // Allow revise: clear the locked plant panel until a new complete result arrives.
+        setFinalResult(null)
       }
-      void refreshConversations()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Chat request failed')
       setMessages((prev) => prev.slice(0, -1))
@@ -289,6 +233,9 @@ export function PlantModelChat({
     if (!finalResult) return
     setToastOpen(true)
   }
+
+  const caseStudiesHref =
+    conversationId != null ? `/case-studies?new=${conversationId}` : '/case-studies'
 
   const handleLaunch = () => {
     if (!finalResult) return
@@ -323,173 +270,13 @@ export function PlantModelChat({
     plantRows.push({ k: 'Artifact', v: 'dynamics(t, x, u) · Python' })
   }
 
-  const historyPanel = (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
-        <div>
-          <div className="text-[11px] font-semibold uppercase tracking-[0.05em] text-muted">
-            Saved
-          </div>
-          <h2 className="m-0 text-[14px] font-semibold text-foreground">Chats & models</h2>
-        </div>
-        <button
-          type="button"
-          className={`${btnBase} ${btnCompact} lg:hidden`}
-          aria-label="Close history"
-          onClick={() => setHistoryOpen(false)}
-        >
-          <X className="size-3.5" aria-hidden />
-        </button>
-      </div>
-
-      <div className="border-b border-border px-3 py-2">
-        <button
-          type="button"
-          className={`${btnBase} ${btnCompact} w-full justify-center`}
-          onClick={resetConversation}
-        >
-          New chat
-        </button>
-      </div>
-
-      <div className="flex-1 overflow-y-auto px-2 py-2">
-        {historyLoading && conversations.length === 0 ? (
-          <p className="m-0 px-2 py-6 text-center text-[12.5px] text-muted">Loading…</p>
-        ) : conversations.length === 0 ? (
-          <p className="m-0 px-2 py-6 text-center text-[12.5px] leading-relaxed text-muted">
-            Past chats and completed plant models will show up here.
-          </p>
-        ) : (
-          <ul className="m-0 flex list-none flex-col gap-1 p-0">
-            {conversations.map((row) => {
-              const active = conversationId === row.id
-              const label = row.system_name || row.title
-              const menuOpen = menuOpenId === row.id
-              return (
-                <li key={row.id}>
-                  <div
-                    className={`relative flex items-start gap-1 rounded-[10px] border px-2 py-2 transition-colors ${
-                      active
-                        ? 'border-[color-mix(in_srgb,var(--app-primary)_28%,transparent)] bg-[color-mix(in_srgb,var(--app-primary)_12%,transparent)]'
-                        : 'border-transparent hover:border-border hover:bg-surface-muted'
-                    }`}
-                  >
-                    <button
-                      type="button"
-                      className="min-w-0 flex-1 border-none bg-transparent p-0 pl-0.5 text-left"
-                      disabled={openingId === row.id}
-                      onClick={() => {
-                        setMenuOpenId(null)
-                        void openConversation(row.id)
-                      }}
-                    >
-                      <div className="truncate text-[13px] font-medium text-foreground">
-                        {label}
-                      </div>
-                      <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted">
-                        <span>
-                          {row.status === 'complete' ? 'Model ready' : 'In progress'}
-                        </span>
-                        <span aria-hidden>·</span>
-                        <span>{formatUpdatedAt(row.updated_at)}</span>
-                      </div>
-                    </button>
-                    <div
-                      className="relative shrink-0"
-                      ref={menuOpen ? menuRef : undefined}
-                    >
-                      <button
-                        type="button"
-                        className="grid size-7 place-items-center rounded-md border-none bg-transparent text-muted transition-colors hover:bg-surface-muted hover:text-foreground"
-                        aria-label={`Actions for ${label}`}
-                        aria-expanded={menuOpen}
-                        aria-haspopup="menu"
-                        disabled={openingId === row.id}
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          setMenuOpenId(menuOpen ? null : row.id)
-                        }}
-                      >
-                        <MoreVertical className="size-3.5" aria-hidden />
-                      </button>
-                      {menuOpen && (
-                        <div
-                          role="menu"
-                          className="absolute right-0 top-full z-20 mt-1 min-w-[140px] overflow-hidden rounded-lg border border-border bg-surface-elevated py-1 shadow-[0_8px_24px_rgba(0,0,0,0.35)]"
-                        >
-                          {row.status === 'complete' && (
-                            <button
-                              type="button"
-                              role="menuitem"
-                              className="flex w-full items-center gap-2 border-none bg-transparent px-3 py-2 text-left text-[12.5px] text-foreground hover:bg-surface-muted"
-                              onClick={() => {
-                                setMenuOpenId(null)
-                                void reuseModel(row.id)
-                              }}
-                            >
-                              Use model
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            role="menuitem"
-                            className="flex w-full items-center gap-2 border-none bg-transparent px-3 py-2 text-left text-[12.5px] text-[var(--app-status-error-text,#e25c5c)] hover:bg-surface-muted"
-                            onClick={() => {
-                              setMenuOpenId(null)
-                              void removeConversation(row.id)
-                            }}
-                          >
-                            <Trash2 className="size-3" aria-hidden />
-                            Delete
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </li>
-              )
-            })}
-          </ul>
-        )}
-      </div>
-    </div>
-  )
-
   return (
     <div className="relative flex min-h-0 flex-1">
-      <aside className="hidden w-[260px] shrink-0 border-r border-border bg-surface-elevated lg:block">
-        {historyPanel}
-      </aside>
-
-      {historyOpen && (
-        <div className="absolute inset-0 z-40 flex lg:hidden">
-          <button
-            type="button"
-            className="absolute inset-0 border-none bg-black/40"
-            aria-label="Close history overlay"
-            onClick={() => setHistoryOpen(false)}
-          />
-          <aside className="relative z-10 flex h-full w-[min(300px,88vw)] flex-col border-r border-border bg-surface-elevated shadow-xl">
-            {historyPanel}
-          </aside>
-        </div>
-      )}
-
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {/* Landing */}
         {!inChat && (
           <div className="flex flex-1 items-center justify-center px-6 py-10">
             <div className="w-full max-w-[620px] text-center">
-              <div className="mb-4 flex justify-center lg:hidden">
-                <button
-                  type="button"
-                  className={`${btnBase} ${btnCompact}`}
-                  onClick={() => setHistoryOpen(true)}
-                >
-                  <History className="size-3.5" aria-hidden />
-                  History
-                </button>
-              </div>
               <div className="mb-[22px] inline-flex items-center gap-2 text-xs font-semibold text-muted">
                 <span className="size-1.5 animate-pulse rounded-full bg-primary shadow-[0_0_8px_color-mix(in_srgb,var(--app-primary)_50%,transparent)]" />
                 Describe a system, get a plant model
@@ -570,10 +357,10 @@ export function PlantModelChat({
               <div className="mt-7 text-[12.5px] text-muted">
                 Already have systems worked out?{' '}
                 <Link
-                  to="/projects"
+                  to="/case-studies"
                   className="font-semibold text-primary no-underline hover:underline"
                 >
-                  Browse your projects →
+                  Browse case studies →
                 </Link>
                 {' · '}
                 <Link
@@ -591,37 +378,6 @@ export function PlantModelChat({
         {inChat && (
           <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[1fr_340px]">
             <div className="flex min-h-0 flex-col border-border lg:border-r">
-              <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-2.5 sm:px-8">
-                <button
-                  type="button"
-                  className={`${btnBase} ${btnCompact} shrink-0 lg:hidden`}
-                  onClick={() => setHistoryOpen(true)}
-                >
-                  <History className="size-3.5" aria-hidden />
-                  History
-                </button>
-                <div className="ml-auto">
-                  <button
-                    type="button"
-                    className={`${btnBase} ${btnCompact} shrink-0`}
-                    onClick={resetConversation}
-                  >
-                    <svg
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      className="size-3.5"
-                      aria-hidden
-                    >
-                      <path d="M12 5v14M5 12h14" />
-                    </svg>
-                    New chat
-                  </button>
-                </div>
-              </div>
-
               {error && (
                 <div className="px-5 pt-3 sm:px-8">
                   <StatusMessage type="error" message={error} />
@@ -844,7 +600,7 @@ export function PlantModelChat({
           <div className="text-xs text-muted">{finalResult?.system_name ?? 'Plant model'}</div>
         </div>
         <div className="ml-2 flex gap-2">
-          <Link to="/projects" className={`${btnBase} ${btnCompact}`}>
+          <Link to={caseStudiesHref} className={`${btnBase} ${btnCompact}`}>
             Library
           </Link>
           <button

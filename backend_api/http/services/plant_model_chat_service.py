@@ -197,6 +197,9 @@ def persist_turn(
         conversation.final_python_code = final_result.python_code
         if final_result.system_name.strip():
             conversation.title = final_result.system_name.strip()[:120]
+    else:
+        # Follow-up turns without a new plant reopen the case study for editing.
+        conversation.status = "active"
 
     db.add(
         PlantModelMessage(

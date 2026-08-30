@@ -6,13 +6,14 @@ import {
   Menu,
   // Moon,
   PanelLeftClose,
+  Plus,
   Shield,
   // Sun,
 } from 'lucide-react'
 import { SupportFabs } from './SupportFabs'
 import { useAuth } from '../context/AuthContext'
 // import { useTheme } from '../context/ThemeContext'
-import { btnBase, btnCompact } from '../lib/classes'
+import { btnBase, btnCompact, btnPrimary } from '../lib/classes'
 
 const SIDEBAR_EXPANDED_WIDTH = 260
 const SIDEBAR_COLLAPSED_WIDTH = 64
@@ -28,6 +29,7 @@ function userInitials(user: { display_name: string | null; email: string }): str
 
 function sectionLabel(pathname: string): string {
   if (pathname === '/design') return 'chat'
+  if (pathname.startsWith('/case-studies')) return 'case studies'
   if (pathname.startsWith('/projects')) return 'Projects'
   if (
     pathname === '/studio' ||
@@ -110,6 +112,7 @@ export function AppShell({ children, topbarActions }: AppShellProps) {
   if (!user) return null
 
   const isDesign = location.pathname === '/design'
+  const isCaseStudies = location.pathname.startsWith('/case-studies')
   const isStudio =
     location.pathname === '/studio' ||
     location.pathname === '/recommender' ||
@@ -188,7 +191,12 @@ export function AppShell({ children, topbarActions }: AppShellProps) {
               <path d="M4 5h16v11H8l-4 4V5Z" />
             </svg>
           </RailItem>
-          <RailItem to="/projects" label="Projects" active={isProjects} expanded={sidebarOpen}>
+          <RailItem
+            to="/case-studies"
+            label="Case studies"
+            active={isCaseStudies}
+            expanded={sidebarOpen}
+          >
             <svg
               viewBox="0 0 24 24"
               fill="none"
@@ -203,6 +211,22 @@ export function AppShell({ children, topbarActions }: AppShellProps) {
               <rect x="14" y="3" width="7" height="7" rx="1.5" />
               <rect x="3" y="14" width="7" height="7" rx="1.5" />
               <rect x="14" y="14" width="7" height="7" rx="1.5" />
+            </svg>
+          </RailItem>
+          <RailItem to="/projects" label="Projects" active={isProjects} expanded={sidebarOpen}>
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="size-[19px]"
+              strokeWidth="1.6"
+              aria-hidden
+            >
+              <path d="M4 20V8.5L12 4l8 4.5V20" />
+              <path d="M4 11.5 12 16l8-4.5" />
+              <path d="M12 16v4" />
             </svg>
           </RailItem>
           <RailItem to="/studio" label="Studio" active={isStudio} expanded={sidebarOpen}>
@@ -330,8 +354,28 @@ export function AppShell({ children, topbarActions }: AppShellProps) {
               <b className="font-semibold text-foreground">LabCD</b>
               <span className="text-muted">· {label}</span>
             </div>
+            {isDesign && (
+              <button
+                type="button"
+                className={`${btnBase} ${btnCompact}`}
+                onClick={() =>
+                  navigate('/design', { replace: true, state: { newChat: Date.now() } })
+                }
+              >
+                <Plus className="size-3.5" aria-hidden />
+                New chat
+              </button>
+            )}
           </div>
-          {topbarActions ? <div className="flex items-center gap-2">{topbarActions}</div> : null}
+          <div className="flex items-center gap-2">
+            {isCaseStudies && (
+              <Link to="/design" className={`${btnPrimary} ${btnCompact} no-underline`}>
+                <Plus className="size-3.5" aria-hidden />
+                New system
+              </Link>
+            )}
+            {topbarActions}
+          </div>
         </header>
 
         <main

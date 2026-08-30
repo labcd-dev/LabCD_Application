@@ -32,6 +32,7 @@ import { BlogListPage } from './pages/BlogListPage'
 import { BlogPostPage } from './pages/BlogPostPage'
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 import { HomePage } from './pages/HomePage'
+import { CaseStudiesPage } from './pages/CaseStudiesPage'
 import { DesignPage } from './pages/DesignPage'
 import { LoginPage } from './pages/LoginPage'
 import { LoginSsoPage } from './pages/LoginSsoPage'
@@ -69,6 +70,7 @@ export default function App() {
                 <Route path="reset-password" element={<ResetPasswordPage />} />
                 <Route element={<ProtectedRoute />}>
                   <Route path="design" element={<DesignPage />} />
+                  <Route path="case-studies" element={<CaseStudiesPage />} />
                   <Route path="studio" element={<HomePage />} />
                   <Route path="projects" element={<ProjectsPage />} />
                   <Route path="projects/:projectId" element={<ProjectDetailPage />} />
