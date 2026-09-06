@@ -361,7 +361,31 @@ class PlantCompiler:
         """Synthesize a complete metadata dict when metadata is omitted by legacy LLM agent."""
         existing = plant_output.get("metadata")
         if isinstance(existing, dict) and existing.get("states"):
-            return existing
+            meta = dict(existing)
+            states = list(meta.get("states") or [])
+            n_states = len(states)
+            if not meta.get("state_meanings") or len(meta["state_meanings"]) != n_states:
+                meta["state_meanings"] = [f"State {s}" for s in states]
+            if not meta.get("inputs"):
+                meta["inputs"] = ["u"]
+            if not meta.get("outputs"):
+                meta["outputs"] = [states[0]] if states else ["x1"]
+            if not meta.get("parameters"):
+                meta["parameters"] = {}
+            if not meta.get("system_type"):
+                meta["system_type"] = "SISO" if len(meta["inputs"]) <= 1 and len(meta["outputs"]) <= 1 else "MIMO"
+            if not meta.get("assumptions"):
+                meta["assumptions"] = ["Continuous-time state-space dynamics"]
+            if not meta.get("state_equations") or len(meta["state_equations"]) != n_states:
+                eqs = []
+                inp0 = meta["inputs"][0]
+                for i in range(n_states):
+                    if i < n_states - 1:
+                        eqs.append(f"{states[i+1]}")
+                    else:
+                        eqs.append(f"-{states[i]} + {inp0}")
+                meta["state_equations"] = eqs
+            return meta
 
         user_code = sanitize_python_code(plant_output.get("python_code") or "")
         system_name = plant_output.get("system_name") or "System"

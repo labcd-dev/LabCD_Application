@@ -68,15 +68,15 @@ def validate_plant_and_pre_launch(
     pre_launch: dict[str, Any] | None = None,
 ) -> ValidationResponse:
     compiler = PlantCompiler()
+    # Enrich metadata with complete schema before validation
+    meta = compiler.infer_metadata(plant, pre_launch or {})
+    plant["metadata"] = meta
+
     plant_result = compiler.validate(plant)
     errors = list(plant_result.errors)
     warnings = list(plant_result.warnings)
 
     if pre_launch is not None and plant_result.ok:
-        meta = plant.get("metadata")
-        if not meta or not meta.get("states"):
-            meta = compiler.infer_metadata(plant, pre_launch)
-            plant["metadata"] = meta
         pl_result = validate_pre_launch(pre_launch, meta)
         errors.extend(pl_result.errors)
         warnings.extend(pl_result.warnings)

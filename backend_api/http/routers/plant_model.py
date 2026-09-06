@@ -142,12 +142,27 @@ def _resolve_plant_from_db(
         assert_conversation_access(conversation, user)
     except ConversationAccessDenied as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
-    if conversation.status != "complete" or conversation.final_result is None:
-        raise HTTPException(
-            status_code=400,
-            detail="Conversation is not complete; finish the plant chat first",
-        )
-    return plant_payload_to_dict(conversation.final_result)
+
+    # Check saved final system name & python code
+    if conversation.final_system_name and conversation.final_python_code:
+        return {
+            "system_name": conversation.final_system_name,
+            "python_code": conversation.final_python_code,
+        }
+
+    # Fallback to latest draft in session_state
+    session_st = conversation.session_state or {}
+    latest = session_st.get("latest_draft")
+    if isinstance(latest, dict) and latest.get("system_name") and latest.get("python_code"):
+        return {
+            "system_name": latest["system_name"],
+            "python_code": latest["python_code"],
+        }
+
+    raise HTTPException(
+        status_code=400,
+        detail="Conversation has no completed plant model or draft; finish the plant chat first",
+    )
 
 
 @router.post(
@@ -161,10 +176,10 @@ def create_plant_artifact(
     db: Session = Depends(get_db),
 ) -> ArtifactCreateResponse:
     plant: dict[str, Any] | None = None
-    if request.conversation_id is not None:
-        plant = _resolve_plant_from_db(db, request.conversation_id, user)
-    elif request.plant is not None:
+    if request.plant is not None:
         plant = plant_payload_to_dict(request.plant)
+    elif request.conversation_id is not None:
+        plant = _resolve_plant_from_db(db, request.conversation_id, user)
     else:
         raise HTTPException(
             status_code=400,
