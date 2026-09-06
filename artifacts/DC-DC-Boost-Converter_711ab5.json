@@ -1,0 +1,60 @@
+{
+  "artifact_id": "DC-DC-Boost-Converter_711ab5",
+  "system_name": "DC-DC Boost Converter",
+  "created_at": "2026-09-06T18:00:51.935649+00:00",
+  "version": "1.0",
+  "plant": {
+    "python_code": "def dynamics(t, x, u):\n    dx0 = x[1]\n    dx1 = -x[0] + u\n    return [dx0, dx1]\n",
+    "metadata": {
+      "states": [
+        "x1",
+        "x2"
+      ],
+      "state_meanings": [
+        "State 1",
+        "State 2"
+      ],
+      "inputs": [
+        "u"
+      ],
+      "outputs": [
+        "x1"
+      ],
+      "state_equations": [
+        "x2",
+        "-x1 + u"
+      ],
+      "parameters": {},
+      "system_type": "SISO",
+      "assumptions": [
+        "Continuous-time state-space dynamics"
+      ]
+    }
+  },
+  "pre_launch": {
+    "total_simulation_time": 10.0,
+    "solver_sample_time": 0.01,
+    "initial_state": [
+      0.0,
+      0.0
+    ],
+    "default_target": [
+      0.0,
+      0.0
+    ]
+  },
+  "module_specific": {
+    "adaptive": {
+      "clarifier_record": null,
+      "designer_method": null,
+      "tuning_best": null
+    },
+    "mpc": {
+      "suggested_dt": null,
+      "suggested_Q": null,
+      "suggested_R": null,
+      "suggested_feedforward": null,
+      "derivative_pairs": null
+    }
+  }
+}

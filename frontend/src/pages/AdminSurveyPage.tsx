@@ -113,7 +113,7 @@ export function AdminSurveyPage() {
       <div className={cardPanel}>
         <h2 className="mt-0 text-base font-semibold text-foreground">Survey module</h2>
         <p className="text-sm text-muted-text">
-          When enabled, new users must complete the profile survey before using the studio, and
+          When enabled, new users must complete the profile survey before using the platform, and
           feedback is requested after a successful SILO or MULO design run.
         </p>
         <label className={`${fieldCheckbox} mt-4`}>

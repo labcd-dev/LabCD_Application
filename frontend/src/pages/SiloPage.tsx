@@ -37,7 +37,7 @@ export function SiloPage() {
       return
     }
     if (!pipeline.projectId) {
-      setError('Create a project from Studio before starting design.')
+      setError('Create a project from Case Studies & Projects before starting design.')
       return
     }
 
@@ -76,13 +76,13 @@ export function SiloPage() {
         <div>
           <h2 className="mt-0 text-xl text-foreground sm:text-2xl">Single Loop Control Designer</h2>
           <p className={pageIntro}>
-            Uses the Design Instructions from Studio as the control objective. Start the
+            Uses the Design Instructions as the control objective. Start the
             SiloDesigner pipeline; live progress opens on the project page.
           </p>
         </div>
-        <button type="button" className={`${btnBase} max-sm:w-full`} onClick={() => navigate('/studio')}>
+        <button type="button" className={`${btnBase} max-sm:w-full`} onClick={() => navigate('/case-studies')}>
           <ArrowLeft className="size-4" aria-hidden />
-          Back to Studio
+          Back to Case Studies &amp; Projects
         </button>
       </div>
 

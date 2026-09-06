@@ -32,7 +32,7 @@ export function Layout() {
         <Outlet />
       </main>
       <footer className="border-t border-border px-4 py-4 text-center text-xs text-muted sm:px-6">
-        LabCD Control Design Studio
+        LabCD Control Design Suite
       </footer>
     </div>
   )

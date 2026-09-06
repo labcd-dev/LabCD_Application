@@ -167,31 +167,45 @@
 .landing-markdown h1,
 .landing-markdown h2,
 .landing-markdown h3 {
-  color: #fff;
+  color: var(--app-foreground, #1a1a2e);
   font-weight: 700;
   margin-top: 1.5rem;
   margin-bottom: 0.75rem;
 }
 
 .landing-markdown p {
-  color: rgba(255, 255, 255, 0.75);
+  color: var(--app-foreground-secondary, #334155);
   line-height: 1.75;
   margin-bottom: 1rem;
 }
 
 .landing-markdown a {
-  color: var(--brand-primary);
+  color: var(--app-primary, #5b7fff);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .landing-markdown code {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--app-surface-muted, #f8fafc);
+  color: var(--app-foreground, #1a1a2e);
+  border: 1px solid var(--app-border, #dde3ef);
   padding: 0.15rem 0.35rem;
   border-radius: 0.25rem;
+  font-size: 0.88em;
 }
 
 .landing-markdown pre {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--app-code-bg, #0f172a);
+  color: var(--app-code-text, #e2e8f0);
+  border: 1px solid var(--app-border, #dde3ef);
   padding: 1rem;
   border-radius: 0.75rem;
   overflow-x: auto;
+}
+
+.landing-markdown pre code {
+  background: transparent;
+  color: inherit;
+  border: none;
+  padding: 0;
 }

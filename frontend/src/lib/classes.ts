@@ -21,9 +21,9 @@ export const btnLink =
 export const btnCompact = 'px-3 py-1.5 text-[0.82rem]'
 
 export const cardPanel =
-  'card-alive bg-surface-elevated/90 backdrop-blur-sm border border-border rounded-xl p-3 shadow-sm sm:p-4'
+  'bg-surface-elevated/90 backdrop-blur-sm border border-border rounded-xl p-3 shadow-sm sm:p-4'
 export const cardProcessing =
-  'card-alive bg-surface-elevated/90 backdrop-blur-sm border border-border rounded-xl p-5 shadow-sm text-center sm:p-8'
+  'bg-surface-elevated/90 backdrop-blur-sm border border-border rounded-xl p-5 shadow-sm text-center sm:p-8'
 
 export const codePreview =
   'w-full font-mono text-[0.85rem] p-4 border border-border-input rounded-lg bg-code-bg text-code-text resize-y shadow-inner'

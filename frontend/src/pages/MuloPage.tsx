@@ -107,10 +107,10 @@ export function MuloPage() {
       goToPipelineStep('recommender')
       return
     }
-    navigate('/studio')
+    navigate('/case-studies')
   }, [pipelineStep, goToPipelineStep, navigate])
 
-  const backLabel = pipelineStep === 'trimmer' ? 'Back to Recommender' : 'Back to Studio'
+  const backLabel = pipelineStep === 'trimmer' ? 'Back to Recommender' : 'Back to Case Studies & Projects'
 
   const handleRecommenderComplete = () => {
     goToPipelineStep('trimmer')

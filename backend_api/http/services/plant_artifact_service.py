@@ -73,9 +73,10 @@ def validate_plant_and_pre_launch(
     warnings = list(plant_result.warnings)
 
     if pre_launch is not None and plant_result.ok:
-        meta = plant.get("metadata") or {}
-        if not meta and plant.get("python_code"):
-            meta = {"states": [], "outputs": []}
+        meta = plant.get("metadata")
+        if not meta or not meta.get("states"):
+            meta = compiler.infer_metadata(plant, pre_launch)
+            plant["metadata"] = meta
         pl_result = validate_pre_launch(pre_launch, meta)
         errors.extend(pl_result.errors)
         warnings.extend(pl_result.warnings)

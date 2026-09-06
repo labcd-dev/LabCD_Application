@@ -277,34 +277,34 @@ export function MpcSimulationPlot({
   const hoverTime = hoverIndex !== null ? t[hoverIndex] : null
 
   return (
-    <div className="card-alive space-y-4 rounded-2xl border border-white/10 bg-[#0c1017]/95 p-5 shadow-2xl backdrop-blur-md">
+    <div className="space-y-4 rounded-2xl border border-border bg-surface-elevated p-5 shadow-sm">
       {/* Oscilloscope Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
         <div>
           <div className="flex items-center gap-2">
-            <span className="flex size-2 rounded-full bg-cyan-400 shadow-[0_0_8px_#38bdf8]" />
-            <h3 className="text-sm font-bold text-white tracking-wide">
+            <span className="flex size-2 rounded-full bg-cyan-500 shadow-[0_0_8px_#06b6d4]" />
+            <h3 className="text-sm font-bold text-foreground tracking-wide">
               Time-Domain Closed-Loop Oscilloscope
             </h3>
-            <span className="rounded-md border border-cyan-500/30 bg-cyan-500/10 px-2 py-0.5 text-[10.5px] font-mono text-cyan-300">
+            <span className="rounded-md border border-cyan-500/30 bg-cyan-500/10 px-2 py-0.5 text-[10.5px] font-mono text-cyan-600 dark:text-cyan-300">
               {t.length} samples · {tRange.toFixed(2)}s simulation
             </span>
           </div>
-          <p className="mt-1 text-xs text-slate-400">
+          <p className="mt-1 text-xs text-muted-text">
             Real nonlinear state trajectories integrated via RK4 against optimal OSQP receding-horizon controls
           </p>
         </div>
 
         {/* Tab Controls */}
         <div className="flex items-center gap-2">
-          <div className="flex rounded-xl border border-white/10 bg-white/[0.03] p-1 text-xs font-semibold">
+          <div className="flex rounded-xl border border-border bg-surface-muted p-1 text-xs font-semibold">
             <button
               type="button"
               onClick={() => setActiveTab('all_states')}
               className={`rounded-lg px-3 py-1.5 transition-all ${
                 activeTab === 'all_states'
-                  ? 'bg-purple-600 text-white shadow'
-                  : 'text-slate-400 hover:text-white'
+                  ? 'bg-purple-600 text-white shadow-sm'
+                  : 'text-muted-text hover:text-foreground'
               }`}
             >
               All States
@@ -314,8 +314,8 @@ export function MpcSimulationPlot({
               onClick={() => setActiveTab('single_state')}
               className={`rounded-lg px-3 py-1.5 transition-all ${
                 activeTab === 'single_state'
-                  ? 'bg-purple-600 text-white shadow'
-                  : 'text-slate-400 hover:text-white'
+                  ? 'bg-purple-600 text-white shadow-sm'
+                  : 'text-muted-text hover:text-foreground'
               }`}
             >
               Single State
@@ -325,8 +325,8 @@ export function MpcSimulationPlot({
               onClick={() => setActiveTab('controls')}
               className={`rounded-lg px-3 py-1.5 transition-all ${
                 activeTab === 'controls'
-                  ? 'bg-purple-600 text-white shadow'
-                  : 'text-slate-400 hover:text-white'
+                  ? 'bg-purple-600 text-white shadow-sm'
+                  : 'text-muted-text hover:text-foreground'
               }`}
             >
               Actuators (u)
@@ -336,8 +336,8 @@ export function MpcSimulationPlot({
               onClick={() => setActiveTab('errors')}
               className={`rounded-lg px-3 py-1.5 transition-all ${
                 activeTab === 'errors'
-                  ? 'bg-purple-600 text-white shadow'
-                  : 'text-slate-400 hover:text-white'
+                  ? 'bg-purple-600 text-white shadow-sm'
+                  : 'text-muted-text hover:text-foreground'
               }`}
             >
               Tracking Error
@@ -347,7 +347,7 @@ export function MpcSimulationPlot({
           <button
             type="button"
             onClick={handleExportCsv}
-            className={`${btnBase} ${btnCompact} flex items-center gap-1.5 text-xs text-slate-300 hover:text-white`}
+            className={`${btnBase} ${btnCompact} flex items-center gap-1.5 text-xs text-muted-text hover:text-foreground`}
           >
             <Download className="size-3.5" /> CSV
           </button>
@@ -358,7 +358,7 @@ export function MpcSimulationPlot({
       <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
         {activeTab === 'single_state' && (
           <div className="flex items-center gap-2">
-            <span className="text-slate-400 text-[11px] font-medium">Channel:</span>
+            <span className="text-muted-text text-[11px] font-medium">Channel:</span>
             <div className="flex gap-1.5">
               {sim.names.map((name, i) => (
                 <button
@@ -367,8 +367,8 @@ export function MpcSimulationPlot({
                   onClick={() => setSelectedStateIdx(i)}
                   className={`rounded-lg border px-2.5 py-1 text-[11px] font-mono transition-all ${
                     selectedStateIdx === i
-                      ? 'border-purple-400 bg-purple-500/20 text-purple-200 font-bold'
-                      : 'border-white/10 bg-white/[0.02] text-slate-400 hover:text-white'
+                      ? 'border-purple-500 bg-purple-500/20 text-purple-600 dark:text-purple-200 font-bold'
+                      : 'border-border bg-surface text-muted-text hover:text-foreground'
                   }`}
                 >
                   {name}
@@ -379,15 +379,15 @@ export function MpcSimulationPlot({
         )}
 
         {activeTab === 'single_state' && baselineSeries && (
-          <label className="flex items-center gap-2 text-[11.5px] text-slate-400 cursor-pointer select-none">
+          <label className="flex items-center gap-2 text-[11.5px] text-muted-text cursor-pointer select-none">
             <input
               type="checkbox"
               checked={showBaseline}
               onChange={(e) => setShowBaseline(e.target.checked)}
-              className="size-3.5 rounded border-white/20 bg-black/40 text-purple-600 focus:ring-0"
+              className="size-3.5 rounded border-border bg-surface text-purple-600 focus:ring-0"
             />
             <span className="flex items-center gap-1">
-              <ArrowRightLeft className="size-3 text-slate-500" />
+              <ArrowRightLeft className="size-3 text-muted" />
               Compare vs Round 1 Baseline
             </span>
           </label>
@@ -404,20 +404,20 @@ export function MpcSimulationPlot({
                   borderTop: l.dash ? '1px dashed' : undefined,
                 }}
               />
-              <span className="text-slate-300">{l.name}</span>
+              <span className="text-foreground">{l.name}</span>
             </div>
           ))}
           {boundsLines.map((b) => (
             <div key={b.label} className="flex items-center gap-1.5">
               <span className="inline-block h-0.5 w-3.5 border-t border-dashed border-red-500" />
-              <span className="text-red-400">{b.label}</span>
+              <span className="text-red-500">{b.label}</span>
             </div>
           ))}
         </div>
       </div>
 
       {/* Main SVG Oscilloscope Screen */}
-      <div className="relative overflow-hidden rounded-xl border border-white/10 bg-[#080b10] p-2">
+      <div className="relative overflow-hidden rounded-xl border border-border bg-surface p-2">
         <svg
           viewBox={`0 0 ${W} ${H}`}
           className="size-full overflow-visible select-none"
@@ -425,9 +425,9 @@ export function MpcSimulationPlot({
           onMouseLeave={() => setHoverIndex(null)}
         >
           {/* Grid lines */}
-          <line x1={PAD} y1={PAD} x2={W - PAD} y2={PAD} stroke="rgba(255,255,255,0.05)" />
-          <line x1={PAD} y1={H / 2} x2={W - PAD} y2={H / 2} stroke="rgba(255,255,255,0.08)" />
-          <line x1={PAD} y1={H - PAD} x2={W - PAD} y2={H - PAD} stroke="rgba(255,255,255,0.12)" />
+          <line x1={PAD} y1={PAD} x2={W - PAD} y2={PAD} stroke="var(--app-border)" strokeDasharray="3 3" />
+          <line x1={PAD} y1={H / 2} x2={W - PAD} y2={H / 2} stroke="var(--app-border)" />
+          <line x1={PAD} y1={H - PAD} x2={W - PAD} y2={H - PAD} stroke="var(--app-border)" strokeDasharray="3 3" />
 
           {/* Zero Axis if in range */}
           {yMin < 0 && yMax > 0 && (
@@ -436,7 +436,7 @@ export function MpcSimulationPlot({
               y1={H - PAD - ((0 - yMin) / (yMax - yMin)) * (H - 2 * PAD)}
               x2={W - PAD}
               y2={H - PAD - ((0 - yMin) / (yMax - yMin)) * (H - 2 * PAD)}
-              stroke="rgba(255,255,255,0.2)"
+              stroke="var(--app-border)"
               strokeDasharray="2 2"
             />
           )}
@@ -482,7 +482,7 @@ export function MpcSimulationPlot({
                 y1={PAD}
                 x2={PAD + ((hoverTime - tMin) / tRange) * (W - 2 * PAD)}
                 y2={H - PAD}
-                stroke="rgba(56, 189, 248, 0.6)"
+                stroke="rgba(6, 182, 212, 0.6)"
                 strokeWidth="1"
                 strokeDasharray="3 3"
               />
@@ -499,14 +499,14 @@ export function MpcSimulationPlot({
 
         {/* Floating HUD Tooltip */}
         {hoverIndex !== null && hoverTime !== null && (
-          <div className="pointer-events-none absolute top-4 left-5 flex flex-col gap-1 rounded-xl border border-white/15 bg-slate-950/90 p-2.5 text-[11px] font-mono text-white shadow-2xl backdrop-blur-md">
-            <span className="font-bold text-cyan-400">t = {hoverTime.toFixed(3)}s</span>
+          <div className="pointer-events-none absolute top-4 left-5 flex flex-col gap-1 rounded-xl border border-border bg-surface-elevated/95 p-2.5 text-[11px] font-mono text-foreground shadow-md backdrop-blur-md">
+            <span className="font-bold text-cyan-600 dark:text-cyan-400">t = {hoverTime.toFixed(3)}s</span>
             {lines.map((l) => {
               const val = l.values[hoverIndex]
               if (typeof val !== 'number') return null
               return (
                 <div key={l.name} className="flex items-center justify-between gap-4">
-                  <span className="text-slate-400">{l.name}:</span>
+                  <span className="text-muted-text">{l.name}:</span>
                   <span className="font-bold" style={{ color: l.color }}>
                     {val.toFixed(4)}
                   </span>
@@ -519,12 +519,12 @@ export function MpcSimulationPlot({
 
       {/* Per-State Performance Metrics Table */}
       {sim.per_state_metrics && sim.per_state_metrics.length > 0 && (
-        <div className="rounded-xl border border-white/10 bg-[#0a0d12] p-4">
+        <div className="rounded-xl border border-border bg-surface-elevated p-4">
           <div className="mb-2 flex items-center justify-between text-xs">
-            <span className="font-bold text-white uppercase tracking-wider">
+            <span className="font-bold text-foreground uppercase tracking-wider">
               Per-Channel Tracking Performance Index
             </span>
-            <span className="text-[11px] text-slate-400">
+            <span className="text-[11px] text-muted-text">
               Integral Absolute Error (IAE) &amp; Integral Squared Error (ISE)
             </span>
           </div>
@@ -532,7 +532,7 @@ export function MpcSimulationPlot({
           <div className="overflow-x-auto">
             <table className="w-full text-left font-mono text-xs">
               <thead>
-                <tr className="border-b border-white/10 text-[11px] text-slate-400">
+                <tr className="border-b border-border text-[11px] text-muted-text">
                   <th className="pb-2 font-medium">State Variable</th>
                   <th className="pb-2 font-medium">Channel MSE</th>
                   <th className="pb-2 font-medium">Max Overshoot</th>
@@ -541,15 +541,15 @@ export function MpcSimulationPlot({
                   <th className="pb-2 font-medium">Status</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/5">
+              <tbody className="divide-y divide-border">
                 {sim.per_state_metrics.map((row) => (
-                  <tr key={row.name} className="hover:bg-white/[0.02]">
-                    <td className="py-2 text-purple-300 font-semibold">{row.name}</td>
-                    <td className="py-2 text-white">{row.mse.toFixed(5)}</td>
-                    <td className="py-2 text-amber-300">{row.overshoot.toFixed(2)}%</td>
-                    <td className="py-2 text-cyan-300">{row.iae.toFixed(4)}</td>
-                    <td className="py-2 text-rose-300">{row.ise.toFixed(4)}</td>
-                    <td className="py-2 text-emerald-400 flex items-center gap-1">
+                  <tr key={row.name} className="hover:bg-surface-hover">
+                    <td className="py-2 text-purple-600 dark:text-purple-300 font-semibold">{row.name}</td>
+                    <td className="py-2 text-foreground">{row.mse.toFixed(5)}</td>
+                    <td className="py-2 text-amber-600 dark:text-amber-300">{row.overshoot.toFixed(2)}%</td>
+                    <td className="py-2 text-cyan-600 dark:text-cyan-300">{row.iae.toFixed(4)}</td>
+                    <td className="py-2 text-rose-600 dark:text-rose-300">{row.ise.toFixed(4)}</td>
+                    <td className="py-2 text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
                       <CheckCircle2 className="size-3" /> Stabilized
                     </td>
                   </tr>

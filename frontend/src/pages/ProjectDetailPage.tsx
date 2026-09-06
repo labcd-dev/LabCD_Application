@@ -293,7 +293,7 @@ export function ProjectDetailPage() {
             {project.status === 'running' ? 'Running' : 'Design progress'}
           </h3>
           <p className="mt-0 mb-3 text-sm text-muted-text">
-            Live status, plots, and logs for this project. You can start another project from Studio
+            Live status, plots, and logs for this project. You can start another project from Case Studies & Projects
             while this one continues.
           </p>
           {showSiloLive && liveJobId && (

@@ -169,26 +169,26 @@ export function MpcDashboard({
   }, [reasoningLogs, reasoningFilter])
 
   return (
-    <div className="space-y-5 text-[#eef2f8]">
+    <div className="space-y-5 text-foreground">
       {/* Header KPI Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
         {/* KPI 1: MSE */}
-        <div className="card-alive relative overflow-hidden rounded-2xl border border-white/10 bg-[#11161d]/90 p-4 shadow-lg backdrop-blur-sm">
+        <div className="relative overflow-hidden rounded-2xl border border-border bg-surface-elevated p-4 shadow-sm">
           <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-purple-500 to-indigo-500" />
-          <div className="flex items-center justify-between text-xs text-slate-400 font-semibold">
+          <div className="flex items-center justify-between text-xs text-muted-text font-semibold">
             <span>Optimal Cost (MSE)</span>
-            <TrendingDown className="size-4 text-purple-400" />
+            <TrendingDown className="size-4 text-purple-500" />
           </div>
-          <div className="mt-2 flex items-baseline gap-1 font-mono text-2xl font-bold text-white">
+          <div className="mt-2 flex items-baseline gap-1 font-mono text-2xl font-bold text-foreground">
             {typeof bestMse === 'number' ? bestMse.toFixed(5) : '0.0142'}
-            <span className="text-xs text-slate-500 font-normal">MSE</span>
+            <span className="text-xs text-muted font-normal">MSE</span>
           </div>
           <div className="mt-1 flex items-center justify-between text-[11px]">
-            <span className="text-emerald-400 font-medium flex items-center gap-1">
+            <span className="text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
               <CheckCircle2 className="size-3" /> Minimum found
             </span>
             {improvementPct && (
-              <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 font-mono text-[10.5px] text-emerald-300">
+              <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 font-mono text-[10.5px] text-emerald-600 dark:text-emerald-300">
                 +{improvementPct}% vs R1
               </span>
             )}
@@ -196,78 +196,78 @@ export function MpcDashboard({
         </div>
 
         {/* KPI 2: Iterations */}
-        <div className="card-alive relative overflow-hidden rounded-2xl border border-white/10 bg-[#11161d]/90 p-4 shadow-lg backdrop-blur-sm">
+        <div className="relative overflow-hidden rounded-2xl border border-border bg-surface-elevated p-4 shadow-sm">
           <div className="absolute top-0 inset-x-0 h-1 bg-purple-500" />
-          <div className="flex items-center justify-between text-xs text-slate-400 font-semibold">
+          <div className="flex items-center justify-between text-xs text-muted-text font-semibold">
             <span>Tuning Rounds</span>
-            <Activity className="size-4 text-purple-400" />
+            <Activity className="size-4 text-purple-500" />
           </div>
-          <div className="mt-2 font-mono text-2xl font-bold text-white">
+          <div className="mt-2 font-mono text-2xl font-bold text-foreground">
             {currentIter}{' '}
-            <span className="text-xs text-slate-500 font-normal">/ {maxIter} iterations</span>
+            <span className="text-xs text-muted font-normal">/ {maxIter} iterations</span>
           </div>
-          <p className="mt-1 text-[11px] text-purple-300 font-medium truncate">
+          <p className="mt-1 text-[11px] text-purple-600 dark:text-purple-300 font-medium truncate">
             {results?.termination_reason || 'Actor-Critic-Juror loop'}
           </p>
         </div>
 
         {/* KPI 3: Solve Time */}
-        <div className="card-alive relative overflow-hidden rounded-2xl border border-white/10 bg-[#11161d]/90 p-4 shadow-lg backdrop-blur-sm">
+        <div className="relative overflow-hidden rounded-2xl border border-border bg-surface-elevated p-4 shadow-sm">
           <div className="absolute top-0 inset-x-0 h-1 bg-cyan-500" />
-          <div className="flex items-center justify-between text-xs text-slate-400 font-semibold">
+          <div className="flex items-center justify-between text-xs text-muted-text font-semibold">
             <span>Avg QP Solve Time</span>
-            <Gauge className="size-4 text-cyan-400" />
+            <Gauge className="size-4 text-cyan-500" />
           </div>
-          <div className="mt-2 flex items-baseline gap-1 font-mono text-2xl font-bold text-white">
+          <div className="mt-2 flex items-baseline gap-1 font-mono text-2xl font-bold text-foreground">
             {typeof results?.metrics?.avg_solve_time === 'number'
               ? (results.metrics.avg_solve_time * 1000).toFixed(2)
               : '1.45'}{' '}
-            <span className="text-xs text-slate-500 font-normal">ms/step</span>
+            <span className="text-xs text-muted font-normal">ms/step</span>
           </div>
-          <p className="mt-1 text-[11px] text-cyan-300 font-medium">OSQP sparse QP solver</p>
+          <p className="mt-1 text-[11px] text-cyan-600 dark:text-cyan-300 font-medium">OSQP sparse QP solver</p>
         </div>
 
         {/* KPI 4: Horizons */}
-        <div className="card-alive relative overflow-hidden rounded-2xl border border-white/10 bg-[#11161d]/90 p-4 shadow-lg backdrop-blur-sm">
+        <div className="relative overflow-hidden rounded-2xl border border-border bg-surface-elevated p-4 shadow-sm">
           <div className="absolute top-0 inset-x-0 h-1 bg-emerald-500" />
-          <div className="flex items-center justify-between text-xs text-slate-400 font-semibold">
+          <div className="flex items-center justify-between text-xs text-muted-text font-semibold">
             <span>Horizon Window</span>
-            <Layers className="size-4 text-emerald-400" />
+            <Layers className="size-4 text-emerald-500" />
           </div>
-          <div className="mt-2 font-mono text-xl font-bold text-white truncate">
+          <div className="mt-2 font-mono text-xl font-bold text-foreground truncate">
             Np={candidateParams.np} · Nc={candidateParams.nc}
           </div>
-          <p className="mt-1 text-[11px] text-emerald-300 font-medium font-mono">
+          <p className="mt-1 text-[11px] text-emerald-600 dark:text-emerald-300 font-medium font-mono">
             dt={candidateParams.dt.toFixed(4)}s
           </p>
         </div>
 
         {/* KPI 5: Token & Cost Accounting */}
-        <div className="card-alive relative overflow-hidden rounded-2xl border border-white/10 bg-[#11161d]/90 p-4 shadow-lg backdrop-blur-sm">
+        <div className="relative overflow-hidden rounded-2xl border border-border bg-surface-elevated p-4 shadow-sm">
           <div className="absolute top-0 inset-x-0 h-1 bg-amber-500" />
-          <div className="flex items-center justify-between text-xs text-slate-400 font-semibold">
+          <div className="flex items-center justify-between text-xs text-muted-text font-semibold">
             <span>LLM Intelligence Cost</span>
-            <Coins className="size-4 text-amber-400" />
+            <Coins className="size-4 text-amber-500" />
           </div>
-          <div className="mt-2 flex items-baseline gap-1 font-mono text-2xl font-bold text-amber-300">
+          <div className="mt-2 flex items-baseline gap-1 font-mono text-2xl font-bold text-amber-600 dark:text-amber-300">
             ${results?.usage?.total_cost !== undefined ? Number(results.usage.total_cost).toFixed(4) : '0.0042'}
           </div>
-          <p className="mt-1 text-[11px] text-slate-400 font-mono truncate">
+          <p className="mt-1 text-[11px] text-muted-text font-mono truncate">
             {results?.usage?.total_tokens ? `${Number(results.usage.total_tokens).toLocaleString()} tokens` : `${currentIter * 1250} tokens`}
           </p>
         </div>
       </div>
 
       {/* Navigation Tab Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-2">
-        <div className="flex flex-wrap gap-1 rounded-xl border border-white/10 bg-white/[0.03] p-1 text-xs font-semibold">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-2">
+        <div className="flex flex-wrap gap-1 rounded-xl border border-border bg-surface-muted p-1 text-xs font-semibold">
           <button
             type="button"
             onClick={() => setActiveTab('convergence')}
             className={`flex items-center gap-1.5 rounded-lg px-3.5 py-2 transition-all ${
               activeTab === 'convergence'
-                ? 'bg-purple-600 text-white shadow-lg'
-                : 'text-slate-400 hover:text-white'
+                ? 'bg-purple-600 text-white shadow-sm'
+                : 'text-muted-text hover:text-foreground'
             }`}
           >
             <Activity className="size-3.5" /> 7-Convergence Curves
@@ -278,8 +278,8 @@ export function MpcDashboard({
             onClick={() => setActiveTab('oscilloscope')}
             className={`flex items-center gap-1.5 rounded-lg px-3.5 py-2 transition-all ${
               activeTab === 'oscilloscope'
-                ? 'bg-purple-600 text-white shadow-lg'
-                : 'text-slate-400 hover:text-white'
+                ? 'bg-purple-600 text-white shadow-sm'
+                : 'text-muted-text hover:text-foreground'
             }`}
           >
             <Gauge className="size-3.5" /> Time-Domain Oscilloscope
@@ -290,8 +290,8 @@ export function MpcDashboard({
             onClick={() => setActiveTab('workflow')}
             className={`flex items-center gap-1.5 rounded-lg px-3.5 py-2 transition-all ${
               activeTab === 'workflow'
-                ? 'bg-purple-600 text-white shadow-lg'
-                : 'text-slate-400 hover:text-white'
+                ? 'bg-purple-600 text-white shadow-sm'
+                : 'text-muted-text hover:text-foreground'
             }`}
           >
             <Workflow className="size-3.5" /> Agent Pipeline DAG
@@ -302,8 +302,8 @@ export function MpcDashboard({
             onClick={() => setActiveTab('matrices')}
             className={`flex items-center gap-1.5 rounded-lg px-3.5 py-2 transition-all ${
               activeTab === 'matrices'
-                ? 'bg-purple-600 text-white shadow-lg'
-                : 'text-slate-400 hover:text-white'
+                ? 'bg-purple-600 text-white shadow-sm'
+                : 'text-muted-text hover:text-foreground'
             }`}
           >
             <Sliders className="size-3.5" /> Optimal Controller &amp; Matrices
@@ -314,8 +314,8 @@ export function MpcDashboard({
             onClick={() => setActiveTab('reasoning')}
             className={`flex items-center gap-1.5 rounded-lg px-3.5 py-2 transition-all ${
               activeTab === 'reasoning'
-                ? 'bg-purple-600 text-white shadow-lg'
-                : 'text-slate-400 hover:text-white'
+                ? 'bg-purple-600 text-white shadow-sm'
+                : 'text-muted-text hover:text-foreground'
             }`}
           >
             <FileText className="size-3.5" /> Multi-Agent Reasoning Logs
@@ -326,8 +326,8 @@ export function MpcDashboard({
             onClick={() => setActiveTab('sandbox')}
             className={`flex items-center gap-1.5 rounded-lg px-3.5 py-2 transition-all ${
               activeTab === 'sandbox'
-                ? 'bg-purple-600 text-white shadow-lg'
-                : 'text-slate-400 hover:text-white'
+                ? 'bg-purple-600 text-white shadow-sm'
+                : 'text-muted-text hover:text-foreground'
             }`}
           >
             <Play className="size-3.5" /> Manual Simulation Sandbox
@@ -338,8 +338,8 @@ export function MpcDashboard({
             onClick={() => setActiveTab('export')}
             className={`flex items-center gap-1.5 rounded-lg px-3.5 py-2 transition-all ${
               activeTab === 'export'
-                ? 'bg-purple-600 text-white shadow-lg'
-                : 'text-slate-400 hover:text-white'
+                ? 'bg-purple-600 text-white shadow-sm'
+                : 'text-muted-text hover:text-foreground'
             }`}
           >
             <Code className="size-3.5" /> Standalone Export &amp; Deliverables
@@ -352,7 +352,7 @@ export function MpcDashboard({
             <button
               type="button"
               onClick={onDownloadReport}
-              className={`${btnBase} ${btnCompact} flex items-center gap-1.5 text-xs text-slate-300 hover:text-white`}
+              className={`${btnBase} ${btnCompact} flex items-center gap-1.5 text-xs text-muted-text hover:text-foreground`}
             >
               <Download className="size-3.5" /> PDF Report
             </button>
@@ -386,12 +386,12 @@ export function MpcDashboard({
       {/* TAB 3: Agent Pipeline DAG */}
       {activeTab === 'workflow' && (
         <div className="space-y-4">
-          <div className="card-alive rounded-2xl border border-white/10 bg-[#11161d]/90 p-5 shadow-xl backdrop-blur-sm">
-            <h3 className="text-sm font-bold text-white mb-2 flex items-center gap-2">
-              <Workflow className="size-4 text-purple-400" />
+          <div className="rounded-2xl border border-border bg-surface-elevated p-5 shadow-sm">
+            <h3 className="text-sm font-bold text-foreground mb-2 flex items-center gap-2">
+              <Workflow className="size-4 text-purple-500" />
               Autonomous Multi-Agent Control Graph Execution
             </h3>
-            <p className="text-xs text-slate-400 mb-4">
+            <p className="text-xs text-muted-text mb-4">
               Visualizes the LangGraph state machine orchestrating Scenarist, Actor, Evaluator, Terminator, Critic, and Juror agents.
             </p>
             <MpcAgentFlowStrip
@@ -401,21 +401,21 @@ export function MpcDashboard({
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div className="rounded-xl border border-white/10 bg-[#0a0d12] p-4 text-xs space-y-1.5">
-              <div className="font-bold text-blue-300">1. Actor (Parameter Synthesizer)</div>
-              <p className="text-slate-400 text-[11px] leading-relaxed">
+            <div className="rounded-xl border border-border bg-surface-elevated p-4 text-xs space-y-1.5">
+              <div className="font-bold text-blue-600 dark:text-blue-300">1. Actor (Parameter Synthesizer)</div>
+              <p className="text-muted-text text-[11px] leading-relaxed">
                 Generates continuous and discrete parameter candidates (Np, Nc, Q, R, dt) conditioned on Critic and Juror feedback.
               </p>
             </div>
-            <div className="rounded-xl border border-white/10 bg-[#0a0d12] p-4 text-xs space-y-1.5">
-              <div className="font-bold text-cyan-300">2. Evaluator (Nonlinear Simulator)</div>
-              <p className="text-slate-400 text-[11px] leading-relaxed">
+            <div className="rounded-xl border border-border bg-surface-elevated p-4 text-xs space-y-1.5">
+              <div className="font-bold text-cyan-600 dark:text-cyan-300">2. Evaluator (Nonlinear Simulator)</div>
+              <p className="text-muted-text text-[11px] leading-relaxed">
                 Executes high-fidelity RK4 integration with OSQP active-set solving to compute MSE, overshoot, settling, and effort.
               </p>
             </div>
-            <div className="rounded-xl border border-white/10 bg-[#0a0d12] p-4 text-xs space-y-1.5">
-              <div className="font-bold text-emerald-300">3. Juror (Convergence Authority)</div>
-              <p className="text-slate-400 text-[11px] leading-relaxed">
+            <div className="rounded-xl border border-border bg-surface-elevated p-4 text-xs space-y-1.5">
+              <div className="font-bold text-emerald-600 dark:text-emerald-300">3. Juror (Convergence Authority)</div>
+              <p className="text-muted-text text-[11px] leading-relaxed">
                 Ranks proposed parameter sets, adjusts sample time dt, and verifies Pareto-optimal trade-offs across objectives.
               </p>
             </div>
@@ -426,53 +426,53 @@ export function MpcDashboard({
       {/* TAB 4: Optimal Controller & Matrices */}
       {activeTab === 'matrices' && (
         <div className="space-y-4">
-          <div className="card-alive rounded-2xl border border-white/10 bg-[#11161d]/90 p-5 shadow-xl backdrop-blur-sm">
-            <h3 className="text-sm font-bold text-white mb-1">
+          <div className="rounded-2xl border border-border bg-surface-elevated p-5 shadow-sm">
+            <h3 className="text-sm font-bold text-foreground mb-1">
               Final Synthesized Controller Weight Matrices
             </h3>
-            <p className="text-xs text-slate-400 mb-4">
+            <p className="text-xs text-muted-text mb-4">
               Discrete-time receding horizon parameters certified by the Juror node
             </p>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 font-mono mb-6">
-              <div className="rounded-xl border border-white/5 bg-[#0a0d12] p-3 text-center">
-                <span className="text-[11px] text-slate-400 block mb-1">Prediction Np</span>
-                <span className="text-xl font-bold text-purple-300">{candidateParams.np}</span>
+              <div className="rounded-xl border border-border bg-surface p-3 text-center">
+                <span className="text-[11px] text-muted-text block mb-1">Prediction Np</span>
+                <span className="text-xl font-bold text-purple-600 dark:text-purple-300">{candidateParams.np}</span>
               </div>
-              <div className="rounded-xl border border-white/5 bg-[#0a0d12] p-3 text-center">
-                <span className="text-[11px] text-slate-400 block mb-1">Control Nc</span>
-                <span className="text-xl font-bold text-purple-300">{candidateParams.nc}</span>
+              <div className="rounded-xl border border-border bg-surface p-3 text-center">
+                <span className="text-[11px] text-muted-text block mb-1">Control Nc</span>
+                <span className="text-xl font-bold text-purple-600 dark:text-purple-300">{candidateParams.nc}</span>
               </div>
-              <div className="rounded-xl border border-white/5 bg-[#0a0d12] p-3 text-center">
-                <span className="text-[11px] text-slate-400 block mb-1">Sample Time dt</span>
-                <span className="text-xl font-bold text-cyan-300">{candidateParams.dt.toFixed(4)}s</span>
+              <div className="rounded-xl border border-border bg-surface p-3 text-center">
+                <span className="text-[11px] text-muted-text block mb-1">Sample Time dt</span>
+                <span className="text-xl font-bold text-cyan-600 dark:text-cyan-300">{candidateParams.dt.toFixed(4)}s</span>
               </div>
-              <div className="rounded-xl border border-white/5 bg-[#0a0d12] p-3 text-center">
-                <span className="text-[11px] text-slate-400 block mb-1">Solved Status</span>
-                <span className="text-xl font-bold text-emerald-300">Optimal</span>
+              <div className="rounded-xl border border-border bg-surface p-3 text-center">
+                <span className="text-[11px] text-muted-text block mb-1">Solved Status</span>
+                <span className="text-xl font-bold text-emerald-600 dark:text-emerald-300">Optimal</span>
               </div>
             </div>
 
             {/* Matrix Viewer */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="rounded-xl border border-white/10 bg-[#0a0d12] p-4">
-                <div className="flex items-center justify-between text-xs font-semibold text-purple-300 mb-2">
+              <div className="rounded-xl border border-border bg-surface-elevated p-4">
+                <div className="flex items-center justify-between text-xs font-semibold text-purple-600 dark:text-purple-300 mb-2">
                   <span>State Tracking Matrix Q (Diagonal)</span>
-                  <span className="text-[10.5px] text-slate-500 font-mono">dim: ({Array.isArray(candidateParams.q) ? candidateParams.q.length : 1}x{Array.isArray(candidateParams.q) ? candidateParams.q.length : 1})</span>
+                  <span className="text-[10.5px] text-muted font-mono">dim: ({Array.isArray(candidateParams.q) ? candidateParams.q.length : 1}x{Array.isArray(candidateParams.q) ? candidateParams.q.length : 1})</span>
                 </div>
-                <pre className="rounded-lg bg-black/40 p-3 font-mono text-xs text-purple-200 overflow-x-auto">
+                <pre className="rounded-lg bg-surface border border-border p-3 font-mono text-xs text-foreground overflow-x-auto">
                   {Array.isArray(candidateParams.q)
                     ? `diag([\n  ${candidateParams.q.map((v: number) => Number(v).toFixed(4)).join(',\n  ')}\n])`
                     : String(candidateParams.q)}
                 </pre>
               </div>
 
-              <div className="rounded-xl border border-white/10 bg-[#0a0d12] p-4">
-                <div className="flex items-center justify-between text-xs font-semibold text-cyan-300 mb-2">
+              <div className="rounded-xl border border-border bg-surface-elevated p-4">
+                <div className="flex items-center justify-between text-xs font-semibold text-cyan-600 dark:text-cyan-300 mb-2">
                   <span>Actuator Penalty Matrix R (Diagonal)</span>
-                  <span className="text-[10.5px] text-slate-500 font-mono">dim: ({Array.isArray(candidateParams.r) ? candidateParams.r.length : 1}x{Array.isArray(candidateParams.r) ? candidateParams.r.length : 1})</span>
+                  <span className="text-[10.5px] text-muted font-mono">dim: ({Array.isArray(candidateParams.r) ? candidateParams.r.length : 1}x{Array.isArray(candidateParams.r) ? candidateParams.r.length : 1})</span>
                 </div>
-                <pre className="rounded-lg bg-black/40 p-3 font-mono text-xs text-cyan-200 overflow-x-auto">
+                <pre className="rounded-lg bg-surface border border-border p-3 font-mono text-xs text-foreground overflow-x-auto">
                   {Array.isArray(candidateParams.r)
                     ? `diag([\n  ${candidateParams.r.map((v: number) => Number(v).toFixed(4)).join(',\n  ')}\n])`
                     : String(candidateParams.r)}
@@ -485,27 +485,27 @@ export function MpcDashboard({
 
       {/* TAB 5: Multi-Agent Reasoning Logs */}
       {activeTab === 'reasoning' && (
-        <div className="card-alive space-y-4 rounded-2xl border border-white/10 bg-[#11161d]/90 p-5 shadow-xl backdrop-blur-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-3">
+        <div className="space-y-4 rounded-2xl border border-border bg-surface-elevated p-5 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
             <div>
-              <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                <FileText className="size-4 text-purple-400" />
+              <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+                <FileText className="size-4 text-purple-500" />
                 Multi-Agent Cognitive Reasoning Trail
               </h3>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-muted-text">
                 Detailed step-by-step hypothesis formulation, evaluation critique, and juror deliberations
               </p>
             </div>
 
             <div className="flex items-center gap-2">
               <div className="relative">
-                <Search className="absolute left-2.5 top-2.5 size-3.5 text-slate-500" />
+                <Search className="absolute left-2.5 top-2.5 size-3.5 text-muted" />
                 <input
                   type="text"
                   placeholder="Filter by agent or keyword..."
                   value={reasoningFilter}
                   onChange={(e) => setReasoningFilter(e.target.value)}
-                  className="rounded-lg border border-white/10 bg-[#0a0d12] pl-8 pr-3 py-1.5 text-xs text-white placeholder-slate-500 outline-none focus:border-purple-400"
+                  className="rounded-lg border border-border bg-surface pl-8 pr-3 py-1.5 text-xs text-foreground placeholder:text-muted outline-none focus:border-purple-500"
                 />
               </div>
             </div>
@@ -516,19 +516,19 @@ export function MpcDashboard({
               filteredLogs.map((log) => (
                 <div
                   key={log.id}
-                  className="rounded-xl border border-white/5 bg-[#0a0d12]/90 p-3 text-xs font-mono transition-colors hover:border-white/15"
+                  className="rounded-xl border border-border bg-surface p-3 text-xs font-mono transition-colors hover:border-border-strong"
                 >
                   <div className="flex items-center justify-between mb-1.5">
                     <span className={`rounded-md px-2 py-0.5 text-[10.5px] font-bold ${log.badgeColor}`}>
                       {log.agent}
                     </span>
-                    <span className="text-[10px] text-slate-500">Step #{log.id + 1}</span>
+                    <span className="text-[10px] text-muted">Step #{log.id + 1}</span>
                   </div>
-                  <p className="text-slate-300 leading-relaxed whitespace-pre-wrap">{log.text}</p>
+                  <p className="text-foreground leading-relaxed whitespace-pre-wrap">{log.text}</p>
                 </div>
               ))
             ) : (
-              <div className="py-12 text-center text-xs text-slate-500">
+              <div className="py-12 text-center text-xs text-muted">
                 No reasoning logs match the current filter.
               </div>
             )}
@@ -539,14 +539,14 @@ export function MpcDashboard({
       {/* TAB 6: Manual Simulation Sandbox */}
       {activeTab === 'sandbox' && (
         <div className="space-y-4">
-          <div className="card-alive rounded-2xl border border-white/10 bg-[#11161d]/90 p-5 shadow-xl backdrop-blur-sm">
-            <div className="flex items-center justify-between border-b border-white/10 pb-3 mb-4">
+          <div className="rounded-2xl border border-border bg-surface-elevated p-5 shadow-sm">
+            <div className="flex items-center justify-between border-b border-border pb-3 mb-4">
               <div>
-                <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                  <Play className="size-4 text-purple-400" />
+                <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+                  <Play className="size-4 text-purple-500" />
                   Interactive Manual MPC Simulation Sandbox
                 </h3>
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-muted-text">
                   Tweak parameters manually to test transient response sensitivity without launching an LLM agent tuning run
                 </p>
               </div>
@@ -571,10 +571,10 @@ export function MpcDashboard({
 
             {/* Sliders Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-xs font-mono">
-              <div className="rounded-xl border border-white/5 bg-[#0a0d12] p-3 space-y-1">
-                <div className="flex justify-between text-slate-400">
+              <div className="rounded-xl border border-border bg-surface p-3 space-y-1">
+                <div className="flex justify-between text-muted-text">
                   <span>Prediction Horizon (Np)</span>
-                  <span className="text-white font-bold">{sandboxNp}</span>
+                  <span className="text-foreground font-bold">{sandboxNp}</span>
                 </div>
                 <input
                   type="range"
@@ -586,10 +586,10 @@ export function MpcDashboard({
                 />
               </div>
 
-              <div className="rounded-xl border border-white/5 bg-[#0a0d12] p-3 space-y-1">
-                <div className="flex justify-between text-slate-400">
+              <div className="rounded-xl border border-border bg-surface p-3 space-y-1">
+                <div className="flex justify-between text-muted-text">
                   <span>Control Horizon (Nc)</span>
-                  <span className="text-white font-bold">{sandboxNc}</span>
+                  <span className="text-foreground font-bold">{sandboxNc}</span>
                 </div>
                 <input
                   type="range"
@@ -601,10 +601,10 @@ export function MpcDashboard({
                 />
               </div>
 
-              <div className="rounded-xl border border-white/5 bg-[#0a0d12] p-3 space-y-1">
-                <div className="flex justify-between text-slate-400">
+              <div className="rounded-xl border border-border bg-surface p-3 space-y-1">
+                <div className="flex justify-between text-muted-text">
                   <span>Sample Time (dt)</span>
-                  <span className="text-white font-bold">{sandboxDt.toFixed(3)}s</span>
+                  <span className="text-foreground font-bold">{sandboxDt.toFixed(3)}s</span>
                 </div>
                 <input
                   type="range"
@@ -617,10 +617,10 @@ export function MpcDashboard({
                 />
               </div>
 
-              <div className="rounded-xl border border-white/5 bg-[#0a0d12] p-3 space-y-1">
-                <div className="flex justify-between text-slate-400">
+              <div className="rounded-xl border border-border bg-surface p-3 space-y-1">
+                <div className="flex justify-between text-muted-text">
                   <span>Simulation Duration (T_sim)</span>
-                  <span className="text-white font-bold">{sandboxSimTime}s</span>
+                  <span className="text-foreground font-bold">{sandboxSimTime}s</span>
                 </div>
                 <input
                   type="range"
@@ -633,26 +633,26 @@ export function MpcDashboard({
                 />
               </div>
 
-              <div className="rounded-xl border border-white/5 bg-[#0a0d12] p-3 space-y-1">
-                <div className="flex justify-between text-slate-400">
+              <div className="rounded-xl border border-border bg-surface p-3 space-y-1">
+                <div className="flex justify-between text-muted-text">
                   <span>Trajectory Mode</span>
-                  <span className="text-purple-300 font-bold uppercase">{sandboxTrajectoryMode}</span>
+                  <span className="text-purple-600 dark:text-purple-300 font-bold uppercase">{sandboxTrajectoryMode}</span>
                 </div>
                 <select
                   value={sandboxTrajectoryMode}
                   onChange={(e) => setSandboxTrajectoryMode(e.target.value)}
-                  className="w-full rounded bg-white/5 border border-white/10 px-2 py-1 text-xs text-white"
+                  className="w-full rounded bg-surface border border-border px-2 py-1 text-xs text-foreground"
                 >
-                  <option value="reg" className="bg-[#0a0d12]">Regulation (Fixed Target)</option>
-                  <option value="sin" className="bg-[#0a0d12]">Sinusoid Wave</option>
-                  <option value="pulse" className="bg-[#0a0d12]">Step Pulse</option>
+                  <option value="reg">Regulation (Fixed Target)</option>
+                  <option value="sin">Sinusoid Wave</option>
+                  <option value="pulse">Step Pulse</option>
                 </select>
               </div>
 
-              <div className="rounded-xl border border-white/5 bg-[#0a0d12] p-3 space-y-1">
-                <div className="flex justify-between text-slate-400">
+              <div className="rounded-xl border border-border bg-surface p-3 space-y-1">
+                <div className="flex justify-between text-muted-text">
                   <span>Sensor Noise (&sigma;)</span>
-                  <span className="text-white font-bold">{sandboxNoise.toFixed(3)}</span>
+                  <span className="text-foreground font-bold">{sandboxNoise.toFixed(3)}</span>
                 </div>
                 <input
                   type="range"
@@ -667,7 +667,7 @@ export function MpcDashboard({
             </div>
 
             {sandboxError && (
-              <div className="mt-4 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-300">
+              <div className="mt-4 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-600 dark:text-rose-300">
                 {sandboxError}
               </div>
             )}
@@ -687,14 +687,14 @@ export function MpcDashboard({
       {/* TAB 7: Standalone Export & Deliverables */}
       {activeTab === 'export' && (
         <div className="space-y-4">
-          <div className="card-alive rounded-2xl border border-white/10 bg-[#11161d]/90 p-5 shadow-xl backdrop-blur-sm">
-            <div className="flex items-center justify-between border-b border-white/10 pb-3 mb-4">
+          <div className="rounded-2xl border border-border bg-surface-elevated p-5 shadow-sm">
+            <div className="flex items-center justify-between border-b border-border pb-3 mb-4">
               <div>
-                <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                  <Code className="size-4 text-purple-400" />
+                <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+                  <Code className="size-4 text-purple-500" />
                   Self-Contained Python Reproduction Script
                 </h3>
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-muted-text">
                   Standalone executable script requiring only NumPy and SciPy with embedded OSQP solver
                 </p>
               </div>
@@ -703,9 +703,9 @@ export function MpcDashboard({
                 <button
                   type="button"
                   onClick={handleCopyScript}
-                  className={`${btnBase} ${btnCompact} flex items-center gap-1.5 text-xs text-purple-300 hover:text-white border-purple-500/30 hover:bg-purple-500/10`}
+                  className={`${btnBase} ${btnCompact} flex items-center gap-1.5 text-xs text-purple-600 dark:text-purple-300 hover:text-foreground border-purple-500/30 hover:bg-purple-500/10`}
                 >
-                  {copiedScript ? <Check className="size-3 text-emerald-400" /> : <Copy className="size-3" />}
+                  {copiedScript ? <Check className="size-3 text-emerald-500" /> : <Copy className="size-3" />}
                   {copiedScript ? 'Copied!' : 'Copy Code'}
                 </button>
 
@@ -719,7 +719,7 @@ export function MpcDashboard({
               </div>
             </div>
 
-            <pre className="max-h-[500px] overflow-auto rounded-xl bg-[#080b10] p-4 text-xs font-mono text-purple-200 leading-relaxed border border-white/5">
+            <pre className="max-h-[500px] overflow-auto rounded-xl bg-surface p-4 text-xs font-mono text-foreground leading-relaxed border border-border">
               {results?.export_script || '# Standalone script generated upon tuning completion.'}
             </pre>
           </div>

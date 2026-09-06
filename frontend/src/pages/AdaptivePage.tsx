@@ -264,29 +264,29 @@ export function AdaptivePage() {
   }
 
   return (
-    <div className="relative flex min-h-screen flex-col bg-transparent text-[#eef2f8]">
-      {/* Studio Atmosphere Glows */}
+    <div className="relative flex min-h-screen flex-col bg-transparent text-foreground">
+      {/* Atmosphere Glows */}
       <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden" aria-hidden>
         <div className="absolute -top-32 left-1/4 h-[420px] w-[600px] rounded-full bg-gradient-to-br from-cyan-600/12 via-teal-600/6 to-transparent blur-3xl animate-[aurora-drift_16s_ease-in-out_infinite]" />
         <div className="absolute bottom-20 right-10 h-[380px] w-[500px] rounded-full bg-gradient-to-tr from-indigo-600/8 via-cyan-800/6 to-transparent blur-3xl animate-[pulse-soft_11s_ease-in-out_infinite]" />
       </div>
 
       {/* Top Bar */}
-      <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-white/10 bg-[#0a0d12]/80 px-6 backdrop-blur-md">
+      <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-border bg-surface-elevated/85 px-6 backdrop-blur-md shadow-xs">
         <div className="flex items-center gap-3 text-xs">
           <Link
-            to="/studio"
-            className="flex items-center gap-1.5 text-slate-400 hover:text-white transition-colors"
+            to="/case-studies"
+            className="flex items-center gap-1.5 text-muted-text hover:text-foreground transition-colors font-medium"
           >
-            <ArrowLeft className="size-3.5" /> Studio
+            <ArrowLeft className="size-3.5" /> Case Studies & Projects
           </Link>
-          <span className="text-slate-600">/</span>
-          <span className="font-semibold text-cyan-400 flex items-center gap-1.5">
-            <Zap className="size-3.5 text-cyan-400" />
-            Adaptive Nonlinear Studio
+          <span className="text-muted/40">/</span>
+          <span className="font-semibold text-cyan-600 dark:text-cyan-400 flex items-center gap-1.5">
+            <Zap className="size-3.5 text-cyan-500" />
+            Adaptive Nonlinear Control
           </span>
           {pipeline.fileName && (
-            <span className="rounded-md border border-white/10 bg-white/5 px-2 py-0.5 font-mono text-[11px] text-slate-300">
+            <span className="rounded-md border border-border bg-surface-muted px-2 py-0.5 font-mono text-[11px] text-muted-text">
               {pipeline.fileName}
             </span>
           )}
@@ -354,31 +354,30 @@ export function AdaptivePage() {
 
           {/* If no active job: Setup & Launch Card */}
           {!job && (
-            <div className="card-alive relative overflow-hidden rounded-2xl border border-white/10 bg-[#11161d]/90 backdrop-blur-md p-7 shadow-2xl">
+            <div className="relative overflow-hidden rounded-2xl border border-border bg-surface-elevated p-6 sm:p-7 shadow-sm">
               {/* Top gradient highlight beam */}
-              <div className="pointer-events-none absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-cyan-400/80 to-transparent" />
-              <div className="pointer-events-none absolute -top-24 -right-24 size-80 rounded-full bg-cyan-500/10 blur-3xl" />
+              <div className="pointer-events-none absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-cyan-500/70 to-transparent" />
               <div className="max-w-xl">
-                <div className="flex items-center gap-2.5 text-cyan-400">
+                <div className="flex items-center gap-2.5 text-cyan-600 dark:text-cyan-400">
                   <Sparkles className="size-5" />
                   <span className="text-xs font-bold uppercase tracking-wider">
                     AgentAdaptive Control Suite
                   </span>
                 </div>
-                <h1 className="mt-2 text-xl font-bold text-white">
+                <h1 className="mt-2 text-xl font-bold text-foreground">
                   Sliding Mode & Backstepping Controller Design
                 </h1>
-                <p className="mt-2 text-xs text-slate-300 leading-relaxed">
+                <p className="mt-2 text-xs text-muted-text leading-relaxed">
                   Synthesizes robust nonlinear control laws with radial basis function (RBF) neural
                   networks for unmodeled friction, parametric drift, and external disturbances.
                   Guaranteed stability via constructive Lyapunov functions.
                 </p>
               </div>
 
-              <div className="mt-6 border-t border-white/10 pt-6 space-y-6">
+              <div className="mt-6 border-t border-border pt-6 space-y-6">
               {/* Plant Model Selection */}
               <div>
-                <label className="text-xs font-bold uppercase tracking-wider text-cyan-300 block mb-2">
+                <label className="text-xs font-bold uppercase tracking-wider text-cyan-600 dark:text-cyan-400 block mb-2">
                   1. Plant Model Dynamics
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
@@ -387,12 +386,12 @@ export function AdaptivePage() {
                     onClick={() => setPlantMode('preset')}
                     className={`rounded-xl border p-3.5 text-left transition-all ${
                       plantMode === 'preset'
-                        ? 'border-cyan-400/80 bg-cyan-500/15 ring-1 ring-cyan-400/50 shadow-[0_0_20px_rgba(6,182,212,0.22)]'
-                        : 'border-white/10 bg-white/[0.02] hover:bg-white/[0.06] hover:border-white/20 text-slate-400'
+                        ? 'border-cyan-500/80 bg-cyan-500/10 text-foreground ring-1 ring-cyan-500/30 shadow-xs'
+                        : 'border-border bg-surface-muted hover:bg-surface-hover text-muted-text'
                     }`}
                   >
-                    <div className="text-xs font-bold text-white mb-1">Preset Benchmark</div>
-                    <div className="text-[11.5px] text-slate-400 leading-snug">
+                    <div className="text-xs font-bold text-foreground mb-1">Preset Benchmark</div>
+                    <div className="text-[11.5px] text-muted leading-snug">
                       smoke_integrator (Unit integrator SISO dx/dt = u)
                     </div>
                   </button>
@@ -402,12 +401,12 @@ export function AdaptivePage() {
                     onClick={() => setPlantMode('artifact')}
                     className={`rounded-xl border p-3.5 text-left transition-all ${
                       plantMode === 'artifact'
-                        ? 'border-cyan-400/80 bg-cyan-500/15 ring-1 ring-cyan-400/50 shadow-[0_0_20px_rgba(6,182,212,0.22)]'
-                        : 'border-white/10 bg-white/[0.02] hover:bg-white/[0.06] hover:border-white/20 text-slate-400'
+                        ? 'border-cyan-500/80 bg-cyan-500/10 text-foreground ring-1 ring-cyan-500/30 shadow-xs'
+                        : 'border-border bg-surface-muted hover:bg-surface-hover text-muted-text'
                     }`}
                   >
-                    <div className="text-xs font-bold text-white mb-1">Synthesizer Artifact</div>
-                    <div className="text-[11.5px] text-slate-400 leading-snug">
+                    <div className="text-xs font-bold text-foreground mb-1">Synthesizer Artifact</div>
+                    <div className="text-[11.5px] text-muted leading-snug">
                       {sessionStorage.getItem('labcd_last_artifact_id')
                         ? `Loaded: ${sessionStorage.getItem('labcd_last_artifact_id')}`
                         : 'Auto-compiled from Plant Synthesizer'}
@@ -419,12 +418,12 @@ export function AdaptivePage() {
                     onClick={() => setPlantMode('custom')}
                     className={`rounded-xl border p-3.5 text-left transition-all ${
                       plantMode === 'custom'
-                        ? 'border-cyan-400/80 bg-cyan-500/15 ring-1 ring-cyan-400/50 shadow-[0_0_20px_rgba(6,182,212,0.22)]'
-                        : 'border-white/10 bg-white/[0.02] hover:bg-white/[0.06] hover:border-white/20 text-slate-400'
+                        ? 'border-cyan-500/80 bg-cyan-500/10 text-foreground ring-1 ring-cyan-500/30 shadow-xs'
+                        : 'border-border bg-surface-muted hover:bg-surface-hover text-muted-text'
                     }`}
                   >
-                    <div className="text-xs font-bold text-white mb-1">Custom Dynamics</div>
-                    <div className="text-[11.5px] text-slate-400 leading-snug">
+                    <div className="text-xs font-bold text-foreground mb-1">Custom Dynamics</div>
+                    <div className="text-[11.5px] text-muted leading-snug">
                       User-specified state-space vectors
                     </div>
                   </button>
@@ -433,7 +432,7 @@ export function AdaptivePage() {
 
               {/* Simulation & Reference Knobs */}
               <div>
-                <label className="text-xs font-bold uppercase tracking-wider text-cyan-300 block mb-2">
+                <label className="text-xs font-bold uppercase tracking-wider text-cyan-600 dark:text-cyan-400 block mb-2">
                   2. Simulation &amp; Desired Trajectory Targets
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
@@ -526,7 +525,7 @@ export function AdaptivePage() {
                       type="button"
                       onClick={() => setSkipClarify(!skipClarify)}
                       className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
-                        skipClarify ? 'bg-cyan-500' : 'bg-white/10'
+                        skipClarify ? 'bg-cyan-500' : 'border-border bg-surface-muted'
                       }`}
                     >
                       <span
@@ -535,7 +534,7 @@ export function AdaptivePage() {
                         }`}
                       />
                     </button>
-                    <span className="text-xs text-slate-300">
+                    <span className="text-xs text-muted-text">
                       {skipClarify ? 'Use Conservative Defaults' : 'Interactive Dialogue'}
                     </span>
                   </div>
@@ -575,7 +574,7 @@ export function AdaptivePage() {
                   type="button"
                   onClick={handleStartJob}
                   disabled={loading}
-                  className={`${btnBase} ${btnPrimary} flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-cyan-500 to-teal-500 text-black font-semibold border-none shadow-lg shadow-cyan-500/20`}
+                  className={`${btnBase} ${btnPrimary} flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-cyan-600 to-teal-600 text-white font-semibold border-none shadow-md`}
                 >
                   {loading ? (
                     <>
@@ -583,7 +582,7 @@ export function AdaptivePage() {
                     </>
                   ) : (
                     <>
-                      <Play className="size-4" /> Start Adaptive Design Studio
+                      <Play className="size-4" /> Start Adaptive Tuning
                     </>
                   )}
                 </button>
@@ -602,18 +601,18 @@ export function AdaptivePage() {
 
           {/* Running / Progress Mode */}
           {job && (job.status === 'designing' || job.status === 'building' || job.status === 'tuning') && (
-            <div className="rounded-2xl border border-white/10 bg-[#11161d] p-8 text-center shadow-xl">
-              <div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+            <div className="rounded-2xl border border-border bg-surface-elevated p-8 text-center shadow-sm">
+              <div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20">
                 <Loader2 className="size-7 animate-spin" />
               </div>
-              <h3 className="mt-4 text-base font-semibold text-white">
+              <h3 className="mt-4 text-base font-semibold text-foreground">
                 {job.stage === 'tune'
                   ? 'Tuning Controller Parameters...'
                   : job.stage === 'build'
                   ? 'Simulating Derived Control Law...'
                   : 'Synthesizing Control Law (Designer Agent)...'}
               </h3>
-              <p className="mt-1 text-xs text-slate-400 max-w-md mx-auto">
+              <p className="mt-1 text-xs text-muted max-w-md mx-auto">
                 {job.message || 'Integrating differential equations with Lyapunov stability verification.'}
               </p>
             </div>
@@ -628,8 +627,8 @@ export function AdaptivePage() {
         {/* Right Column: Pipeline Status & Activity Strip */}
         <div className="w-full lg:w-84 xl:w-96 shrink-0 space-y-5">
           {/* Flow Strip */}
-          <div className="rounded-2xl border border-white/10 bg-[#11161d] p-5 shadow-xl">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+          <div className="rounded-2xl border border-border bg-surface-elevated p-5 shadow-sm">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-muted">
               Pipeline Stages
             </span>
             <div className="mt-4 space-y-3">
@@ -641,27 +640,27 @@ export function AdaptivePage() {
                     key={stage.id}
                     className={`flex items-center justify-between rounded-xl border p-3 text-xs transition-all ${
                       active
-                        ? 'border-cyan-400/50 bg-cyan-500/10 text-white font-semibold'
+                        ? 'border-cyan-500/50 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 font-semibold'
                         : completed
-                        ? 'border-emerald-500/30 bg-emerald-500/5 text-emerald-300'
-                        : 'border-white/5 bg-white/5 text-slate-500'
+                        ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 font-semibold'
+                        : 'border-border bg-surface-muted text-muted'
                     }`}
                   >
                     <div className="flex items-center gap-2.5">
                       <span
                         className={`flex size-6 items-center justify-center rounded-lg text-xs ${
                           completed
-                            ? 'bg-emerald-500/20 text-emerald-400'
+                            ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400'
                             : active
-                            ? 'bg-cyan-500/20 text-cyan-400'
-                            : 'bg-white/5 text-slate-500'
+                            ? 'bg-cyan-500/20 text-cyan-600 dark:text-cyan-400'
+                            : 'border border-border bg-surface text-muted'
                         }`}
                       >
                         {completed ? <CheckCircle2 className="size-3.5" /> : idx + 1}
                       </span>
                       <span>{stage.label}</span>
                     </div>
-                    {active && <span className="size-2 rounded-full bg-cyan-400 animate-ping" />}
+                    {active && <span className="size-2 rounded-full bg-cyan-500 animate-ping" />}
                   </div>
                 )
               })}
@@ -670,18 +669,18 @@ export function AdaptivePage() {
 
           {/* Live Activity Feed */}
           {job && job.progress && job.progress.length > 0 && (
-            <div className="rounded-2xl border border-white/10 bg-[#11161d] p-5 shadow-xl">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+            <div className="rounded-2xl border border-border bg-surface-elevated p-5 shadow-sm">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-muted">
                 Agent Events
               </span>
               <div className="mt-3 max-h-64 overflow-y-auto space-y-2 pr-1 text-xs">
                 {job.progress.map((ev, i) => (
                   <div
                     key={i}
-                    className="rounded-lg border border-white/5 bg-[#0a0d12] p-2.5 text-[11.5px] leading-relaxed text-slate-300"
+                    className="rounded-lg border border-border bg-surface p-2.5 text-[11.5px] leading-relaxed text-muted-text"
                   >
-                    <div className="flex items-center justify-between text-[10px] text-slate-500 font-mono mb-1">
-                      <span className="text-cyan-400 font-semibold uppercase">{ev.stage || 'info'}</span>
+                    <div className="flex items-center justify-between text-[10px] text-muted font-mono mb-1">
+                      <span className="text-cyan-600 dark:text-cyan-400 font-semibold uppercase">{ev.stage || 'info'}</span>
                       <span>{ev.ts ? new Date(ev.ts * 1000).toLocaleTimeString() : ''}</span>
                     </div>
                     <div>{ev.text}</div>

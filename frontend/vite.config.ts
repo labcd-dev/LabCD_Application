@@ -8,10 +8,14 @@ export default defineConfig({
     needsInterop: ['react-simple-code-editor'],
   },
   server: {
+    host: '0.0.0.0',
     port: 5173,
+    watch: {
+      usePolling: true,
+    },
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        target: process.env.BACKEND_URL || 'http://localhost:8000',
         changeOrigin: true,
         // Long-running design jobs use SSE; default proxy timeout is ~2 minutes.
         timeout: 0,

@@ -244,79 +244,79 @@ legend('show', 'Location', 'best');
     : null
 
   return (
-    <div className="space-y-6 text-[#eef2f8]">
+    <div className="space-y-6 text-foreground">
       {/* Top Metrics Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-        <div className="card-alive relative overflow-hidden rounded-2xl border border-white/10 bg-[#11161d]/90 backdrop-blur-sm p-4.5 shadow-lg">
+        <div className="relative overflow-hidden rounded-2xl border border-border bg-surface-elevated p-4.5 shadow-sm">
           <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-cyan-400 to-teal-400" />
-          <div className="flex items-center justify-between text-slate-400 text-xs font-semibold">
+          <div className="flex items-center justify-between text-muted-text text-xs font-semibold">
             <span>Tracking RMS</span>
-            <TrendingDown className="size-4 text-cyan-400" />
+            <TrendingDown className="size-4 text-cyan-500" />
           </div>
-          <div className="mt-2 flex items-baseline gap-1 font-mono text-2xl font-bold text-white">
+          <div className="mt-2 flex items-baseline gap-1 font-mono text-2xl font-bold text-foreground">
             {trackingRms}
-            <span className="text-xs font-normal text-slate-500">MSE</span>
+            <span className="text-xs font-normal text-muted">MSE</span>
           </div>
-          <p className="mt-1 text-[11px] text-emerald-400 flex items-center gap-1 font-medium">
+          <p className="mt-1 text-[11px] text-emerald-600 dark:text-emerald-400 flex items-center gap-1 font-medium">
             <CheckCircle2 className="size-3" /> Within Lyapunov bound
           </p>
         </div>
 
-        <div className="card-alive relative overflow-hidden rounded-2xl border border-white/10 bg-[#11161d]/90 backdrop-blur-sm p-4.5 shadow-lg">
+        <div className="relative overflow-hidden rounded-2xl border border-border bg-surface-elevated p-4.5 shadow-sm">
           <div className="absolute top-0 left-0 right-0 h-1 bg-cyan-500" />
-          <div className="flex items-center justify-between text-slate-400 text-xs font-semibold">
+          <div className="flex items-center justify-between text-muted-text text-xs font-semibold">
             <span>Control Law</span>
-            <Cpu className="size-4 text-cyan-400" />
+            <Cpu className="size-4 text-cyan-500" />
           </div>
-          <div className="mt-2 text-base font-bold text-cyan-300 font-sans truncate">
+          <div className="mt-2 text-base font-bold text-cyan-600 dark:text-cyan-300 font-sans truncate">
             {results.method || 'Backstepping + RBF'}
           </div>
-          <p className="mt-1 text-[11px] text-slate-400">Adaptive disturbance rejection</p>
+          <p className="mt-1 text-[11px] text-muted-text">Adaptive disturbance rejection</p>
         </div>
 
-        <div className="card-alive relative overflow-hidden rounded-2xl border border-white/10 bg-[#11161d]/90 backdrop-blur-sm p-4.5 shadow-lg">
+        <div className="relative overflow-hidden rounded-2xl border border-border bg-surface-elevated p-4.5 shadow-sm">
           <div className="absolute top-0 left-0 right-0 h-1 bg-amber-500" />
-          <div className="flex items-center justify-between text-slate-400 text-xs font-semibold">
+          <div className="flex items-center justify-between text-muted-text text-xs font-semibold">
             <span>Max Effort |u|</span>
-            <Zap className="size-4 text-amber-400" />
+            <Zap className="size-4 text-amber-500" />
           </div>
-          <div className="mt-2 flex items-baseline gap-1 font-mono text-2xl font-bold text-white">
+          <div className="mt-2 flex items-baseline gap-1 font-mono text-2xl font-bold text-foreground">
             {maxEffort}
-            <span className="text-xs font-normal text-slate-500">N / V</span>
+            <span className="text-xs font-normal text-muted">N / V</span>
           </div>
-          <p className="mt-1 text-[11px] text-slate-400">Actuator within limits</p>
+          <p className="mt-1 text-[11px] text-muted-text">Actuator within limits</p>
         </div>
 
-        <div className="card-alive relative overflow-hidden rounded-2xl border border-white/10 bg-[#11161d]/90 backdrop-blur-sm p-4.5 shadow-lg">
+        <div className="relative overflow-hidden rounded-2xl border border-border bg-surface-elevated p-4.5 shadow-sm">
           <div className="absolute top-0 left-0 right-0 h-1 bg-emerald-500" />
-          <div className="flex items-center justify-between text-slate-400 text-xs font-semibold">
+          <div className="flex items-center justify-between text-muted-text text-xs font-semibold">
             <span>Settling Time</span>
-            <Gauge className="size-4 text-emerald-400" />
+            <Gauge className="size-4 text-emerald-500" />
           </div>
-          <div className="mt-2 font-mono text-2xl font-bold text-white">{settlingTime}</div>
-          <p className="mt-1 text-[11px] text-emerald-400">Fast exponential recovery</p>
+          <div className="mt-2 font-mono text-2xl font-bold text-foreground">{settlingTime}</div>
+          <p className="mt-1 text-[11px] text-emerald-600 dark:text-emerald-400">Fast exponential recovery</p>
         </div>
       </div>
 
       {/* Main Plot Card */}
-      <div className="card-alive rounded-2xl border border-white/10 bg-[#11161d]/90 backdrop-blur-sm p-5 shadow-xl">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4 mb-4">
+      <div className="rounded-2xl border border-border bg-surface-elevated p-5 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4 mb-4">
           <div>
-            <h3 className="text-sm font-semibold text-white">Closed-Loop Simulation Response</h3>
-            <p className="text-xs text-slate-400">
+            <h3 className="text-sm font-semibold text-foreground">Closed-Loop Simulation Response</h3>
+            <p className="text-xs text-muted-text">
               Interactive numerical integration of derived control law
             </p>
           </div>
 
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-[#0a0d12] p-1 text-xs">
+            <div className="flex items-center gap-1.5 rounded-xl border border-border bg-surface-muted p-1 text-xs">
               <button
                 type="button"
                 onClick={() => setSelectedSignal('states')}
                 className={`rounded-lg px-2.5 py-1 transition-all ${
                   selectedSignal === 'states'
-                    ? 'bg-cyan-500/20 text-cyan-300 font-semibold shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200'
+                    ? 'bg-cyan-500/20 text-cyan-700 dark:text-cyan-300 font-semibold shadow-sm'
+                    : 'text-muted-text hover:text-foreground'
                 }`}
               >
                 State Tracking x(t)
@@ -326,8 +326,8 @@ legend('show', 'Location', 'best');
                 onClick={() => setSelectedSignal('control')}
                 className={`rounded-lg px-2.5 py-1 transition-all ${
                   selectedSignal === 'control'
-                    ? 'bg-cyan-500/20 text-cyan-300 font-semibold shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200'
+                    ? 'bg-cyan-500/20 text-cyan-700 dark:text-cyan-300 font-semibold shadow-sm'
+                    : 'text-muted-text hover:text-foreground'
                 }`}
               >
                 Control Effort u(t)
@@ -337,8 +337,8 @@ legend('show', 'Location', 'best');
                 onClick={() => setSelectedSignal('disturbance')}
                 className={`rounded-lg px-2.5 py-1 transition-all ${
                   selectedSignal === 'disturbance'
-                    ? 'bg-cyan-500/20 text-cyan-300 font-semibold shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200'
+                    ? 'bg-cyan-500/20 text-cyan-700 dark:text-cyan-300 font-semibold shadow-sm'
+                    : 'text-muted-text hover:text-foreground'
                 }`}
               >
                 Disturbance Estimate d̂(t)
@@ -349,19 +349,19 @@ legend('show', 'Location', 'best');
               <button
                 type="button"
                 onClick={handleExportCsv}
-                className="flex items-center gap-1 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 px-2.5 py-1.5 text-xs text-slate-300 transition-colors"
+                className="flex items-center gap-1 rounded-xl border border-border bg-surface-muted hover:bg-surface-hover px-2.5 py-1.5 text-xs text-foreground transition-colors"
                 title="Download CSV"
               >
-                <Download className="size-3 text-cyan-400" />
+                <Download className="size-3 text-cyan-500" />
                 <span>CSV</span>
               </button>
               <button
                 type="button"
                 onClick={handleExportMatlab}
-                className="flex items-center gap-1 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 px-2.5 py-1.5 text-xs text-slate-300 transition-colors"
+                className="flex items-center gap-1 rounded-xl border border-border bg-surface-muted hover:bg-surface-hover px-2.5 py-1.5 text-xs text-foreground transition-colors"
                 title="Download MATLAB Script"
               >
-                <Download className="size-3 text-teal-400" />
+                <Download className="size-3 text-teal-500" />
                 <span>MATLAB</span>
               </button>
             </div>
@@ -370,7 +370,7 @@ legend('show', 'Location', 'best');
 
         {plotData ? (
           <div>
-            <div className="relative rounded-xl border border-white/5 bg-[#0a0d12] p-3">
+            <div className="relative rounded-xl border border-border bg-surface p-3">
               <svg
                 viewBox="0 0 600 200"
                 className="w-full h-56 overflow-visible cursor-crosshair"
@@ -378,10 +378,10 @@ legend('show', 'Location', 'best');
                 onMouseLeave={() => setHoverIndex(null)}
               >
                 {/* Horizontal grid lines */}
-                <line x1="0" y1="20" x2="600" y2="20" stroke="rgba(255,255,255,0.05)" />
-                <line x1="0" y1="70" x2="600" y2="70" stroke="rgba(255,255,255,0.05)" />
-                <line x1="0" y1="120" x2="600" y2="120" stroke="rgba(255,255,255,0.05)" />
-                <line x1="0" y1="170" x2="600" y2="170" stroke="rgba(255,255,255,0.05)" />
+                <line x1="0" y1="20" x2="600" y2="20" stroke="var(--app-border)" strokeDasharray="3 3" />
+                <line x1="0" y1="70" x2="600" y2="70" stroke="var(--app-border)" />
+                <line x1="0" y1="120" x2="600" y2="120" stroke="var(--app-border)" strokeDasharray="3 3" />
+                <line x1="0" y1="170" x2="600" y2="170" stroke="var(--app-border)" />
 
                 {/* Reference trajectory */}
                 {plotData.referencePath && (
@@ -398,7 +398,7 @@ legend('show', 'Location', 'best');
                 <path
                   d={plotData.primaryPath}
                   fill="none"
-                  stroke="#35c9d6"
+                  stroke="#0891b2"
                   strokeWidth="2.5"
                   className="transition-all duration-300"
                 />
@@ -411,7 +411,7 @@ legend('show', 'Location', 'best');
                       y1="0"
                       x2={hoverX}
                       y2="200"
-                      stroke="rgba(53, 201, 214, 0.4)"
+                      stroke="rgba(8, 145, 178, 0.4)"
                       strokeWidth="1.5"
                       strokeDasharray="2 2"
                     />
@@ -419,8 +419,8 @@ legend('show', 'Location', 'best');
                       cx={hoverX}
                       cy={hoverY}
                       r="4.5"
-                      fill="#35c9d6"
-                      stroke="#ffffff"
+                      fill="#0891b2"
+                      stroke="var(--app-surface-elevated)"
                       strokeWidth="1.5"
                     />
                   </>
@@ -429,30 +429,30 @@ legend('show', 'Location', 'best');
 
               {/* Floating Tooltip Pill */}
               {hoverIndex !== null && (
-                <div className="absolute top-4 right-4 flex items-center gap-3 rounded-lg border border-cyan-500/30 bg-[#161c24]/90 px-3 py-1.5 text-[11px] font-mono shadow-lg backdrop-blur-md">
-                  <span className="text-slate-400">t: <b className="text-white">{plotData.t[hoverIndex].toFixed(2)}s</b></span>
-                  <span className="text-cyan-300">y: <b className="text-cyan-200">{plotData.primaryY[hoverIndex]?.toFixed(3)}</b></span>
+                <div className="absolute top-4 right-4 flex items-center gap-3 rounded-lg border border-cyan-500/30 bg-surface-elevated/95 px-3 py-1.5 text-[11px] font-mono shadow-md backdrop-blur-md">
+                  <span className="text-muted-text">t: <b className="text-foreground">{plotData.t[hoverIndex].toFixed(2)}s</b></span>
+                  <span className="text-cyan-600 dark:text-cyan-300">y: <b className="text-foreground">{plotData.primaryY[hoverIndex]?.toFixed(3)}</b></span>
                   {plotData.referenceY[hoverIndex] !== undefined && (
-                    <span className="text-slate-400">yd: <b className="text-slate-200">{plotData.referenceY[hoverIndex]?.toFixed(3)}</b></span>
+                    <span className="text-muted-text">yd: <b className="text-muted">{plotData.referenceY[hoverIndex]?.toFixed(3)}</b></span>
                   )}
                 </div>
               )}
 
-              <div className="flex justify-between text-[10px] text-slate-500 font-mono mt-2 px-1">
+              <div className="flex justify-between text-[10px] text-muted font-mono mt-2 px-1">
                 <span>t = 0s ({plotData.yMin})</span>
                 <span>Response Horizon: {plotData.tMax}s ({plotData.yMax})</span>
               </div>
             </div>
 
-            <div className="mt-3 flex items-center justify-between text-xs text-slate-400">
+            <div className="mt-3 flex items-center justify-between text-xs text-muted-text">
               <div className="flex items-center gap-4">
                 <span className="flex items-center gap-1.5">
-                  <span className="size-2.5 rounded-sm bg-cyan-400" />
+                  <span className="size-2.5 rounded-sm bg-cyan-500" />
                   Simulated Response
                 </span>
                 {selectedSignal === 'states' && (
                   <span className="flex items-center gap-1.5">
-                    <span className="size-2.5 rounded-sm border border-slate-500 border-dashed" />
+                    <span className="size-2.5 rounded-sm border border-muted border-dashed" />
                     Reference Desired xd(t)
                   </span>
                 )}
@@ -460,20 +460,20 @@ legend('show', 'Location', 'best');
             </div>
           </div>
         ) : (
-          <div className="py-12 text-center text-xs text-slate-400">
+          <div className="py-12 text-center text-xs text-muted-text">
             No dense simulation series available in results.
           </div>
         )}
       </div>
 
       {/* Control Law & Stability Proof Card */}
-      <div className="rounded-2xl border border-white/10 bg-[#11161d] p-5 shadow-xl">
-        <div className="flex items-center justify-between border-b border-white/10 pb-4 mb-4">
+      <div className="rounded-2xl border border-border bg-surface-elevated p-5 shadow-sm">
+        <div className="flex items-center justify-between border-b border-border pb-4 mb-4">
           <div className="flex items-center gap-2">
-            <ShieldCheck className="size-5 text-cyan-400" />
+            <ShieldCheck className="size-5 text-cyan-500" />
             <div>
-              <h3 className="text-sm font-semibold text-white">Stability Proof & Technical Summary</h3>
-              <p className="text-xs text-slate-400">
+              <h3 className="text-sm font-semibold text-foreground">Stability Proof &amp; Technical Summary</h3>
+              <p className="text-xs text-muted-text">
                 Lyapunov decrease guarantee: dV/dt &le; -k ||e||&sup2; + &epsilon;
               </p>
             </div>
@@ -484,7 +484,7 @@ legend('show', 'Location', 'best');
               <button
                 type="button"
                 onClick={onDownloadReport}
-                className={`${btnBase} ${btnCompact} flex items-center gap-1.5 text-xs text-slate-300 hover:text-white`}
+                className={`${btnBase} ${btnCompact} flex items-center gap-1.5 text-xs text-muted-text hover:text-foreground`}
               >
                 <Download className="size-3.5" />
                 Download PDF Report
@@ -493,7 +493,7 @@ legend('show', 'Location', 'best');
             <button
               type="button"
               onClick={() => setShowFullReport(!showFullReport)}
-              className="rounded-lg p-1.5 text-slate-400 hover:text-white"
+              className="rounded-lg p-1.5 text-muted-text hover:text-foreground"
             >
               {showFullReport ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
             </button>
@@ -501,14 +501,14 @@ legend('show', 'Location', 'best');
         </div>
 
         {results.abstract && (
-          <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-4 text-xs leading-relaxed text-slate-300 mb-4">
-            <span className="font-semibold text-cyan-400 block mb-1">Executive Summary:</span>
+          <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-4 text-xs leading-relaxed text-muted-text mb-4">
+            <span className="font-semibold text-cyan-600 dark:text-cyan-400 block mb-1">Executive Summary:</span>
             {results.abstract}
           </div>
         )}
 
         {showFullReport && results.report && (
-          <div className="rounded-xl border border-white/10 bg-[#0a0d12] p-4 text-xs text-slate-300 font-mono whitespace-pre-wrap max-h-96 overflow-y-auto">
+          <div className="rounded-xl border border-border bg-surface p-4 text-xs text-muted-text font-mono whitespace-pre-wrap max-h-96 overflow-y-auto">
             {results.report}
           </div>
         )}
@@ -516,11 +516,11 @@ legend('show', 'Location', 'best');
 
       {/* Tuning History Log */}
       {results.tuning_log && results.tuning_log.length > 0 && (
-        <div className="rounded-2xl border border-white/10 bg-[#11161d] p-5 shadow-xl">
-          <h3 className="text-sm font-semibold text-white mb-3">Tuning Rounds History</h3>
+        <div className="rounded-2xl border border-border bg-surface-elevated p-5 shadow-sm">
+          <h3 className="text-sm font-semibold text-foreground mb-3">Tuning Rounds History</h3>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead className="border-b border-white/10 text-slate-400">
+              <thead className="border-b border-border text-muted-text">
                 <tr>
                   <th className="py-2 px-3">Round</th>
                   <th className="py-2 px-3">RMS Error</th>
@@ -528,13 +528,13 @@ legend('show', 'Location', 'best');
                   <th className="py-2 px-3">Tuner Assessment</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/5 font-mono">
+              <tbody className="divide-y divide-border font-mono">
                 {results.tuning_log.map((item, idx) => (
-                  <tr key={idx} className="hover:bg-white/5">
-                    <td className="py-2.5 px-3 text-cyan-300 font-bold">#{idx + 1}</td>
+                  <tr key={idx} className="hover:bg-surface-hover">
+                    <td className="py-2.5 px-3 text-cyan-600 dark:text-cyan-300 font-bold">#{idx + 1}</td>
                     <td className="py-2.5 px-3">{String(item.rms ?? item.cost ?? '—')}</td>
                     <td className="py-2.5 px-3">{String(item.gains ? JSON.stringify(item.gains) : '—')}</td>
-                    <td className="py-2.5 px-3 font-sans text-slate-300">{String(item.feedback ?? item.note ?? 'Optimized')}</td>
+                    <td className="py-2.5 px-3 font-sans text-muted-text">{String(item.feedback ?? item.note ?? 'Optimized')}</td>
                   </tr>
                 ))}
               </tbody>
@@ -545,15 +545,15 @@ legend('show', 'Location', 'best');
 
       {/* LLM Resource & Token Usage Footer */}
       {results.usage && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/5 bg-[#0a0d12] px-4 py-3 text-xs text-slate-400 font-mono">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-surface-muted px-4 py-3 text-xs text-muted-text font-mono">
           <div className="flex items-center gap-4">
             <span>LLM Usage:</span>
-            <span>Prompt: <strong className="text-white">{Number(results.usage.prompt_tokens || 0).toLocaleString()}</strong> tok</span>
-            <span>Completion: <strong className="text-white">{Number(results.usage.completion_tokens || 0).toLocaleString()}</strong> tok</span>
-            <span>Total: <strong className="text-cyan-300">{Number(results.usage.total_tokens || 0).toLocaleString()}</strong> tok</span>
+            <span>Prompt: <strong className="text-foreground">{Number(results.usage.prompt_tokens || 0).toLocaleString()}</strong> tok</span>
+            <span>Completion: <strong className="text-foreground">{Number(results.usage.completion_tokens || 0).toLocaleString()}</strong> tok</span>
+            <span>Total: <strong className="text-cyan-600 dark:text-cyan-300">{Number(results.usage.total_tokens || 0).toLocaleString()}</strong> tok</span>
           </div>
           {results.usage.total_cost !== undefined && (
-            <span>Est. Cost: <strong className="text-emerald-400">${Number(results.usage.total_cost).toFixed(4)}</strong></span>
+            <span>Est. Cost: <strong className="text-emerald-600 dark:text-emerald-400">${Number(results.usage.total_cost).toFixed(4)}</strong></span>
           )}
         </div>
       )}

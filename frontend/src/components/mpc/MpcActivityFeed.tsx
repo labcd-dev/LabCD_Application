@@ -23,34 +23,34 @@ export function MpcActivityFeed({ events }: MpcActivityFeedProps) {
       case 'evaluator':
         return 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10'
       default:
-        return 'text-slate-400 border-white/10 bg-white/5'
+        return 'text-muted-text border-border bg-surface-muted'
     }
   }
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#11161d] p-5 shadow-xl text-[#eef2f8]">
-      <div className="flex items-center justify-between border-b border-white/10 pb-3 mb-3">
+    <div className="rounded-2xl border border-border bg-surface-elevated p-5 shadow-sm text-foreground">
+      <div className="flex items-center justify-between border-b border-border pb-3 mb-3">
         <div className="flex items-center gap-2">
-          <Terminal className="size-4 text-purple-400" />
-          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300">
+          <Terminal className="size-4 text-purple-500 dark:text-purple-400" />
+          <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">
             Agent Reasoning Stream
           </h3>
         </div>
-        <span className="rounded-full bg-white/5 px-2 py-0.5 text-[10px] font-mono text-slate-400">
+        <span className="rounded-full bg-surface-muted px-2 py-0.5 text-[10px] font-mono text-muted">
           {displayItems.length} messages
         </span>
       </div>
 
       <div className="max-h-[580px] lg:max-h-[660px] overflow-y-auto space-y-2.5 pr-1 text-xs">
         {displayItems.length === 0 ? (
-          <div className="py-8 text-center text-xs text-slate-500">
+          <div className="py-8 text-center text-xs text-muted">
             Awaiting multi-agent graph decisions...
           </div>
         ) : (
           displayItems.map((item, idx) => (
             <div
               key={idx}
-              className="rounded-xl border border-white/5 bg-[#0a0d12] p-3 text-xs leading-relaxed"
+              className="rounded-xl border border-border bg-surface p-3 text-xs leading-relaxed"
             >
               <div className="flex items-center justify-between mb-1.5">
                 <span
@@ -60,11 +60,11 @@ export function MpcActivityFeed({ events }: MpcActivityFeedProps) {
                 >
                   {item.stage || 'Graph'}
                 </span>
-                <span className="font-mono text-[10px] text-slate-500">
+                <span className="font-mono text-[10px] text-muted">
                   {item.ts ? new Date(item.ts * 1000).toLocaleTimeString() : ''}
                 </span>
               </div>
-              <p className="text-slate-300 font-sans text-[11.5px] whitespace-pre-wrap">{item.text}</p>
+              <p className="text-muted-text font-sans text-[11.5px] whitespace-pre-wrap">{item.text}</p>
             </div>
           ))
         )}

@@ -149,27 +149,27 @@ export function PreLaunchModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 dark:bg-black/80 p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
     >
-      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-2xl border border-white/10 bg-[#11161d] text-[#eef2f8] shadow-2xl">
+      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-2xl border border-border bg-surface-elevated text-foreground shadow-2xl overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-white/10 px-6 py-4">
+        <div className="flex items-center justify-between border-b border-border px-6 py-4">
           <div className="flex items-center gap-2">
-            <span className="flex size-8 items-center justify-center rounded-lg bg-cyan-500/10 text-cyan-400">
+            <span className="flex size-8 items-center justify-center rounded-lg bg-cyan-500/10 text-cyan-500 dark:text-cyan-400">
               <Sparkles className="size-4" />
             </span>
             <div>
-              <h2 className="text-base font-semibold text-white">
+              <h2 className="text-base font-semibold text-foreground">
                 Pre-Launch Configuration: {systemName}
                 {targetPipeline && (
-                  <span className="ml-2 text-xs font-normal text-cyan-300">
+                  <span className="ml-2 text-xs font-normal text-cyan-600 dark:text-cyan-300">
                     ({targetPipeline === 'adaptiveDesign' ? 'Adaptive' : targetPipeline === 'mpcDesign' ? 'MPC' : 'PID'})
                   </span>
                 )}
               </h2>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-muted">
                 Module-agnostic simulation settings & artifact compilation
               </p>
             </div>
@@ -177,7 +177,7 @@ export function PreLaunchModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-1.5 text-slate-400 hover:bg-white/5 hover:text-white transition-colors"
+            className="rounded-lg p-1.5 text-muted hover:bg-surface-muted hover:text-foreground transition-colors"
           >
             <X className="size-4" />
           </button>
@@ -186,14 +186,14 @@ export function PreLaunchModal({
         {/* Body */}
         <div className="overflow-y-auto px-6 py-5 space-y-5">
           {error && (
-            <div className="flex items-start gap-2.5 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-300">
+            <div className="flex items-start gap-2.5 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-600 dark:text-rose-300">
               <AlertCircle className="size-4 shrink-0 mt-0.5" />
               <span>{error}</span>
             </div>
           )}
 
           {warnings.length > 0 && (
-            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-300 space-y-1">
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-600 dark:text-amber-300 space-y-1">
               <div className="font-semibold flex items-center gap-1.5">
                 <AlertCircle className="size-3.5" /> Compiler warnings:
               </div>
@@ -215,7 +215,7 @@ export function PreLaunchModal({
                 onChange={(e) => setTSim(parseFloat(e.target.value) || 0)}
                 className={fieldInput}
               />
-              <span className="text-[11px] text-slate-400">Horizon for closed-loop evaluation</span>
+              <span className="text-[11px] text-muted">Horizon for closed-loop evaluation</span>
             </div>
 
             <div>
@@ -228,7 +228,7 @@ export function PreLaunchModal({
                 onChange={(e) => setDt(parseFloat(e.target.value) || 0)}
                 className={fieldInput}
               />
-              <span className="text-[11px] text-slate-400">Step size for RK4 / OSQP solver</span>
+              <span className="text-[11px] text-muted">Step size for RK4 / OSQP solver</span>
             </div>
 
             <div className="sm:col-span-2">
@@ -239,10 +239,10 @@ export function PreLaunchModal({
                     key={m}
                     type="button"
                     onClick={() => setMode(m)}
-                    className={`rounded-lg border px-3 py-2 text-xs font-semibold transition-all ${
+                    className={`rounded-lg border px-3 py-2 text-xs font-semibold transition-all cursor-pointer ${
                       mode === m
-                        ? 'border-cyan-400 bg-cyan-500/15 text-cyan-300 shadow-sm'
-                        : 'border-white/10 bg-white/5 text-slate-300 hover:border-white/20'
+                        ? 'border-cyan-500 bg-cyan-500/10 text-cyan-600 dark:bg-cyan-500/20 dark:text-cyan-300 shadow-sm'
+                        : 'border-border bg-surface text-muted-text hover:bg-surface-hover hover:border-border hover:text-foreground'
                     }`}
                   >
                     {m === 'reg' ? 'Regulation (Constant)' : m === 'sin' ? 'Sine Wave' : 'Pulse / Step'}
@@ -295,7 +295,7 @@ export function PreLaunchModal({
                 placeholder="0, 0, 0, 0"
                 className={`${fieldInput} font-mono text-xs`}
               />
-              <span className="text-[11px] text-slate-400">
+              <span className="text-[11px] text-muted">
                 Initial condition for simulation states at t=0
               </span>
             </div>
@@ -309,21 +309,21 @@ export function PreLaunchModal({
                 placeholder="0, 0, 0, 0"
                 className={`${fieldInput} font-mono text-xs`}
               />
-              <span className="text-[11px] text-slate-400">
+              <span className="text-[11px] text-muted">
                 Setpoint destination for state regulation
               </span>
             </div>
           </div>
 
           {/* Reference Signal Preview Toggle */}
-          <div className="rounded-xl border border-white/10 bg-black/20 p-3.5">
+          <div className="rounded-xl border border-border bg-surface-muted p-3.5">
             <button
               type="button"
               onClick={() => setShowPreview(!showPreview)}
-              className="flex w-full items-center justify-between text-xs font-semibold text-slate-300 hover:text-white"
+              className="flex w-full items-center justify-between text-xs font-semibold text-muted-text hover:text-foreground"
             >
               <span className="flex items-center gap-1.5">
-                <CheckCircle2 className="size-3.5 text-cyan-400" />
+                <CheckCircle2 className="size-3.5 text-cyan-500 dark:text-cyan-400" />
                 Preview Reference Trajectory Signal
               </span>
               {showPreview ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
@@ -331,11 +331,11 @@ export function PreLaunchModal({
 
             {showPreview && (
               <div className="mt-3">
-                <svg viewBox="0 0 300 100" className="w-full h-24 rounded-lg bg-[#0a0d12] border border-white/5">
-                  <line x1="0" y1="50" x2="300" y2="50" stroke="rgba(255,255,255,0.1)" strokeDasharray="3 3" />
-                  <path d={pathD} fill="none" stroke="#35c9d6" strokeWidth="2" />
+                <svg viewBox="0 0 300 100" className="w-full h-24 rounded-lg bg-surface border border-border">
+                  <line x1="0" y1="50" x2="300" y2="50" stroke="var(--app-border)" strokeDasharray="3 3" />
+                  <path d={pathD} fill="none" stroke="#06b6d4" strokeWidth="2" />
                 </svg>
-                <div className="mt-1 flex justify-between text-[10px] text-slate-500 font-mono">
+                <div className="mt-1 flex justify-between text-[10px] text-muted font-mono">
                   <span>t = 0 s</span>
                   <span>t = {tSim} s</span>
                 </div>
@@ -345,7 +345,7 @@ export function PreLaunchModal({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 border-t border-white/10 px-6 py-4">
+        <div className="flex items-center justify-end gap-3 border-t border-border px-6 py-4">
           <button
             type="button"
             onClick={onClose}
@@ -358,7 +358,7 @@ export function PreLaunchModal({
             type="button"
             onClick={handleSave}
             disabled={submitting}
-            className={`${btnBase} ${btnCompact} ${btnPrimary} flex items-center gap-2 bg-gradient-to-r from-cyan-500 to-teal-500 border-none text-black font-semibold`}
+            className={`${btnBase} ${btnCompact} ${btnPrimary} flex items-center gap-2 border-none font-semibold text-white shadow-md`}
           >
             {submitting ? (
               <>

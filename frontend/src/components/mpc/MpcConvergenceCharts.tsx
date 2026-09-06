@@ -104,28 +104,28 @@ function MiniChart({
     : deltaPct !== null && deltaPct >= 0
 
   return (
-    <div className="card-alive group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-white/10 bg-[#0f141d]/90 p-4.5 shadow-lg backdrop-blur-sm transition-all hover:border-white/20">
+    <div className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-border bg-surface-elevated p-4.5 shadow-sm transition-all hover:border-border-strong">
       {/* Top Header */}
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2">
           <div
-            className="flex size-7 items-center justify-center rounded-lg border border-white/10"
+            className="flex size-7 items-center justify-center rounded-lg border border-border"
             style={{ backgroundColor: `${color}18`, color }}
           >
             <Icon className="size-3.5" />
           </div>
           <div>
-            <h4 className="text-xs font-bold text-white tracking-wide">{title}</h4>
-            <span className="text-[10px] text-slate-400">{subtitle}</span>
+            <h4 className="text-xs font-bold text-foreground tracking-wide">{title}</h4>
+            <span className="text-[10px] text-muted-text">{subtitle}</span>
           </div>
         </div>
 
         <div className="text-right">
-          <div className="font-mono text-sm font-bold text-white">
+          <div className="font-mono text-sm font-bold text-foreground">
             {latestVal !== undefined ? (
               <>
                 {latestVal >= 1000 ? latestVal.toFixed(1) : latestVal.toFixed(4)}
-                {unit && <span className="ml-0.5 text-[10px] text-slate-400 font-normal">{unit}</span>}
+                {unit && <span className="ml-0.5 text-[10px] text-muted-text font-normal">{unit}</span>}
               </>
             ) : (
               '--'
@@ -134,7 +134,7 @@ function MiniChart({
           {deltaPct !== null && validData.length > 1 && (
             <span
               className={`inline-block text-[10px] font-mono font-medium ${
-                isImproved ? 'text-emerald-400' : 'text-amber-400'
+                isImproved ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'
               }`}
             >
               {deltaPct > 0 ? `+${deltaPct.toFixed(1)}%` : `${deltaPct.toFixed(1)}%`}
@@ -159,9 +159,9 @@ function MiniChart({
             </defs>
 
             {/* Grid horizontal dashed lines */}
-            <line x1="20" y1="20" x2="360" y2="20" stroke="rgba(255,255,255,0.06)" strokeDasharray="3 3" />
-            <line x1="20" y1="80" x2="360" y2="80" stroke="rgba(255,255,255,0.06)" strokeDasharray="3 3" />
-            <line x1="20" y1="140" x2="360" y2="140" stroke="rgba(255,255,255,0.08)" />
+            <line x1="20" y1="20" x2="360" y2="20" stroke="var(--app-border)" strokeDasharray="3 3" />
+            <line x1="20" y1="80" x2="360" y2="80" stroke="var(--app-border)" strokeDasharray="3 3" />
+            <line x1="20" y1="140" x2="360" y2="140" stroke="var(--app-border)" />
 
             {/* Area fill */}
             {areaD && <path d={areaD} fill={`url(#grad-${title.replace(/\s+/g, '')})`} />}
@@ -183,7 +183,7 @@ function MiniChart({
                 cx={pt.x}
                 cy={pt.y}
                 r={hoverIdx === i ? 4.5 : 2.5}
-                fill="#0f141d"
+                fill="var(--app-surface-elevated)"
                 stroke={color}
                 strokeWidth={hoverIdx === i ? 2.5 : 1.5}
                 className="cursor-pointer transition-all"
@@ -199,7 +199,7 @@ function MiniChart({
                   y1="10"
                   x2={points[hoverIdx].x}
                   y2="150"
-                  stroke="rgba(255,255,255,0.3)"
+                  stroke="var(--app-border)"
                   strokeDasharray="2 2"
                 />
                 <circle cx={points[hoverIdx].x} cy={points[hoverIdx].y} r="5" fill={color} />
@@ -207,7 +207,7 @@ function MiniChart({
             )}
           </svg>
         ) : (
-          <div className="flex h-full items-center justify-center text-xs text-slate-500">
+          <div className="flex h-full items-center justify-center text-xs text-muted">
             Awaiting iteration data...
           </div>
         )}
@@ -215,7 +215,7 @@ function MiniChart({
         {/* Hover Pill */}
         {hoverIdx !== null && points[hoverIdx] && (
           <div
-            className="pointer-events-none absolute -top-1 rounded border border-white/20 bg-slate-900/95 px-2 py-0.5 text-[10.5px] font-mono text-white shadow-xl backdrop-blur-md"
+            className="pointer-events-none absolute -top-1 rounded border border-border bg-surface-elevated/95 px-2 py-0.5 text-[10.5px] font-mono text-foreground shadow-md backdrop-blur-md"
             style={{
               left: `${Math.min(Math.max((points[hoverIdx].x / 380) * 100, 10), 85)}%`,
               transform: 'translateX(-50%)',
@@ -227,7 +227,7 @@ function MiniChart({
       </div>
 
       {/* Axis Footer */}
-      <div className="mt-1 flex items-center justify-between text-[9.5px] font-mono text-slate-500">
+      <div className="mt-1 flex items-center justify-between text-[9.5px] font-mono text-muted">
         <span>Min: {minVal.toFixed(3)}</span>
         <span>{points.length} rounds logged</span>
         <span>Max: {maxVal.toFixed(3)}</span>
@@ -328,22 +328,22 @@ export function MpcConvergenceCharts({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-bold text-white flex items-center gap-2">
-            <Activity className="size-4 text-purple-400" />
+          <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+            <Activity className="size-4 text-purple-500" />
             7-Channel Optimization Convergence Suite
           </h3>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-muted-text">
             Real-time trajectory of cost objectives, transient dynamics, control horizon, and sample time adaptations
           </p>
         </div>
 
         <div className="flex items-center gap-2">
           {bestMse !== undefined && bestMse !== null && (
-            <span className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-mono text-emerald-400">
+            <span className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-mono text-emerald-600 dark:text-emerald-400">
               Optimal MSE: {bestMse.toFixed(5)}
             </span>
           )}
-          <span className="rounded-md border border-purple-500/30 bg-purple-500/10 px-2.5 py-1 text-[11px] font-mono text-purple-300">
+          <span className="rounded-md border border-purple-500/30 bg-purple-500/10 px-2.5 py-1 text-[11px] font-mono text-purple-600 dark:text-purple-300">
             Active Metric: L2 Quadratic Objective
           </span>
         </div>

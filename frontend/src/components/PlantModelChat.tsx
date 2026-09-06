@@ -62,9 +62,10 @@ interface PlantModelChatProps {
   models: string[]
   onModelChange: (model: string) => void
   disabled?: boolean
-  onUseModel: (result: PlantModelResult) => void
+  onUseModel: (result: PlantModelResult, conversationId?: number | null) => void
   continueLabel?: string
   continueIcon?: ReactNode
+  isModalOpen?: boolean
 }
 
 function userInitials(user: { display_name: string | null; email: string } | null): string {
@@ -90,6 +91,7 @@ export function PlantModelChat({
   onUseModel,
   continueLabel = 'Configure & launch →',
   continueIcon,
+  isModalOpen = false,
 }: PlantModelChatProps) {
   const { user } = useAuth()
   const initials = userInitials(user)
@@ -270,7 +272,8 @@ export function PlantModelChat({
 
   const handleLaunch = () => {
     if (!finalResult) return
-    onUseModel(finalResult)
+    setToastOpen(false)
+    onUseModel(finalResult, conversationId)
   }
 
   const handleDownload = () => {
@@ -322,11 +325,11 @@ export function PlantModelChat({
               </div>
 
               {/* Title & Subtitle */}
-              <h1 className="mb-2 text-2xl font-bold tracking-tight text-white sm:text-3xl lg:text-[34px] leading-tight">
+              <h1 className="mb-2 text-2xl font-bold tracking-tight text-foreground sm:text-3xl lg:text-[34px] leading-tight">
                 What physical system do you want to model?
               </h1>
-              <p className="mx-auto mb-6 max-w-lg text-[13.5px] leading-relaxed text-slate-400">
-                Describe your plant dynamics in plain physics, transfer functions, or differential equations. AgentPlant derives continuous ODEs and prepares hand-off for Studio.
+              <p className="mx-auto mb-6 max-w-lg text-[13.5px] leading-relaxed text-muted-text">
+                Describe your plant dynamics in plain physics, transfer functions, or differential equations. AgentPlant derives continuous ODEs and prepares hand-off for Control Design.
               </p>
 
               {error && (
@@ -336,11 +339,11 @@ export function PlantModelChat({
               )}
 
               {/* Elevated Prompt Box */}
-              <div className="card-alive w-full rounded-2xl border border-white/10 bg-[#11161d]/90 p-3 sm:p-4 shadow-[0_12px_36px_rgba(0,0,0,0.45)] backdrop-blur-xl transition-all duration-200 focus-within:border-primary/60 focus-within:ring-1 focus-within:ring-primary/30 focus-within:shadow-[0_0_24px_rgba(99,102,241,0.25)]">
+              <div className="w-full rounded-2xl border border-border bg-surface-elevated p-3 sm:p-4 shadow-sm backdrop-blur-xl transition-all duration-200 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 dark:border-white/10 dark:bg-[#11161d]/90">
                 <textarea
                   ref={landingInputRef}
                   rows={2}
-                  className="max-h-40 w-full resize-none border-none bg-transparent px-2 py-1 font-inherit text-[14.5px] leading-relaxed text-white outline-none placeholder:text-slate-500"
+                  className="max-h-40 w-full resize-none border-none bg-transparent px-2 py-1 font-inherit text-[14.5px] leading-relaxed text-foreground outline-none placeholder:text-muted"
                   placeholder="e.g. A nonlinear magnetic levitation ball with coil inductance, or a buck-boost converter stepping 12V to 48V with inductor ESR..."
                   value={input}
                   disabled={chatDisabled}
@@ -350,7 +353,7 @@ export function PlantModelChat({
                   }}
                   onKeyDown={onComposerKeyDown}
                 />
-                <div className="mt-2 flex flex-wrap items-center justify-between gap-3 border-t border-white/5 pt-2.5">
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-3 border-t border-border/60 dark:border-white/5 pt-2.5">
                   <div className="flex items-center gap-2">
                     <ComposerModelPicker
                       models={models}
@@ -360,7 +363,7 @@ export function PlantModelChat({
                     />
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className="hidden sm:inline text-[11px] font-mono text-slate-500">
+                    <span className="hidden sm:inline text-[11px] font-mono text-muted">
                       ↵ Enter to send
                     </span>
                     <button
@@ -386,7 +389,7 @@ export function PlantModelChat({
               {/* Recent Systems Quick Shelf (if any) */}
               {recentConversations.length > 0 && (
                 <div className="mt-4 flex flex-wrap items-center justify-center gap-2 text-xs">
-                  <span className="text-[11px] text-slate-500 flex items-center gap-1 font-medium">
+                  <span className="text-[11px] text-muted flex items-center gap-1 font-medium">
                     <Clock className="size-3" /> Recent:
                   </span>
                   {recentConversations.slice(0, 3).map((c) => (
@@ -394,12 +397,12 @@ export function PlantModelChat({
                       key={c.id}
                       type="button"
                       onClick={() => void openConversation(c.id)}
-                      className="rounded-lg border border-white/[0.08] bg-white/[0.02] hover:bg-white/[0.06] hover:border-primary/30 px-2.5 py-1 text-[11.5px] text-slate-300 hover:text-white transition-colors truncate max-w-[200px]"
+                      className="rounded-lg border border-border bg-surface-muted hover:bg-surface-hover hover:border-primary/40 px-2.5 py-1 text-[11.5px] text-foreground transition-colors truncate max-w-[200px] dark:border-white/[0.08] dark:bg-white/[0.02] dark:hover:bg-white/[0.06] dark:text-slate-300"
                     >
                       {c.system_name || c.title || 'Untitled system'}
                     </button>
                   ))}
-                  <Link to="/case-studies" className="text-[11.5px] text-primary/80 hover:text-primary hover:underline ml-1">
+                  <Link to="/case-studies" className="text-[11.5px] text-primary hover:underline ml-1 font-medium">
                     All case studies →
                   </Link>
                 </div>
@@ -408,10 +411,10 @@ export function PlantModelChat({
               {/* Intermediate Archetype Grid (2x2) */}
               <div className="mt-7 w-full text-left">
                 <div className="flex items-center justify-between mb-2.5 px-0.5">
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-muted">
                     Or start from an engineering archetype
                   </span>
-                  <span className="text-[11px] text-slate-500 font-mono hidden sm:inline">
+                  <span className="text-[11px] text-muted font-mono hidden sm:inline">
                     Click to load prompt
                   </span>
                 </div>
@@ -420,22 +423,22 @@ export function PlantModelChat({
                     <div
                       key={arch.id}
                       onClick={() => void sendMessage(arch.prompt)}
-                      className="card-alive group relative flex flex-col justify-between rounded-xl border border-white/[0.08] bg-[#11161d]/75 hover:bg-[#161d26] p-3.5 transition-all duration-200 cursor-pointer overflow-hidden"
+                      className="group relative flex flex-col justify-between rounded-xl border border-border bg-surface-elevated hover:bg-surface-hover hover:border-primary/40 p-3.5 transition-all duration-200 cursor-pointer overflow-hidden shadow-sm dark:border-white/[0.08] dark:bg-[#11161d]/75 dark:hover:bg-[#161d26]"
                     >
                       <div className="pointer-events-none absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-primary/50 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
                       <div>
                         <div className="flex items-center justify-between gap-2 mb-1">
-                          <span className="text-[10.5px] font-medium text-slate-400">
+                          <span className="text-[10.5px] font-medium text-muted">
                             {arch.category}
                           </span>
-                          <span className="rounded border border-white/[0.06] bg-white/[0.04] px-1.5 py-0.5 text-[9.5px] font-mono text-slate-300">
+                          <span className="rounded border border-border bg-surface-muted px-1.5 py-0.5 text-[9.5px] font-mono text-muted-text dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
                             {arch.badge}
                           </span>
                         </div>
-                        <h3 className="text-[13px] font-semibold text-white group-hover:text-primary transition-colors">
+                        <h3 className="text-[13px] font-semibold text-foreground group-hover:text-primary transition-colors">
                           {arch.title}
                         </h3>
-                        <p className="mt-1 text-[11.5px] text-slate-400 line-clamp-1 leading-snug">
+                        <p className="mt-1 text-[11.5px] text-muted-text line-clamp-1 leading-snug dark:text-slate-400">
                           {arch.desc}
                         </p>
                       </div>
@@ -445,13 +448,13 @@ export function PlantModelChat({
               </div>
 
               {/* Bottom Subtle Navigation */}
-              <div className="mt-6 text-[12px] text-slate-500">
-                Already have dynamics files?{' '}
+              <div className="mt-6 text-[12px] text-muted">
+                Already have benchmark systems?{' '}
                 <Link
-                  to="/studio"
+                  to="/case-studies"
                   className="font-medium text-primary hover:underline"
                 >
-                  Upload in Studio →
+                  Browse Case Studies →
                 </Link>
               </div>
             </div>
@@ -669,34 +672,36 @@ export function PlantModelChat({
       </div>
 
       {/* Toast */}
-      <div
-        className={`fixed bottom-[26px] left-1/2 z-[500] flex items-center gap-3.5 rounded-xl border border-border bg-surface-muted px-4 py-3.5 shadow-[0_16px_50px_rgba(0,0,0,0.5)] transition-all duration-250 ${
-          toastOpen
-            ? 'pointer-events-auto translate-x-[-50%] translate-y-0 opacity-100'
-            : 'pointer-events-none translate-x-[-50%] translate-y-5 opacity-0'
-        }`}
-      >
-        <div className="grid size-[30px] shrink-0 place-items-center rounded-lg bg-[var(--app-status-success-bg)] text-[var(--app-status-success-text)]">
-          <Check className="size-[15px]" strokeWidth={2.5} aria-hidden />
+      {!isModalOpen && (
+        <div
+          className={`fixed bottom-[26px] left-1/2 z-40 flex items-center gap-3.5 rounded-xl border border-border bg-surface-muted px-4 py-3.5 shadow-[0_16px_50px_rgba(0,0,0,0.5)] transition-all duration-250 ${
+            toastOpen
+              ? 'pointer-events-auto translate-x-[-50%] translate-y-0 opacity-100'
+              : 'pointer-events-none translate-x-[-50%] translate-y-5 opacity-0'
+          }`}
+        >
+          <div className="grid size-[30px] shrink-0 place-items-center rounded-lg bg-[var(--app-status-success-bg)] text-[var(--app-status-success-text)]">
+            <Check className="size-[15px]" strokeWidth={2.5} aria-hidden />
+          </div>
+          <div>
+            <div className="text-[13px] font-semibold text-foreground">Ready for Control Design</div>
+            <div className="text-xs text-muted">{finalResult?.system_name ?? 'Plant model'}</div>
+          </div>
+          <div className="ml-2 flex gap-2">
+            <Link to={caseStudiesHref} className={`${btnBase} ${btnCompact}`}>
+              Library
+            </Link>
+            <button
+              type="button"
+              className={`${btnPrimary} ${btnCompact}`}
+              onClick={handleLaunch}
+            >
+              {continueLabel}
+              {continueIcon}
+            </button>
+          </div>
         </div>
-        <div>
-          <div className="text-[13px] font-semibold text-foreground">Ready for Studio</div>
-          <div className="text-xs text-muted">{finalResult?.system_name ?? 'Plant model'}</div>
-        </div>
-        <div className="ml-2 flex gap-2">
-          <Link to={caseStudiesHref} className={`${btnBase} ${btnCompact}`}>
-            Library
-          </Link>
-          <button
-            type="button"
-            className={`${btnPrimary} ${btnCompact}`}
-            onClick={handleLaunch}
-          >
-            {continueLabel}
-            {continueIcon}
-          </button>
-        </div>
-      </div>
+      )}
     </div>
   )
 }

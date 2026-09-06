@@ -353,9 +353,123 @@ class PlantCompiler:
 
         return ValidationResult(ok=not errors, errors=errors, warnings=warnings)
 
+    def infer_metadata(
+        self,
+        plant_output: dict,
+        pre_launch: dict | None = None,
+    ) -> Dict[str, Any]:
+        """Synthesize a complete metadata dict when metadata is omitted by legacy LLM agent."""
+        existing = plant_output.get("metadata")
+        if isinstance(existing, dict) and existing.get("states"):
+            return existing
+
+        user_code = sanitize_python_code(plant_output.get("python_code") or "")
+        system_name = plant_output.get("system_name") or "System"
+
+        # 1. Infer number of states
+        inferred_n_states = 0
+        x_indices = [int(m) for m in re.findall(r"x\[(\d+)\]", user_code)]
+        if x_indices:
+            inferred_n_states = max(x_indices) + 1
+
+        if pre_launch and isinstance(pre_launch.get("initial_state"), list):
+            pl_len = len(pre_launch["initial_state"])
+            if pl_len > 0:
+                inferred_n_states = max(inferred_n_states, pl_len)
+
+        # Dynamic probe if needed
+        if inferred_n_states == 0:
+            try:
+                probe_loc = {"np": np, "numpy": np}
+                exec(user_code, probe_loc)
+                dyn_fn = probe_loc.get("dynamics")
+                if callable(dyn_fn):
+                    test_x = np.zeros(10)
+                    try:
+                        out = dyn_fn(0.0, test_x, 0.0)
+                        out_size = np.asarray(out).size
+                        if out_size > 0:
+                            inferred_n_states = out_size
+                    except TypeError:
+                        out = dyn_fn(0.0, test_x, np.zeros(1))
+                        out_size = np.asarray(out).size
+                        if out_size > 0:
+                            inferred_n_states = out_size
+            except Exception:
+                pass
+
+        n_states = max(1, inferred_n_states)
+        states = [f"x{i+1}" for i in range(n_states)]
+        state_meanings = [f"State {i+1}" for i in range(n_states)]
+
+        # 2. Infer inputs
+        u_indices = [int(m) for m in re.findall(r"u\[(\d+)\]", user_code)]
+        if u_indices:
+            n_inputs = max(u_indices) + 1
+            inputs = [f"u{i+1}" for i in range(n_inputs)]
+        elif re.search(r"\bu\b", user_code):
+            inputs = ["u"]
+        else:
+            inputs = ["u"]
+
+        # 3. Outputs
+        outputs = [states[0]] if states else ["x1"]
+
+        # 4. State equations (RHS expressions parseable by sympy)
+        parsed_eqs: List[str] = []
+        try:
+            clean_body = re.sub(r"\bnp\.", "", user_code)
+            var_map: Dict[str, str] = {}
+            for line in clean_body.splitlines():
+                line = line.strip()
+                m = re.match(r"^([a-zA-Z_]\w*)\s*=\s*(.+)$", line)
+                if m:
+                    var_name, expr = m.group(1), m.group(2)
+                    for xi in range(n_states):
+                        expr = re.sub(rf"\bx\[{xi}\]", f"x{xi+1}", expr)
+                    for ui in range(len(inputs)):
+                        expr = re.sub(rf"\bu\[{ui}\]", inputs[ui], expr)
+                    var_map[var_name] = expr
+
+            for i in range(n_states):
+                cand = None
+                for key in (f"dx{i}", f"dx_{i+1}", f"x{i}_dot", f"dx{i+1}"):
+                    if key in var_map:
+                        cand = var_map[key]
+                        break
+                if cand:
+                    parsed_eqs.append(cand)
+        except Exception:
+            pass
+
+        if len(parsed_eqs) == n_states:
+            state_equations = parsed_eqs
+        else:
+            state_equations = []
+            for i in range(n_states):
+                if i < n_states - 1:
+                    state_equations.append(f"x{i+2}")
+                else:
+                    state_equations.append(f"-x{n_states} + {inputs[0]}")
+
+        return {
+            "states": states,
+            "state_meanings": state_meanings,
+            "inputs": inputs,
+            "outputs": outputs,
+            "state_equations": state_equations,
+            "parameters": {},
+            "system_type": "SISO" if len(inputs) <= 1 and len(outputs) <= 1 else "MIMO",
+            "assumptions": ["Continuous-time state-space dynamics"],
+        }
+
     def generate_mpc_plugin(self, plant_output: dict, pre_launch: dict) -> str:
         """Return the full .py source for an AgentMPC BaseDynamics plugin."""
         meta = plant_output.get("metadata") or {}
+        if not meta or not meta.get("states"):
+            meta = self.infer_metadata(plant_output, pre_launch)
+            plant_output["metadata"] = meta
+
         system_name = plant_output.get("system_name") or "System"
         python_code = plant_output.get("python_code") or ""
         class_base = _safe_class_name(system_name)
@@ -475,6 +589,10 @@ class {class_name}(BaseDynamics):
     def generate_adaptive_spec(self, plant_output: dict, pre_launch: dict) -> dict:
         """Return a system_spec-compatible dict for AgentAdaptive."""
         meta = plant_output.get("metadata") or {}
+        if not meta or not meta.get("states"):
+            meta = self.infer_metadata(plant_output, pre_launch)
+            plant_output["metadata"] = meta
+
         system_name = plant_output.get("system_name") or "System"
 
         states = list(meta.get("states") or [])
@@ -525,6 +643,9 @@ class {class_name}(BaseDynamics):
         """Validate, generate both outputs, return artifact handle (no I/O)."""
         result = self.validate(plant_output)
         result.raise_if_invalid()
+
+        if not plant_output.get("metadata") or not plant_output["metadata"].get("states"):
+            plant_output["metadata"] = self.infer_metadata(plant_output, pre_launch)
 
         system_name = plant_output["system_name"]
         short = _short_hash(
@@ -624,17 +745,35 @@ def validate_pre_launch(pre_launch: dict, metadata: dict) -> ValidationResult:
         errors.append("solver_sample_time must be <= total_simulation_time / 100")
 
     x0 = pre_launch.get("initial_state")
-    if not isinstance(x0, list) or len(x0) != n:
-        errors.append(f"initial_state must be a list of length {n}")
-
     target = pre_launch.get("default_target")
-    if not isinstance(target, list) or len(target) != n:
-        errors.append(f"default_target must be a list of length {n}")
+
+    if not isinstance(x0, list):
+        errors.append("initial_state must be a list")
+    elif not all(isinstance(v, (int, float)) for v in x0):
+        errors.append("initial_state elements must be numeric")
+
+    if not isinstance(target, list):
+        errors.append("default_target must be a list")
+    elif not all(isinstance(v, (int, float)) for v in target):
+        errors.append("default_target elements must be numeric")
+
+    if n > 0:
+        if isinstance(x0, list) and len(x0) != n:
+            errors.append(f"initial_state must be a list of length {n}")
+        if isinstance(target, list) and len(target) != n:
+            errors.append(f"default_target must be a list of length {n}")
+    else:
+        if isinstance(x0, list) and isinstance(target, list) and len(x0) != len(target):
+            errors.append(
+                f"initial_state length ({len(x0)}) must match default_target length ({len(target)})"
+            )
 
     outputs = metadata.get("outputs") or []
-    state_set = set(states)
-    for o in outputs:
-        if o not in state_set:
-            errors.append(f"output {o!r} not in states")
+    if states:
+        state_set = set(states)
+        for o in outputs:
+            if o not in state_set:
+                errors.append(f"output {o!r} not in states")
 
     return ValidationResult(ok=not errors, errors=errors)
+

@@ -109,7 +109,7 @@ export function LaunchModuleModal({
           <p className="mb-[18px] text-[12.5px] text-muted">{subtitle}</p>
         ) : (
           <p className="mb-[18px] text-[12.5px] text-muted">
-            Choose a design module, then launch Studio.
+            Choose a design module, then launch controller.
           </p>
         )}
 
@@ -176,7 +176,7 @@ export function LaunchModuleModal({
               Launching…
             </>
           ) : (
-            'Launch studio →'
+            'Launch Controller →'
           )}
         </button>
         <button

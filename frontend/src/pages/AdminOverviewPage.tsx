@@ -51,7 +51,7 @@ export function AdminOverviewPage() {
       label: 'Total users',
       value: loading ? '—' : String(users.length),
       icon: Users,
-      hint: 'Accounts on this studio',
+      hint: 'Accounts on this platform',
     },
     {
       label: 'Active',

@@ -13,14 +13,16 @@ export function DesignPage() {
   const pipeline = usePipeline()
   const [models, setModels] = useState<string[]>(['gpt-4o', 'gpt-4o-mini'])
   const [activeResult, setActiveResult] = useState<PlantModelResult | null>(null)
+  const [conversationId, setConversationId] = useState<number | null>(null)
   const [isPreLaunchOpen, setIsPreLaunchOpen] = useState(false)
 
   useEffect(() => {
     healthApi.models().then((res) => setModels(res.llm_models)).catch(() => {})
   }, [])
 
-  const handleUseModel = (result: PlantModelResult) => {
+  const handleUseModel = (result: PlantModelResult, convId?: number | null) => {
     setActiveResult(result)
+    setConversationId(convId ?? null)
     setIsPreLaunchOpen(true)
   }
 
@@ -30,7 +32,7 @@ export function DesignPage() {
     pipeline.setFile(`${safeName}.py`, 'python', activeResult.python_code)
     sessionStorage.setItem('labcd_last_artifact_id', artifactId)
     sessionStorage.setItem('labcd_last_pre_launch', JSON.stringify(preLaunch))
-    navigate(`/studio?artifact_id=${encodeURIComponent(artifactId)}`)
+    navigate(`/case-studies?artifact_id=${encodeURIComponent(artifactId)}`)
   }
 
   return (
@@ -42,6 +44,7 @@ export function DesignPage() {
         onUseModel={handleUseModel}
         continueLabel="Configure & launch →"
         continueIcon={<ArrowRight className="size-3.5" aria-hidden />}
+        isModalOpen={isPreLaunchOpen}
       />
 
       {activeResult && (
@@ -53,6 +56,7 @@ export function DesignPage() {
             python_code: activeResult.python_code,
             metadata: activeResult.metadata as Record<string, unknown>,
           }}
+          conversationId={conversationId}
           systemName={activeResult.system_name}
           onSuccess={handlePreLaunchSuccess}
         />
