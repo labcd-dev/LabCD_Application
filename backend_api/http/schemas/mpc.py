@@ -88,6 +88,7 @@ class MPCDiagnosticsResponse(BaseModel):
 
 
 class MPCSimulateRequest(BaseModel):
+    job_id: str | None = None
     dynamics: MPCDynamicsInput | None = None
     np: int = Field(default=12, ge=1, le=100)
     nc: int = Field(default=4, ge=1, le=50)

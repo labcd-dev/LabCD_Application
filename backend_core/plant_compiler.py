@@ -575,9 +575,15 @@ class {class_name}(BaseDynamics):
         u_arg = u_arr[0] if u_arr.size == 1 else u_arr
         try:
             out = dynamics(0.0, x_arr, u_arg)
-        except TypeError:
+        except (TypeError, IndexError):
             out = dynamics(0.0, x_arr, u_arr)
-        out_arr = np.atleast_1d(np.asarray(out, dtype=float)).reshape(-1)
+        if isinstance(out, (list, tuple)):
+            try:
+                out_arr = np.asarray(out, dtype=float).reshape(-1)
+            except ValueError:
+                out_arr = np.array([float(np.squeeze(v)) for v in out], dtype=float).reshape(-1)
+        else:
+            out_arr = np.atleast_1d(np.asarray(out, dtype=float)).reshape(-1)
         if out_arr.size != {n_states}:
             raise ValueError(
                 f"dynamics returned shape {{out_arr.shape}}, expected ({n_states},)"

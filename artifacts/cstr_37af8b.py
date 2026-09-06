@@ -33,13 +33,26 @@ def create_config() -> SystemConfig:
 class CstrDynamics(BaseDynamics):
     def dynamics(self, x: np.ndarray, u: np.ndarray) -> np.ndarray:
         # Always pass 1-D float arrays. AgentPlant python_code is expected to
-        # index u[0], u[1], ... (never treat u as a bare Python float).
+        # index u[0], u[1], ... or scalar u.
         x_arr = np.asarray(x, dtype=float).reshape(-1)
         u_arr = np.atleast_1d(np.asarray(u, dtype=float).reshape(-1))
-        out = dynamics(0.0, x_arr, u_arr)
-        out_arr = np.atleast_1d(np.asarray(out, dtype=float)).reshape(-1)
+        if u_arr.size == 0:
+            u_arr = np.zeros(1)
+        u_arg = u_arr[0] if u_arr.size == 1 else u_arr
+        try:
+            out = dynamics(0.0, x_arr, u_arg)
+        except (TypeError, IndexError):
+            out = dynamics(0.0, x_arr, u_arr)
+        if isinstance(out, (list, tuple)):
+            try:
+                out_arr = np.asarray(out, dtype=float).reshape(-1)
+            except ValueError:
+                out_arr = np.array([float(np.squeeze(v)) for v in out], dtype=float).reshape(-1)
+        else:
+            out_arr = np.atleast_1d(np.asarray(out, dtype=float)).reshape(-1)
         if out_arr.size != 3:
             raise ValueError(
                 f"dynamics returned shape {out_arr.shape}, expected (3,)"
             )
         return out_arr
+

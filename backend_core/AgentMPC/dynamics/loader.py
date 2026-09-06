@@ -86,7 +86,57 @@ class DynamicLoader:
                 f"create_config() must return a SystemConfig, got {type(config).__name__}"
             )
 
+        # Ensure module.dynamics is resilient to scalar/array u mismatches and inhomogeneous array outputs
+        if hasattr(module, "dynamics") and callable(module.dynamics):
+            orig_dyn = module.dynamics
+
+            def resilient_module_dynamics(t, x, u):
+                # If single-input system and u passed as 1-element array, try scalar float first
+                if isinstance(u, (np.ndarray, list)) and np.size(u) == 1:
+                    try:
+                        res = orig_dyn(t, x, float(np.asarray(u).item()))
+                        if isinstance(res, (list, tuple)):
+                            return np.array([float(np.squeeze(v)) for v in res], dtype=float)
+                        return res
+                    except (TypeError, IndexError):
+                        pass
+                res = orig_dyn(t, x, u)
+                if isinstance(res, (list, tuple)):
+                    try:
+                        return np.asarray(res, dtype=float)
+                    except ValueError:
+                        return np.array([float(np.squeeze(v)) for v in res], dtype=float)
+                return res
+
+            module.dynamics = resilient_module_dynamics
+
         dynamics_class = cls._find_dynamics_class(module, source_name)
+
+        # Also wrap dynamics_class.dynamics to ensure clean 1D float array return and handle array vs scalar u
+        orig_cls_dynamics = dynamics_class.dynamics
+
+        def resilient_class_dynamics(self, x: np.ndarray, u: np.ndarray) -> np.ndarray:
+            try:
+                out = orig_cls_dynamics(self, x, u)
+            except (ValueError, TypeError) as err:
+                u_arr = np.asarray(u, dtype=float).reshape(-1)
+                if u_arr.size == 1:
+                    try:
+                        out = orig_cls_dynamics(self, x, float(u_arr[0]))
+                    except Exception:
+                        raise err
+                else:
+                    raise err
+
+            if isinstance(out, (list, tuple)):
+                try:
+                    return np.asarray(out, dtype=float).reshape(-1)
+                except ValueError:
+                    return np.array([float(np.squeeze(v)) for v in out], dtype=float).reshape(-1)
+            return np.asarray(out, dtype=float).reshape(-1)
+
+        dynamics_class.dynamics = resilient_class_dynamics
+
         cls._validate_dynamics(dynamics_class, config, source_name)
 
         return cls(module=module, dynamics_class=dynamics_class, config=config, source_name=source_name)
@@ -120,12 +170,25 @@ class DynamicLoader:
         except Exception as e:  # noqa: BLE001
             raise DynamicsPluginError(f"Could not instantiate '{dynamics_class.__name__}': {e}") from e
 
-        x0 = np.zeros(max(1, config.n_states))
-        u0 = np.zeros(max(1, config.n_inputs))
+        # Test at default_initial_state if available, falling back to zero state
+        if (
+            config.default_initial_state is not None
+            and len(config.default_initial_state) == config.n_states
+        ):
+            x_test = np.asarray(config.default_initial_state, dtype=float)
+        else:
+            x_test = np.zeros(max(1, config.n_states))
+        u_test = np.zeros(max(1, config.n_inputs))
+
         try:
-            dx = np.asarray(instance.dynamics(x0, u0), dtype=float)
+            dx = np.asarray(instance.dynamics(x_test, u_test), dtype=float)
         except Exception as e:  # noqa: BLE001
-            raise DynamicsPluginError(f"dynamics(x, u) raised at the zero state: {e}") from e
+            # Fallback to zero state in case default_initial_state was out of bounds
+            x_test_zero = np.zeros(max(1, config.n_states))
+            try:
+                dx = np.asarray(instance.dynamics(x_test_zero, u_test), dtype=float)
+            except Exception as e2:  # noqa: BLE001
+                raise DynamicsPluginError(f"dynamics(x, u) raised at test state: {e}") from e
 
         if dx.shape != (config.n_states,):
             raise DynamicsPluginError(
@@ -133,7 +196,7 @@ class DynamicLoader:
             )
         if not np.all(np.isfinite(dx)):
             raise DynamicsPluginError(
-                "dynamics() returned non-finite values at the zero state "
+                "dynamics() returned non-finite values during validation "
                 "(check for division by zero in the model parameters)."
             )
 

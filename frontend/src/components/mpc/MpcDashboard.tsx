@@ -74,9 +74,9 @@ export function MpcDashboard({
       np: Number(p?.Np ?? p?.np ?? p?.prediction_horizon ?? job?.options?.prediction_horizon ?? 12),
       nc: Number(p?.Nc ?? p?.nc ?? p?.control_horizon ?? job?.options?.control_horizon ?? 4),
       dt: Number(p?.dt ?? p?.dt_mpc ?? job?.options?.dt_mpc ?? 0.02),
-      q: p?.Q ?? p?.q_weights ?? [10.0, 1.0],
-      r: p?.R ?? p?.r_weights ?? [0.1],
-      p_mat: p?.P ?? p?.p_weights ?? p?.Q ?? [10.0, 1.0],
+      q: p?.Q ?? p?.q_weights ?? job?.options?.q_weights,
+      r: p?.R ?? p?.r_weights ?? job?.options?.r_weights,
+      p_mat: p?.P ?? p?.p_weights ?? p?.Q ?? job?.options?.p_weights,
     }
   }, [results, job])
 
@@ -104,13 +104,13 @@ export function MpcDashboard({
     try {
       const qVal = Array.isArray(candidateParams.q)
         ? (candidateParams.q as number[])
-        : [10.0, 1.0]
+        : job?.options?.q_weights
       const rVal = Array.isArray(candidateParams.r)
         ? (candidateParams.r as number[])
-        : [0.1]
+        : job?.options?.r_weights
 
       const res = await mpcApi.simulate({
-        dynamics: job?.options?.system_name ? { plugin_id: 'example_pendulum' } : undefined,
+        job_id: job?.job_id,
         np: sandboxNp,
         nc: sandboxNc,
         dt: sandboxDt,

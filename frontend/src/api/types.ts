@@ -908,6 +908,7 @@ export interface MPCDiagnosticsResponse {
 }
 
 export interface MPCSimulateRequest {
+  job_id?: string | null
   dynamics?: MPCDynamicsInput | null
   np?: number
   nc?: number

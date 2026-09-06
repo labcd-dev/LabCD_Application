@@ -1176,7 +1176,14 @@ def simulate_manual(request: MPCSimulateRequest) -> MPCSimulateResponse:
         from backend_core.AgentMPC.mpc.config import Config
         from backend_core.AgentMPC.agents.evaluator import run_closed_loop
 
-        plugin_path = _resolve_plugin_path(request.dynamics)
+        dynamics_input = request.dynamics
+        if not dynamics_input and request.job_id:
+            from backend_api.http.services.mpc_job_store import get_mpc_store
+            record = get_mpc_store().get(request.job_id)
+            if record and record.dynamics_ref:
+                dynamics_input = record.dynamics_ref
+
+        plugin_path = _resolve_plugin_path(dynamics_input)
         plugin = DynamicLoader.load_from_path(plugin_path)
         dynamics = plugin.create_dynamics()
 
@@ -1194,9 +1201,29 @@ def simulate_manual(request: MPCSimulateRequest) -> MPCSimulateResponse:
         cfg.data.trajectory_pulse_end = float(request.trajectory_pulse_end)
         cfg.data.noise_std = float(request.noise_std)
 
-        q = request.q or [1.0] * n_states
-        r = request.r or [0.1] * n_inputs
+        if request.q:
+            q_list = list(request.q)
+            if len(q_list) < n_states:
+                q_list = q_list + [1.0] * (n_states - len(q_list))
+            elif len(q_list) > n_states:
+                q_list = q_list[:n_states]
+            q = q_list
+        else:
+            q = [1.0] * n_states
+
+        if request.r:
+            r_list = list(request.r)
+            if len(r_list) < n_inputs:
+                r_list = r_list + [0.1] * (n_inputs - len(r_list))
+            elif len(r_list) > n_inputs:
+                r_list = r_list[:n_inputs]
+            r = r_list
+        else:
+            r = [0.1] * n_inputs
+
         p = request.p or q
+        if p and len(p) != n_states:
+            p = q
 
         params = {
             "Np": request.np,
