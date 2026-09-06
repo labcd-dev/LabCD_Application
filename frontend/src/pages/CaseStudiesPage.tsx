@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Check, Loader2, Search } from 'lucide-react'
-import { plantModelApi } from '../api/endpoints'
+import { plantArtifactApi, plantModelApi } from '../api/endpoints'
 import type { PlantModelConversationSummary } from '../api/types'
 import {
   LaunchModuleModal,
@@ -20,8 +20,18 @@ const SPARK_PATHS = [
   'M2,32 C20,32 30,20 46,20 C66,20 74,16 90,16 L104,15',
 ]
 
+const SPARK_ENDPOINTS = [
+  { x: 104, y: 12 },
+  { x: 104, y: 16 },
+  { x: 104, y: 15 },
+]
+
 function sparkPath(seed: number): string {
   return SPARK_PATHS[Math.abs(seed) % SPARK_PATHS.length]
+}
+
+function sparkEndpoint(seed: number): { x: number; y: number } {
+  return SPARK_ENDPOINTS[Math.abs(seed) % SPARK_ENDPOINTS.length]
 }
 
 function relativeUpdatedAt(value: string): string {
@@ -121,8 +131,27 @@ export function CaseStudiesPage() {
       if (detail.llm_model) {
         pipeline.setModel(detail.llm_model)
       }
+      if (selected === 'adaptiveDesign' || selected === 'mpcDesign') {
+        try {
+          const artifacts = await plantArtifactApi.listArtifacts()
+          const matched = artifacts.find(
+            (a) => a.system_name?.trim().toLowerCase() === result.system_name.trim().toLowerCase()
+          )
+          if (matched) {
+            sessionStorage.setItem('labcd_last_artifact_id', matched.artifact_id)
+          }
+        } catch {
+          // ignore lookup errors
+        }
+      }
       setLaunchTarget(null)
-      navigate('/studio')
+      if (selected === 'adaptiveDesign') {
+        navigate('/adaptive')
+      } else if (selected === 'mpcDesign') {
+        navigate('/mpc')
+      } else {
+        navigate('/studio')
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to launch studio')
     } finally {
@@ -221,7 +250,7 @@ export function CaseStudiesPage() {
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-3.5">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(310px,1fr))] gap-3.5">
           {filtered.map((row) => {
             const name = displayName(row)
             const isComplete = row.status === 'complete'
@@ -230,62 +259,104 @@ export function CaseStudiesPage() {
             return (
               <article
                 key={row.id}
-                className={`flex flex-col gap-3 rounded-xl border bg-surface-elevated p-4 transition-[border-color,transform] duration-150 hover:-translate-y-0.5 hover:border-[color-mix(in_srgb,var(--app-foreground)_14%,transparent)] ${
+                className={`card-alive group relative flex flex-col gap-3 rounded-xl p-4 overflow-hidden ${
                   highlight
-                    ? 'border-[color-mix(in_srgb,var(--app-status-success-text)_40%,transparent)] shadow-[0_0_0_1px_color-mix(in_srgb,var(--app-status-success-text)_15%,transparent)]'
-                    : 'border-border'
+                    ? 'border-[color-mix(in_srgb,var(--app-status-success-text)_40%,transparent)] shadow-[0_0_0_1px_color-mix(in_srgb,var(--app-status-success-text)_20%,transparent)]'
+                    : ''
                 }`}
               >
+                {/* Luminous top-edge hairline */}
+                <div className="pointer-events-none absolute inset-x-0 top-0 h-[1.5px] bg-gradient-to-r from-transparent via-primary/50 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <div className="mb-0.5 truncate text-[14.5px] font-semibold text-foreground">
+                    <div className="mb-1 truncate text-[14.5px] font-semibold text-foreground group-hover:text-primary transition-colors">
                       {name}
                     </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      <span className="rounded-md border border-border-subtle bg-surface-muted px-1.5 py-0.5 text-[10.5px] font-semibold text-muted">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="inline-flex items-center gap-1.5 rounded-md border border-border-subtle bg-surface-muted/90 px-2 py-0.5 text-[10.5px] font-semibold text-muted">
+                        <span
+                          className={`inline-block size-1.5 rounded-full ${
+                            isComplete
+                              ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)] animate-[live-ping_2.4s_infinite]'
+                              : 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.8)] animate-pulse'
+                          }`}
+                        />
                         {isComplete ? 'model ready' : 'in progress'}
                       </span>
                       {isComplete && (
-                        <span className="rounded-md border border-border-subtle bg-surface-muted px-1.5 py-0.5 text-[10.5px] font-semibold text-[var(--app-status-success-text)]">
-                          tuned
+                        <span className="inline-flex items-center gap-1 rounded-md border border-[color-mix(in_srgb,var(--app-status-success-text)_28%,transparent)] bg-[color-mix(in_srgb,var(--app-status-success-text)_10%,transparent)] px-2 py-0.5 text-[10.5px] font-semibold text-[var(--app-status-success-text)] shadow-[0_0_10px_rgba(34,211,167,0.12)]">
+                          <Check className="size-2.5" strokeWidth={3} /> tuned
                         </span>
                       )}
                     </div>
                   </div>
                 </div>
 
-                <div className="h-[46px] overflow-hidden rounded-lg border border-border-subtle bg-surface-muted">
+                {/* Oscilloscope Sparkline Waveform */}
+                <div className="relative h-[48px] overflow-hidden rounded-lg border border-border-subtle bg-surface-muted/60">
                   <svg
                     viewBox="0 0 106 40"
                     preserveAspectRatio="none"
                     className="block size-full"
                     aria-hidden
                   >
+                    <defs>
+                      <linearGradient id={`spark-grad-${row.id}`} x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" stopColor="var(--app-primary)" stopOpacity="0.25" />
+                        <stop offset="100%" stopColor="var(--app-primary)" stopOpacity="0.0" />
+                      </linearGradient>
+                      <filter id={`spark-glow-${row.id}`} x="-10%" y="-10%" width="120%" height="120%">
+                        <feDropShadow dx="0" dy="0" stdDeviation="1.2" floodColor="var(--app-primary)" floodOpacity="0.6" />
+                      </filter>
+                    </defs>
+                    <path
+                      d={`${sparkPath(row.id)} L104,40 L2,40 Z`}
+                      fill={`url(#spark-grad-${row.id})`}
+                    />
                     <path
                       d={sparkPath(row.id)}
                       fill="none"
                       stroke="var(--app-primary)"
-                      strokeWidth="1.6"
+                      strokeWidth="1.8"
                       strokeLinecap="round"
+                      filter={`url(#spark-glow-${row.id})`}
+                    />
+                    <circle
+                      cx={sparkEndpoint(row.id).x}
+                      cy={sparkEndpoint(row.id).y}
+                      r="2"
+                      className="fill-primary"
+                    />
+                    <circle
+                      cx={sparkEndpoint(row.id).x}
+                      cy={sparkEndpoint(row.id).y}
+                      r="4"
+                      className="fill-primary animate-ping opacity-35"
                     />
                   </svg>
                 </div>
 
-                <div className="flex justify-between gap-2 text-[11.5px] text-muted">
-                  <span>{relativeUpdatedAt(row.updated_at)}</span>
-                  <span>{canLaunch ? 'Ready to tune' : 'Not tuned yet'}</span>
+                <div className="flex justify-between items-center gap-2 text-[11.5px] text-muted">
+                  <span className="flex items-center gap-1.5">
+                    <span className="inline-block size-1 rounded-full bg-slate-500" />
+                    {relativeUpdatedAt(row.updated_at)}
+                  </span>
+                  <span className={canLaunch ? 'text-primary font-medium' : 'text-slate-400'}>
+                    {canLaunch ? 'Ready to tune' : 'Not tuned yet'}
+                  </span>
                 </div>
 
                 <div className="mt-0.5 flex gap-2">
                   <Link
                     to={`/design?conversation=${row.id}`}
-                    className={`${btnBase} ${btnCompact} flex-1 justify-center no-underline`}
+                    className={`${btnBase} ${btnCompact} flex-1 justify-center no-underline whitespace-nowrap text-xs px-2`}
                   >
                     Continue chat
                   </Link>
                   <button
                     type="button"
-                    className={`${btnPrimary} ${btnCompact} flex-1 justify-center`}
+                    className={`${btnPrimary} ${btnCompact} flex-1 justify-center whitespace-nowrap text-xs px-2`}
                     disabled={!canLaunch}
                     title={
                       canLaunch

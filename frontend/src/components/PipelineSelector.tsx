@@ -1,8 +1,9 @@
-import { Gauge, Network } from 'lucide-react'
+import { Activity, Compass, Gauge, Network } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
+import type { PipelineType } from '../api/types'
 
-type Pipeline = 'siloDesign' | 'muloDesign'
+type Pipeline = Exclude<PipelineType, null>
 
 interface PipelineOption {
   id: Pipeline
@@ -15,17 +16,31 @@ interface PipelineOption {
 const PIPELINES: PipelineOption[] = [
   {
     id: 'siloDesign',
-    title: 'Single Loop',
-    description: 'Design one control loop with the Silo Designer pipeline.',
+    title: 'Single Loop (PID)',
+    description: 'Design one SISO control loop with the Silo Designer pipeline.',
     icon: Gauge,
     action: 'pipeline:silo',
   },
   {
     id: 'muloDesign',
-    title: 'Multi Loop',
+    title: 'Multi Loop (PID)',
     description: 'Coordinate multiple loops via Recommender, Trimmer, and MULO.',
     icon: Network,
     action: 'pipeline:mulo',
+  },
+  {
+    id: 'adaptiveDesign',
+    title: 'Adaptive Nonlinear',
+    description: 'Sliding mode & backstepping control with neural uncertainty estimation.',
+    icon: Activity,
+    action: 'pipeline:adaptive',
+  },
+  {
+    id: 'mpcDesign',
+    title: 'Agentic MPC',
+    description: 'Receding-horizon control with multi-agent auto-tuning (Actor–Critic–Juror).',
+    icon: Compass,
+    action: 'pipeline:mpc',
   },
 ]
 

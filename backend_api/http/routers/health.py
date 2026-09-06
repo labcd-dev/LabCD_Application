@@ -12,7 +12,28 @@ router = APIRouter(tags=["health"])
 
 @router.get("/health")
 def health_check() -> dict:
-    return {"status": "ok"}
+    from pathlib import Path
+    from backend_api.http.services.plant_artifact_service import default_artifacts_dir
+    from sqlalchemy import text
+
+    db_ok = False
+    try:
+        from backend_api.db.session import SessionLocal
+        with SessionLocal() as db:
+            db.execute(text("SELECT 1"))
+            db_ok = True
+    except Exception:
+        db_ok = False
+
+    art_dir = default_artifacts_dir()
+    art_ok = Path(art_dir).is_dir()
+
+    return {
+        "status": "ok" if db_ok else "degraded",
+        "database": "connected" if db_ok else "offline",
+        "artifacts_dir": str(art_dir),
+        "artifacts_accessible": art_ok,
+    }
 
 
 @router.get("/models", response_model=ModelsResponse)

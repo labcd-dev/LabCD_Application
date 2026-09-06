@@ -42,6 +42,8 @@ import { ProjectsPage } from './pages/ProjectsPage'
 import { RegisterPage } from './pages/RegisterPage'
 import { ResetPasswordPage } from './pages/ResetPasswordPage'
 import { MuloPage } from './pages/MuloPage'
+import { AdaptivePage } from './pages/AdaptivePage'
+import { MpcPage } from './pages/MpcPage'
 import { RecommenderPage } from './pages/RecommenderPage'
 import { SiloPage } from './pages/SiloPage'
 import { TrimmerPage } from './pages/TrimmerPage'
@@ -78,6 +80,8 @@ export default function App() {
                   <Route path="trimmer" element={<TrimmerPage />} />
                   <Route path="silo" element={<SiloPage />} />
                   <Route path="mulo" element={<MuloPage />} />
+                  <Route path="adaptive" element={<AdaptivePage />} />
+                  <Route path="mpc" element={<MpcPage />} />
                   <Route path="tutorials" element={<TutorialsPage />} />
                   <Route path="profile" element={<ProfilePage />} />
                   <Route path="*" element={<Navigate to="/design" replace />} />

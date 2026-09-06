@@ -118,7 +118,18 @@ def _upsert_env_file(path: Path, updates: dict[str, str]) -> None:
             handle.write(content)
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(tmp_path, path)
+        try:
+            os.replace(tmp_path, path)
+        except OSError:
+            # Fall back to in-place overwrite when file is a Docker bind mount (EBUSY / Errno 16)
+            with open(path, "w", encoding="utf-8", newline="") as dst:
+                dst.write(content)
+                dst.flush()
+                os.fsync(dst.fileno())
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except OSError:
+                pass
     except Exception:
         try:
             tmp_path.unlink(missing_ok=True)

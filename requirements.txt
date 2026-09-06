@@ -1,4 +1,7 @@
 -e ./packages/labcd_agents[all]
+-e ./packages/labcd_pdfmaker
+osqp>=0.6.3
+sympy>=1.12
 aiohappyeyeballs==2.6.1
 aiohttp==3.13.5
 aiosignal==1.4.0

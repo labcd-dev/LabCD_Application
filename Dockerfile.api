@@ -8,13 +8,14 @@ RUN apt-get update && \
 
 COPY requirements.txt .
 COPY packages/labcd_agents ./packages/labcd_agents
+COPY packages/labcd_pdfmaker ./packages/labcd_pdfmaker
 
 RUN python -m pip install --upgrade pip setuptools wheel \
     && pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-RUN mkdir -p results uploads logs
+RUN mkdir -p results uploads logs artifacts
 
 EXPOSE 8000
 

@@ -45,6 +45,7 @@ export interface PlantModelChatMessage {
 export interface PlantModelResult {
   system_name: string
   python_code: string
+  metadata?: Record<string, unknown> | null
 }
 
 export interface PlantModelSessionState {
@@ -186,7 +187,7 @@ export interface SiloSimulateResponse {
   manual: SiloSimTrace | null
 }
 
-export type PipelineType = 'siloDesign' | 'muloDesign' | null
+export type PipelineType = 'siloDesign' | 'muloDesign' | 'adaptiveDesign' | 'mpcDesign' | null
 
 export interface StreamEvent {
   type: string
@@ -281,7 +282,7 @@ export interface AdminUserDetail {
 
 export type ExperienceLevel = 'None' | 'Beginner' | 'Intermediate' | 'Advanced'
 export type DegreeLevel = "Bachelor's" | "Master's" | 'PhD' | 'Other'
-export type FeedbackPipelineType = 'siloDesign' | 'muloDesign'
+export type FeedbackPipelineType = 'siloDesign' | 'muloDesign' | 'adaptiveDesign' | 'mpcDesign'
 export type MajorField =
   | 'Electrical Engineering'
   | 'Mechanical Engineering'
@@ -422,7 +423,7 @@ export interface TokenResponse {
   token_type: string
 }
 
-export type ProjectPipelineType = 'siloDesign' | 'muloDesign'
+export type ProjectPipelineType = 'siloDesign' | 'muloDesign' | 'adaptiveDesign' | 'mpcDesign'
 export type ProjectStatus = 'draft' | 'running' | 'completed' | 'failed' | 'cancelled'
 
 export interface ProjectSummary {
@@ -695,4 +696,465 @@ export interface BugReport {
 export interface BugReportSettings {
   enabled: boolean
 }
+
+// ---------------------------------------------------------------------------
+// AgentAdaptive
+// ---------------------------------------------------------------------------
+
+export type AdaptiveJobStatus =
+  | 'queued'
+  | 'clarifying'
+  | 'designing'
+  | 'building'
+  | 'tuning'
+  | 'reporting'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+
+export type AdaptiveJobStage =
+  | 'queued'
+  | 'clarify'
+  | 'design'
+  | 'build'
+  | 'tune'
+  | 'report'
+  | 'done'
+  | 'error'
+
+export interface AdaptiveJobOptions {
+  enable_tuning?: boolean
+  target_rms_frac?: number
+  max_tuning_rounds?: number
+  skip_clarify?: boolean
+  model?: string | null
+  description?: string
+  sim_time?: number
+  solver_step?: number
+  x0?: number[]
+  references?: Record<string, string>
+}
+
+export interface AdaptiveJobCreateRequest {
+  system_spec?: Record<string, unknown> | null
+  options?: AdaptiveJobOptions
+  user_id?: number | null
+  project_id?: string | null
+}
+
+export interface AdaptiveJobCreateResponse {
+  job_id: string
+  status: AdaptiveJobStatus
+  stage: AdaptiveJobStage
+  message: string
+}
+
+export interface AdaptiveClarifyRequest {
+  answer: string
+  force_finish?: boolean
+}
+
+export interface AdaptiveClarifyResponse {
+  job_id: string
+  status: AdaptiveJobStatus
+  stage: AdaptiveJobStage
+  clarifier_status: 'continue' | 'complete' | 'error' | 'skipped'
+  reply: string
+  round: number
+}
+
+export interface AdaptiveJobProgressEvent {
+  kind: string
+  stage: string
+  text: string
+  round?: number | null
+  ts?: number | null
+  extra?: Record<string, unknown>
+}
+
+export interface AdaptiveJobStatusResponse {
+  job_id: string
+  status: AdaptiveJobStatus
+  stage: AdaptiveJobStage
+  message: string
+  error?: string | null
+  round: number
+  clarify_pending: boolean
+  last_clarifier_reply?: string | null
+  progress: AdaptiveJobProgressEvent[]
+  created_at: string
+  updated_at: string
+  user_id?: number | null
+  project_id?: string | null
+  options?: AdaptiveJobOptions | null
+}
+
+export interface AdaptiveJobResultsResponse {
+  job_id: string
+  status: AdaptiveJobStatus
+  stage: AdaptiveJobStage
+  abstract?: string | null
+  report?: string | null
+  method?: string | null
+  final_metrics?: Record<string, unknown> | null
+  tuning_log?: Array<Record<string, unknown>>
+  tuning_best?: Record<string, unknown> | null
+  system_spec?: Record<string, unknown> | null
+  clarification_record?: Array<Record<string, unknown>>
+  usage?: Record<string, unknown> | null
+  series?: {
+    t?: number[]
+    x?: number[][]
+    u?: number[][]
+    xd?: number[][]
+    d_hat?: number[][]
+    names?: string[]
+    [key: string]: unknown
+  } | null
+  error?: string | null
+}
+
+export interface AdaptiveJobSummary {
+  job_id: string
+  status: AdaptiveJobStatus
+  stage: AdaptiveJobStage
+  system_name?: string | null
+  created_at: string
+  updated_at: string
+  user_id?: number | null
+}
+
+// ---------------------------------------------------------------------------
+// AgentMPC
+// ---------------------------------------------------------------------------
+
+export type MPCJobStatus =
+  | 'queued'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+
+export type MPCJobStage =
+  | 'queued'
+  | 'scenarist'
+  | 'actor'
+  | 'evaluator'
+  | 'terminator'
+  | 'critic'
+  | 'juror'
+  | 'done'
+  | 'error'
+
+export interface MPCJobOptions {
+  max_iterations?: number
+  prediction_horizon?: number
+  control_horizon?: number
+  dt_mpc?: number
+  simulation_time?: number
+  ui_scenario_level?: number
+  user_guidance?: string
+  min_explore_iterations?: number
+  exploration_intensity?: number
+  use_ui_graph?: boolean
+  seed_params?: Record<string, unknown> | null
+  model?: string | null
+  system_name?: string
+  trajectory_mode?: 'reg' | 'sin' | 'pulse' | 'custom'
+  trajectory_amplitude?: number
+  trajectory_frequency?: number
+  trajectory_pulse_start?: number
+  trajectory_pulse_end?: number
+  noise_std?: number
+  q_weights?: number[]
+  r_weights?: number[]
+  p_weights?: number[]
+  cost_weights?: Record<string, number>
+}
+
+export interface MPCDynamicsInput {
+  plugin_path?: string | null
+  plugin_id?: string | null
+  source?: string | null
+}
+
+export interface MPCDiagnosticsRequest {
+  dynamics?: MPCDynamicsInput | null
+  dt?: number
+  sim_time?: number
+  u_step_fraction?: number
+}
+
+export interface MPCDiagnosticsResponse {
+  eigenvalues: Array<{ real: number; imag: number }>
+  is_stable: boolean
+  is_controllable: boolean
+  controllability_rank: number
+  n_states: number
+  n_inputs: number
+  state_names: string[]
+  input_names: string[]
+  suggested_dt: number
+  bryson_q: number[]
+  bryson_r: number[]
+  probe_trajectory: {
+    t?: number[]
+    x?: Record<string, number[]>
+    ranges?: Record<string, number>
+    step_mag?: Record<string, number>
+  }
+  notes: string[]
+  error?: string | null
+}
+
+export interface MPCSimulateRequest {
+  dynamics?: MPCDynamicsInput | null
+  np?: number
+  nc?: number
+  dt?: number
+  sim_time?: number
+  q?: number[]
+  r?: number[]
+  p?: number[]
+  trajectory_mode?: string
+  trajectory_amplitude?: number
+  trajectory_frequency?: number
+  trajectory_pulse_start?: number
+  trajectory_pulse_end?: number
+  noise_std?: number
+  scenario_level?: number
+}
+
+export interface MPCSimulateResponse {
+  series: {
+    t: number[]
+    x: Record<string, number[]>
+    xd: Record<string, number[]>
+    u: Record<string, number[]>
+    names: string[]
+    input_names: string[]
+    bounds?: {
+      x_lo?: Array<number | null> | null
+      x_hi?: Array<number | null> | null
+      u_lo?: Array<number | null> | null
+      u_hi?: Array<number | null> | null
+    }
+    per_state_metrics?: Array<{
+      name: string
+      mse: number
+      overshoot: number
+      iae: number
+      ise: number
+    }>
+  }
+  metrics: {
+    mse: number
+    overshoot: number
+    settling_time: number
+    control_effort: number
+    integral_abs_error: number
+    integral_sq_error: number
+    is_regulation: boolean
+    settled: boolean
+    per_state_mse?: Record<string, number>
+  }
+  solve_time_ms: number
+  unstable: boolean
+  unstable_reason?: string | null
+  error?: string | null
+}
+
+export interface MPCJobCreateRequest {
+  dynamics?: MPCDynamicsInput | null
+  options?: MPCJobOptions
+  user_id?: number | null
+  project_id?: string | null
+}
+
+export interface MPCJobCreateResponse {
+  job_id: string
+  status: MPCJobStatus
+  stage: MPCJobStage
+  message: string
+}
+
+export interface MPCJobProgressEvent {
+  kind: string
+  stage: string
+  text: string
+  round?: number | null
+  ts?: number | null
+  extra?: Record<string, unknown>
+}
+
+export interface MPCJobStatusResponse {
+  job_id: string
+  status: MPCJobStatus
+  stage: MPCJobStage
+  message: string
+  error?: string | null
+  iteration: number
+  max_iterations: number
+  progress: MPCJobProgressEvent[]
+  created_at: string
+  updated_at: string
+  user_id?: number | null
+  project_id?: string | null
+  options?: MPCJobOptions | null
+  system_name?: string | null
+}
+
+export interface MPCJobResultsResponse {
+  job_id: string
+  status: MPCJobStatus
+  stage: MPCJobStage
+  best_params?: Record<string, unknown> | null
+  best_mse?: number | null
+  iteration: number
+  termination_reason?: string | null
+  mse_history: Array<number | null>
+  overshoot_history: Array<number | null>
+  settling_history: Array<number | null>
+  effort_history: Array<number | null>
+  params_history: Array<Record<string, unknown>>
+  history: Array<Record<string, unknown> | string>
+  report?: string | null
+  export_script?: string | null
+  metrics?: Record<string, unknown> | null
+  usage?: {
+    prompt_tokens?: number
+    completion_tokens?: number
+    total_tokens?: number
+    total_cost?: number
+    model?: string
+    [key: string]: unknown
+  } | null
+  diagnostics?: Record<string, unknown> | null
+  series?: {
+    t: number[]
+    x: Record<string, number[]>
+    xd: Record<string, number[]>
+    u: Record<string, number[]>
+    names: string[]
+    input_names: string[]
+    bounds?: {
+      x_lo?: Array<number | null> | null
+      x_hi?: Array<number | null> | null
+      u_lo?: Array<number | null> | null
+      u_hi?: Array<number | null> | null
+    }
+    per_state_metrics?: Array<{
+      name: string
+      mse: number
+      overshoot: number
+      iae: number
+      ise: number
+    }>
+    [key: string]: unknown
+  } | null
+  baseline_series?: {
+    t: number[]
+    x: Record<string, number[]>
+    xd: Record<string, number[]>
+    u: Record<string, number[]>
+    names: string[]
+    input_names: string[]
+    bounds?: {
+      x_lo?: Array<number | null> | null
+      x_hi?: Array<number | null> | null
+      u_lo?: Array<number | null> | null
+      u_hi?: Array<number | null> | null
+    }
+    per_state_metrics?: Array<{
+      name: string
+      mse: number
+      overshoot: number
+      iae: number
+      ise: number
+    }>
+    [key: string]: unknown
+  } | null
+  error?: string | null
+}
+
+export interface MPCJobSummary {
+  job_id: string
+  status: MPCJobStatus
+  stage: MPCJobStage
+  system_name?: string | null
+  created_at: string
+  updated_at: string
+  user_id?: number | null
+}
+
+// ---------------------------------------------------------------------------
+// Pre-Launch & Plant Artifacts
+// ---------------------------------------------------------------------------
+
+export interface PreLaunchConfig {
+  total_simulation_time: number
+  solver_sample_time: number
+  initial_state: number[]
+  default_target: number[]
+  trajectory_mode?: 'reg' | 'sin' | 'pulse'
+  trajectory_amplitude?: number
+  trajectory_frequency?: number
+  trajectory_offset?: number
+}
+
+export interface PlantPayload {
+  system_name: string
+  python_code: string
+  metadata?: Record<string, unknown> | null
+}
+
+export interface ArtifactCreateRequest {
+  pre_launch: PreLaunchConfig
+  plant?: PlantPayload | null
+  conversation_id?: number | null
+}
+
+export interface ArtifactSummary {
+  artifact_id: string
+  system_name: string
+  created_at: string
+  version: string
+}
+
+export interface ArtifactCreateResponse {
+  artifact_id: string
+  system_name: string
+  created_at: string
+  version: string
+  warnings: string[]
+}
+
+export interface ArtifactDetail {
+  artifact_id: string
+  system_name: string
+  created_at: string
+  version: string
+  plant: Record<string, unknown>
+  pre_launch: Record<string, unknown>
+  module_specific: Record<string, unknown>
+}
+
+export interface ArtifactPluginResponse {
+  artifact_id: string
+  plugin_path: string
+  source: string
+}
+
+export interface ValidationRequest {
+  plant?: PlantPayload | null
+  pre_launch?: PreLaunchConfig | null
+  conversation_id?: number | null
+}
+
+export interface ValidationResponse {
+  ok: boolean
+  errors: string[]
+  warnings: string[]
+}
+
 

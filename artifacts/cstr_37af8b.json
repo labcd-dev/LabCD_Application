@@ -1,0 +1,83 @@
+{
+  "artifact_id": "cstr_37af8b",
+  "system_name": "cstr",
+  "created_at": "2026-09-04T15:58:37.630984+00:00",
+  "version": "1.0",
+  "plant": {
+    "python_code": "import numpy as np\n\ndef dynamics(t, x, u):\n    q, V, CA0, T0, Tc0 = 1, 1, 1, 350, 300\n    k0, E_R, dH, rho, Cp = 7.2e10, 8750, -2e5, 1000, 0.239\n    UA, rhoc, Cpc, Vc = 5e4, 1000, 1, 1\n    CA, T, Tc = x[0], x[1], x[2]\n    r = k0 * np.exp(-E_R/T) * CA\n    xdot = [q/V*(CA0 - CA) - r,\n            q/V*(T0 - T) - dH/(rho*Cp)*r + UA/(V*rho*Cp)*(Tc - T),\n            u/Vc*(Tc0 - Tc) + UA/(Vc*rhoc*Cpc)*(T - Tc)]\n    return np.array(xdot)",
+    "metadata": {
+      "states": [
+        "CA",
+        "T",
+        "Tc"
+      ],
+      "state_meanings": [
+        "Concentration of A (kmol/m3)",
+        "Reactor Temperature (K)",
+        "Coolant Temperature (K)"
+      ],
+      "inputs": [
+        "u"
+      ],
+      "outputs": [
+        "CA",
+        "T"
+      ],
+      "state_equations": [
+        "(q / V) * (CA0 - CA) - k0 * exp(-E_R / T) * CA",
+        "(q / V) * (T0 - T) - (dH / (rho * Cp)) * k0 * exp(-E_R / T) * CA + (UA / (V * rho * Cp)) * (Tc - T)",
+        "(u / Vc) * (Tc0 - Tc) + (UA / (Vc * rhoc * Cpc)) * (T - Tc)"
+      ],
+      "parameters": {
+        "q": 1.0,
+        "V": 1.0,
+        "CA0": 1.0,
+        "T0": 350.0,
+        "Tc0": 300.0,
+        "k0": 72000000000.0,
+        "E_R": 8750.0,
+        "dH": -200000.0,
+        "rho": 1000.0,
+        "Cp": 0.239,
+        "UA": 50000.0,
+        "rhoc": 1000.0,
+        "Cpc": 1.0,
+        "Vc": 1.0
+      },
+      "system_type": "SISO",
+      "assumptions": [
+        "Well-mixed liquid phase",
+        "Constant volume and density",
+        "First-order Arrhenius kinetics"
+      ]
+    }
+  },
+  "pre_launch": {
+    "total_simulation_time": 15.0,
+    "solver_sample_time": 0.01,
+    "initial_state": [
+      0.8,
+      324.0,
+      300.0
+    ],
+    "default_target": [
+      0.5,
+      340.0,
+      305.0
+    ]
+  },
+  "module_specific": {
+    "adaptive": {
+      "clarifier_record": null,
+      "designer_method": null,
+      "tuning_best": null
+    },
+    "mpc": {
+      "suggested_dt": null,
+      "suggested_Q": null,
+      "suggested_R": null,
+      "suggested_feedforward": null,
+      "derivative_pairs": null
+    }
+  }
+}

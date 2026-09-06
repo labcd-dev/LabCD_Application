@@ -26,12 +26,16 @@ FailureReason = str  # "invalid_credentials" | "inactive" | "unknown_user" | "un
 DEFAULT_ACTIONS: list[tuple[str, str]] = [
     ("pipeline:silo", "Run Single Loop (Silo) design for yourself"),
     ("pipeline:mulo", "Run Multi Loop (Mulo) design for yourself"),
+    ("pipeline:adaptive", "Run Adaptive / Nonlinear control design for yourself"),
+    ("pipeline:mpc", "Run MPC auto-tuning design for yourself"),
     ("module:upload", "Upload dynamics files"),
     ("module:regularize", "Run Regularizer / standardize"),
     ("module:recommender", "Run Recommender"),
     ("module:trimmer", "Run Trimmer"),
     ("module:silo", "Run SiloDesigner jobs"),
     ("module:mulo", "Run MuloDesigner jobs"),
+    ("module:adaptive", "Run AgentAdaptive jobs"),
+    ("module:mpc", "Run AgentMPC jobs"),
     ("module:case_studies", "Load and use case studies"),
     ("admin:access", "Enter the admin area"),
     ("admin:users", "Manage users"),
@@ -55,6 +59,8 @@ DEFAULT_ACTIONS: list[tuple[str, str]] = [
 PIPELINE_ACTIONS = {
     "siloDesign": "pipeline:silo",
     "muloDesign": "pipeline:mulo",
+    "adaptiveDesign": "pipeline:adaptive",
+    "mpcDesign": "pipeline:mpc",
 }
 
 MODULE_ACTIONS = {
@@ -64,6 +70,8 @@ MODULE_ACTIONS = {
     "trimmer": "module:trimmer",
     "silo": "module:silo",
     "mulo": "module:mulo",
+    "adaptive": "module:adaptive",
+    "mpc": "module:mpc",
     "case_studies": "module:case_studies",
 }
 
@@ -82,6 +90,18 @@ MULO_ACTION_CODES = [
     "module:trimmer",
     "module:mulo",
     "module:case_studies",
+]
+
+ADAPTIVE_ACTION_CODES = [
+    "pipeline:adaptive",
+    "module:upload",
+    "module:adaptive",
+]
+
+MPC_ACTION_CODES = [
+    "pipeline:mpc",
+    "module:upload",
+    "module:mpc",
 ]
 
 DEFAULT_PLANS: list[tuple[str, str, Decimal, list[str], list[str]]] = [
@@ -108,9 +128,9 @@ DEFAULT_PLANS: list[tuple[str, str, Decimal, list[str], list[str]]] = [
     ),
     (
         "Full Access",
-        "Both Single Loop and Multi Loop pipelines.",
+        "Full suite access: Silo, Mulo, Adaptive, and MPC pipelines.",
         Decimal("79.00"),
-        sorted(set(SILO_ACTION_CODES + MULO_ACTION_CODES)),
+        sorted(set(SILO_ACTION_CODES + MULO_ACTION_CODES + ADAPTIVE_ACTION_CODES + MPC_ACTION_CODES)),
         list(DEFAULT_LLM_MODELS),
     ),
 ]

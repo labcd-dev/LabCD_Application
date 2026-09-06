@@ -5,12 +5,20 @@ from sqlalchemy.orm import Session
 
 from backend_api.db.models import User
 from backend_api.db.session import get_db
-from backend_api.http.dependencies import assert_model_allowed, require_action
+from typing import Any
+
 from backend_api.http.schemas.plant_model import (
+    ArtifactCreateRequest,
+    ArtifactCreateResponse,
+    ArtifactDetail,
+    ArtifactPluginResponse,
+    ArtifactSummary,
     PlantModelChatRequest,
     PlantModelChatResponse,
     PlantModelConversationDetail,
     PlantModelConversationSummary,
+    ValidationRequest,
+    ValidationResponse,
 )
 from backend_api.http.services.analytics_service import record_module_use
 from backend_api.http.services.plant_model_chat_service import (
@@ -23,7 +31,18 @@ from backend_api.http.services.plant_model_chat_service import (
     list_conversations_for_user,
     persist_turn,
 )
+from backend_api.http.dependencies import assert_model_allowed, require_action
 from backend_api.http.services.plant_model_service import run_plant_model_chat
+from backend_api.http.services.plant_artifact_service import (
+    ArtifactValidationError,
+    create_artifact,
+    get_adaptive_spec,
+    get_artifact,
+    get_artifact_plugin,
+    list_artifacts,
+    plant_payload_to_dict,
+    run_validation,
+)
 
 router = APIRouter(prefix="/plant-model", tags=["plant-model"])
 
@@ -102,3 +121,122 @@ def plant_model_chat(
     )
     response.conversation_id = conversation.id
     return response
+
+
+# ---------------------------------------------------------------------------
+# Artifacts (unified hand-off)
+# ---------------------------------------------------------------------------
+
+
+def _resolve_plant_from_db(
+    db: Session,
+    conversation_id: int | None,
+    user: User,
+) -> dict[str, Any] | None:
+    if conversation_id is None:
+        return None
+    conversation = get_conversation(db, conversation_id)
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    try:
+        assert_conversation_access(conversation, user)
+    except ConversationAccessDenied as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    if conversation.status != "complete" or conversation.final_result is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Conversation is not complete; finish the plant chat first",
+        )
+    return plant_payload_to_dict(conversation.final_result)
+
+
+@router.post(
+    "/artifacts",
+    response_model=ArtifactCreateResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_plant_artifact(
+    request: ArtifactCreateRequest,
+    user: User = Depends(require_action("module:upload")),
+    db: Session = Depends(get_db),
+) -> ArtifactCreateResponse:
+    plant: dict[str, Any] | None = None
+    if request.conversation_id is not None:
+        plant = _resolve_plant_from_db(db, request.conversation_id, user)
+    elif request.plant is not None:
+        plant = plant_payload_to_dict(request.plant)
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Provide plant payload or conversation_id of a completed plant chat",
+        )
+
+    try:
+        return create_artifact(request, plant_override=plant)
+    except ArtifactValidationError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "message": "Plant or pre-launch validation failed",
+                "errors": exc.errors,
+                "warnings": exc.warnings,
+            },
+        ) from exc
+
+
+@router.get("/artifacts", response_model=list[ArtifactSummary])
+def list_plant_artifacts(
+    _: User = Depends(require_action("module:upload")),
+) -> list[ArtifactSummary]:
+    return list_artifacts()
+
+
+@router.get("/artifacts/{artifact_id}", response_model=ArtifactDetail)
+def get_plant_artifact(
+    artifact_id: str,
+    _: User = Depends(require_action("module:upload")),
+) -> ArtifactDetail:
+    try:
+        return get_artifact(artifact_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get(
+    "/artifacts/{artifact_id}/plugin",
+    response_model=ArtifactPluginResponse,
+)
+def get_plant_artifact_plugin(
+    artifact_id: str,
+    _: User = Depends(require_action("module:upload")),
+) -> ArtifactPluginResponse:
+    try:
+        return get_artifact_plugin(artifact_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/artifacts/{artifact_id}/adaptive-spec")
+def get_plant_artifact_adaptive_spec(
+    artifact_id: str,
+    _: User = Depends(require_action("module:upload")),
+) -> dict[str, Any]:
+    try:
+        return get_adaptive_spec(artifact_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/validate", response_model=ValidationResponse)
+def validate_plant_or_pre_launch(
+    request: ValidationRequest,
+    user: User = Depends(require_action("module:upload")),
+    db: Session = Depends(get_db),
+) -> ValidationResponse:
+    plant: dict[str, Any] | None = None
+    if request.conversation_id is not None:
+        plant = _resolve_plant_from_db(db, request.conversation_id, user)
+    elif request.plant is not None:
+        plant = plant_payload_to_dict(request.plant)
+    return run_validation(request, plant)
+

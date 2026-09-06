@@ -40,6 +40,8 @@ function sectionLabel(pathname: string): string {
   ) {
     return 'studio'
   }
+  if (pathname.startsWith('/adaptive')) return 'Adaptive Studio'
+  if (pathname.startsWith('/mpc')) return 'MPC Studio'
   if (pathname.startsWith('/tutorials')) return 'tutorials'
   if (pathname === '/profile') return 'profile'
   return 'app'
@@ -122,6 +124,9 @@ export function AppShell({ children, topbarActions }: AppShellProps) {
   const isProjects = location.pathname.startsWith('/projects')
   const isTutorials = location.pathname.startsWith('/tutorials')
   const isProfile = location.pathname === '/profile'
+  const isMpc = location.pathname.startsWith('/mpc')
+  const isAdaptive = location.pathname.startsWith('/adaptive')
+  const isFullBleed = isProfile || isDesign || isMpc || isAdaptive
   const initials = userInitials(user)
   const label = sectionLabel(location.pathname)
   const sidebarWidth = sidebarOpen ? SIDEBAR_EXPANDED_WIDTH : SIDEBAR_COLLAPSED_WIDTH
@@ -133,7 +138,14 @@ export function AppShell({ children, topbarActions }: AppShellProps) {
   }
 
   return (
-    <div className="flex h-dvh overflow-hidden bg-surface font-sans text-[14px] leading-[1.55] text-foreground antialiased">
+    <div className="relative flex h-dvh overflow-hidden bg-surface font-sans text-[14px] leading-[1.55] text-foreground antialiased">
+      {/* Living Ambient Lighting Atmosphere */}
+      <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden" aria-hidden>
+        <div className="absolute -top-40 left-1/4 h-[480px] w-[700px] rounded-full bg-gradient-to-br from-primary/10 via-purple-600/5 to-transparent blur-3xl animate-[aurora-drift_14s_ease-in-out_infinite]" />
+        <div className="absolute right-1/4 top-1/3 h-[420px] w-[560px] rounded-full bg-gradient-to-bl from-cyan-500/8 via-indigo-600/4 to-transparent blur-3xl animate-[pulse-soft_9s_ease-in-out_infinite]" />
+        <div className="absolute bottom-10 left-1/3 h-[480px] w-[620px] rounded-full bg-gradient-to-tr from-purple-700/5 via-primary/6 to-transparent blur-3xl animate-[aurora-drift_18s_ease-in-out_infinite_reverse]" />
+      </div>
+
       <aside
         className={`fixed inset-y-0 left-0 z-[200] flex flex-col border-r border-border bg-surface-elevated transition-[width] duration-200 ${
           sidebarOpen ? 'px-3 py-3.5' : 'items-center py-3.5 pb-4'
@@ -380,13 +392,13 @@ export function AppShell({ children, topbarActions }: AppShellProps) {
 
         <main
           className={`flex min-h-0 flex-1 flex-col overflow-y-auto ${
-            isProfile || isDesign ? '' : 'p-4 sm:p-6 lg:p-8'
+            isFullBleed ? '' : 'p-4 sm:p-6 lg:p-8 xl:p-10'
           }`}
         >
-          {isProfile || isDesign ? (
+          {isFullBleed ? (
             children
           ) : (
-            <div className="mx-auto w-full max-w-6xl">{children}</div>
+            <div className="mx-auto w-full max-w-[1720px] 2xl:max-w-[1920px]">{children}</div>
           )}
         </main>
       </div>

@@ -771,3 +771,86 @@ class UserIdentity(Base):
     )
 
     user: Mapped[User] = relationship("User", back_populates="identities")
+
+
+class AdaptiveJobRecord(Base):
+    """Persisted AgentAdaptive design job."""
+
+    __tablename__ = "adaptive_jobs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    job_id: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    project_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    status: Mapped[str] = mapped_column(String(32), default="queued", nullable=False, index=True)
+    stage: Mapped[str] = mapped_column(String(32), default="queued", nullable=False)
+    message: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    clarify_round: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_clarifier_reply: Mapped[str | None] = mapped_column(Text, nullable=True)
+    options: Mapped[dict[str, Any] | None] = mapped_column(JsonDict, nullable=True)
+    system_spec: Mapped[dict[str, Any] | None] = mapped_column(JsonDict, nullable=True)
+    clarification_record: Mapped[list[Any] | None] = mapped_column(JsonDict, nullable=True)
+    progress: Mapped[list[Any]] = mapped_column(JsonDict, default=list, nullable=False)
+    results: Mapped[dict[str, Any] | None] = mapped_column(JsonDict, nullable=True)
+    cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+        index=True,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    user: Mapped[User | None] = relationship("User", lazy="noload")
+
+
+class MPCJobRecord(Base):
+    """Persisted AgentMPC tuning job."""
+
+    __tablename__ = "mpc_jobs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    job_id: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    project_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    status: Mapped[str] = mapped_column(String(32), default="queued", nullable=False, index=True)
+    stage: Mapped[str] = mapped_column(String(32), default="queued", nullable=False)
+    message: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    iteration: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    max_iterations: Mapped[int] = mapped_column(Integer, default=15, nullable=False)
+    system_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    options: Mapped[dict[str, Any] | None] = mapped_column(JsonDict, nullable=True)
+    dynamics: Mapped[dict[str, Any] | None] = mapped_column(JsonDict, nullable=True)
+    progress: Mapped[list[Any]] = mapped_column(JsonDict, default=list, nullable=False)
+    results: Mapped[dict[str, Any] | None] = mapped_column(JsonDict, nullable=True)
+    cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+        index=True,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    user: Mapped[User | None] = relationship("User", lazy="noload")
+

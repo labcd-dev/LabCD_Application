@@ -140,7 +140,11 @@ export function HomePage() {
       pipeline.setProjectId(project.id)
       if (pipeline.pipeline === 'muloDesign') {
         navigate('/mulo?step=recommender')
-      } else if (pipeline.pipeline === 'siloDesign') {
+      } else if (pipeline.pipeline === 'adaptiveDesign') {
+        navigate('/adaptive')
+      } else if (pipeline.pipeline === 'mpcDesign') {
+        navigate('/mpc')
+      } else {
         navigate('/silo')
       }
     } catch (err) {
@@ -179,7 +183,14 @@ export function HomePage() {
   }
 
   const nextLabel =
-    pipeline.pipeline === 'muloDesign' ? 'Multi Loop Designer' : 'Silo Designer'
+    pipeline.pipeline === 'muloDesign'
+      ? 'Multi Loop Designer'
+      : pipeline.pipeline === 'adaptiveDesign'
+        ? 'Adaptive Designer'
+        : pipeline.pipeline === 'mpcDesign'
+          ? 'Agentic MPC Designer'
+          : 'Silo Designer'
+
 
   return (
     <section className={pageSection}>

@@ -3,7 +3,7 @@ import { Loader2, X } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { btnBase, btnPrimary } from '../lib/classes'
 
-export type LaunchPipeline = 'siloDesign' | 'muloDesign'
+export type LaunchPipeline = 'siloDesign' | 'muloDesign' | 'adaptiveDesign' | 'mpcDesign'
 
 interface ModuleOption {
   id: LaunchPipeline
@@ -24,6 +24,18 @@ const MODULES: ModuleOption[] = [
     name: 'Multi Loop',
     description: 'Cascaded loops via Recommender, Trimmer, and MULO.',
     action: 'pipeline:mulo',
+  },
+  {
+    id: 'adaptiveDesign',
+    name: 'Adaptive Nonlinear',
+    description: 'Sliding mode & backstepping control with neural uncertainty estimation.',
+    action: 'pipeline:adaptive',
+  },
+  {
+    id: 'mpcDesign',
+    name: 'Agentic MPC',
+    description: 'Receding-horizon control with multi-agent auto-tuning (Actor–Critic–Juror).',
+    action: 'pipeline:mpc',
   },
 ]
 

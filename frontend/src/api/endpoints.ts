@@ -1,4 +1,4 @@
-import { apiFetch, artifactUrl, AUTH_TIMEOUT_MS, getAuthToken, projectArtifactUrl } from './client'
+import { apiFetch, artifactUrl, AUTH_TIMEOUT_MS, getAuthToken, projectArtifactUrl, streamEvents } from './client'
 import type {
   ActionInfo,
   ArtifactResponse,
@@ -32,6 +32,7 @@ import type {
   PlantModelSessionState,
   ProfileSurveyRequest,
   ProjectDetail,
+  ProjectPipelineType,
   ProjectSummary,
   RagStatusResponse,
   RecommenderHandoffResponse,
@@ -62,6 +63,29 @@ import type {
   SsoProviderCreate,
   SsoProviderPublic,
   SsoProviderUpdate,
+  AdaptiveClarifyRequest,
+  AdaptiveClarifyResponse,
+  AdaptiveJobCreateRequest,
+  AdaptiveJobCreateResponse,
+  AdaptiveJobResultsResponse,
+  AdaptiveJobStatusResponse,
+  AdaptiveJobSummary,
+  MPCDiagnosticsRequest,
+  MPCDiagnosticsResponse,
+  MPCSimulateRequest,
+  MPCSimulateResponse,
+  MPCJobCreateRequest,
+  MPCJobCreateResponse,
+  MPCJobResultsResponse,
+  MPCJobStatusResponse,
+  MPCJobSummary,
+  ArtifactCreateRequest,
+  ArtifactCreateResponse,
+  ArtifactDetail,
+  ArtifactPluginResponse,
+  ArtifactSummary,
+  ValidationRequest,
+  ValidationResponse,
 } from './types'
 import { viewerTimeZone } from '../lib/formatDateTime'
 
@@ -572,7 +596,7 @@ export const projectsApi = {
   get: (projectId: number) => apiFetch<ProjectDetail>(`/projects/${projectId}`),
   create: (body: {
     title?: string
-    pipeline_type: 'siloDesign' | 'muloDesign'
+    pipeline_type: ProjectPipelineType
     file_name?: string
     file_type?: string
     file_content?: string
@@ -972,3 +996,81 @@ export const adminBlogApi = {
   delete: (postId: number) =>
     apiFetch<void>(`/admin/blog/${postId}`, { method: 'DELETE' }),
 }
+
+export const adaptiveApi = {
+  createJob: (body: AdaptiveJobCreateRequest) =>
+    apiFetch<AdaptiveJobCreateResponse>('/adaptive/jobs', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  listJobs: () => apiFetch<AdaptiveJobSummary[]>('/adaptive/jobs'),
+  getJob: (jobId: string) => apiFetch<AdaptiveJobStatusResponse>(`/adaptive/jobs/${jobId}`),
+  clarify: (jobId: string, body: AdaptiveClarifyRequest) =>
+    apiFetch<AdaptiveClarifyResponse>(`/adaptive/jobs/${jobId}/clarify`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  cancel: (jobId: string) =>
+    apiFetch<AdaptiveJobStatusResponse>(`/adaptive/jobs/${jobId}/cancel`, { method: 'POST' }),
+  getResults: (jobId: string) =>
+    apiFetch<AdaptiveJobResultsResponse>(`/adaptive/jobs/${jobId}/results`),
+  streamEvents: (
+    jobId: string,
+    onEvent: (event: string, data: any) => void,
+    onError?: (err: unknown) => void,
+  ) => streamEvents(`/adaptive/jobs/${jobId}/events`, onEvent, onError),
+}
+
+export const mpcApi = {
+  createJob: (body: MPCJobCreateRequest) =>
+    apiFetch<MPCJobCreateResponse>('/mpc/jobs', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  listJobs: () => apiFetch<MPCJobSummary[]>('/mpc/jobs'),
+  getJob: (jobId: string) => apiFetch<MPCJobStatusResponse>(`/mpc/jobs/${jobId}`),
+  cancel: (jobId: string) =>
+    apiFetch<MPCJobStatusResponse>(`/mpc/jobs/${jobId}/cancel`, { method: 'POST' }),
+  getResults: (jobId: string) =>
+    apiFetch<MPCJobResultsResponse>(`/mpc/jobs/${jobId}/results`),
+  streamEvents: (
+    jobId: string,
+    onEvent: (event: string, data: any) => void,
+    onError?: (err: unknown) => void,
+  ) => streamEvents(`/mpc/jobs/${jobId}/events`, onEvent, onError),
+  testDynamics: (body: MPCDiagnosticsRequest) =>
+    apiFetch<MPCDiagnosticsResponse>('/mpc/test-dynamics', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  simulate: (body: MPCSimulateRequest) =>
+    apiFetch<MPCSimulateResponse>('/mpc/simulate', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  getExportScriptUrl: (jobId: string) => `${API_BASE}/mpc/jobs/${jobId}/export-script`,
+  getReportPdfUrl: (jobId: string) => `${API_BASE}/mpc/jobs/${jobId}/report.pdf`,
+  getExportScript: (jobId: string) =>
+    apiFetch<string>(`/mpc/jobs/${jobId}/export-script`),
+}
+
+export const plantArtifactApi = {
+  createArtifact: (body: ArtifactCreateRequest) =>
+    apiFetch<ArtifactCreateResponse>('/plant-model/artifacts', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  listArtifacts: () => apiFetch<ArtifactSummary[]>('/plant-model/artifacts'),
+  getArtifact: (artifactId: string) =>
+    apiFetch<ArtifactDetail>(`/plant-model/artifacts/${artifactId}`),
+  getPlugin: (artifactId: string) =>
+    apiFetch<ArtifactPluginResponse>(`/plant-model/artifacts/${artifactId}/plugin`),
+  getAdaptiveSpec: (artifactId: string) =>
+    apiFetch<Record<string, unknown>>(`/plant-model/artifacts/${artifactId}/adaptive-spec`),
+  validate: (body: ValidationRequest) =>
+    apiFetch<ValidationResponse>('/plant-model/validate', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+}
+

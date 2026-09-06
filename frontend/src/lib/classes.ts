@@ -9,11 +9,11 @@ export const fieldInput =
 export const fieldCheckbox = 'flex flex-row items-center gap-2 mb-4 text-foreground'
 
 const btnShared =
-  'inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 cursor-pointer font-inherit font-medium text-sm transition-all duration-150 disabled:opacity-60 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary'
+  'inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 cursor-pointer font-inherit font-medium text-sm transition-all duration-150 disabled:opacity-60 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary whitespace-nowrap'
 
-export const btnBase = `${btnShared} border border-border-input bg-surface-elevated text-foreground shadow-sm hover:border-primary hover:bg-surface-hover active:scale-[0.98]`
+export const btnBase = `${btnShared} border border-border-input bg-surface-elevated text-foreground shadow-sm hover:border-primary/50 hover:bg-surface-hover hover:shadow-[0_0_16px_rgba(99,102,241,0.18)] active:scale-[0.98]`
 
-export const btnPrimary = `${btnShared} border border-primary bg-primary text-primary-foreground shadow-sm hover:brightness-110 active:scale-[0.98]`
+export const btnPrimary = `${btnShared} border border-primary/30 bg-gradient-to-r from-primary via-indigo-500 to-[#4a63e0] text-white shadow-[0_2px_14px_rgba(99,102,241,0.35)] hover:shadow-[0_4px_22px_rgba(99,102,241,0.55)] hover:brightness-110 active:scale-[0.98]`
 
 export const btnWide = 'w-full mt-4'
 export const btnLink =
@@ -21,9 +21,9 @@ export const btnLink =
 export const btnCompact = 'px-3 py-1.5 text-[0.82rem]'
 
 export const cardPanel =
-  'bg-surface-elevated border border-border rounded-xl p-3 shadow-sm sm:p-4'
+  'card-alive bg-surface-elevated/90 backdrop-blur-sm border border-border rounded-xl p-3 shadow-sm sm:p-4'
 export const cardProcessing =
-  'bg-surface-elevated border border-border rounded-xl p-5 shadow-sm text-center sm:p-8'
+  'card-alive bg-surface-elevated/90 backdrop-blur-sm border border-border rounded-xl p-5 shadow-sm text-center sm:p-8'
 
 export const codePreview =
   'w-full font-mono text-[0.85rem] p-4 border border-border-input rounded-lg bg-code-bg text-code-text resize-y shadow-inner'

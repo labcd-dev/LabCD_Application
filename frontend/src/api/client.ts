@@ -135,3 +135,70 @@ export function streamUrl(module: string, jobId: string): string {
   const base = `${API_BASE}/${module}/${jobId}/stream`
   return token ? `${base}?access_token=${encodeURIComponent(token)}` : base
 }
+
+export function streamEvents(
+  path: string,
+  onEvent: (event: string, data: any) => void,
+  onError?: (err: unknown) => void,
+): () => void {
+  const controller = new AbortController()
+  const token = getAuthToken()
+  const headers: Record<string, string> = {
+    Accept: 'text/event-stream',
+  }
+  if (token) {
+    headers.Authorization = `Bearer ${token}`
+  }
+
+  fetch(`${API_BASE}${path}`, {
+    signal: controller.signal,
+    headers,
+  })
+    .then(async (res) => {
+      if (!res.ok || !res.body) {
+        throw new Error(`Stream failed: ${res.status}`)
+      }
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n\n')
+        buffer = lines.pop() || ''
+
+        for (const block of lines) {
+          if (!block.trim()) continue
+          let eventType = 'message'
+          let dataStr = ''
+          for (const line of block.split('\n')) {
+            if (line.startsWith('event: ')) {
+              eventType = line.slice(7).trim()
+            } else if (line.startsWith('data: ')) {
+              dataStr = line.slice(6).trim()
+            }
+          }
+          if (dataStr) {
+            try {
+              const parsed = JSON.parse(dataStr)
+              onEvent(eventType, parsed)
+            } catch {
+              onEvent(eventType, dataStr)
+            }
+          }
+        }
+      }
+    })
+    .catch((err) => {
+      if (err.name !== 'AbortError') {
+        onError?.(err)
+      }
+    })
+
+  return () => {
+    controller.abort()
+  }
+}
+

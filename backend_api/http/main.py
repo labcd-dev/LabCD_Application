@@ -18,6 +18,7 @@ from backend_api.http.config import API_PREFIX, API_THREAD_LIMIT, CORS_ORIGINS, 
 from backend_api.http.middleware.error_tracking import ErrorTrackingMiddleware
 from backend_api.http.middleware.request_metrics import RequestMetricsMiddleware
 from backend_api.http.routers import (
+    adaptive,
     admin,
     auth,
     blog,
@@ -26,6 +27,7 @@ from backend_api.http.routers import (
     errors,
     health,
     jobs,
+    mpc,
     mulo,
     plant_model,
     projects,
@@ -128,6 +130,8 @@ def create_app() -> FastAPI:
     app.include_router(trimmer.router, prefix=API_PREFIX)
     app.include_router(silo.router, prefix=API_PREFIX)
     app.include_router(mulo.router, prefix=API_PREFIX)
+    app.include_router(adaptive.router, prefix=API_PREFIX)
+    app.include_router(mpc.router, prefix=API_PREFIX)
     app.include_router(jobs.router, prefix=API_PREFIX)
     app.include_router(case_studies.router, prefix=API_PREFIX)
     app.mount(f"{API_PREFIX}/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")

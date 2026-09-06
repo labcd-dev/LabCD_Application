@@ -27,10 +27,12 @@ services:
     environment:
       - RESULTS_DIR=/app/results
       - UPLOADS_DIR=/app/uploads
+      - LABCD_ARTIFACTS_DIR=/app/artifacts
       - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-labcd}:${POSTGRES_PASSWORD:-labcd}@db:5432/${POSTGRES_DB:-labcd}
     volumes:
       - ./results:/app/results
       - ./uploads:/app/uploads
+      - ./artifacts:/app/artifacts
       - ./.env:/app/.env
     depends_on:
       db:
