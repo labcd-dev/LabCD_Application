@@ -103,6 +103,10 @@ function MiniChart({
     ? deltaPct !== null && deltaPct <= 0
     : deltaPct !== null && deltaPct >= 0
 
+  const gradId = useMemo(() => {
+    return `grad-mpc-${title.toLowerCase().replace(/[^a-z0-9]/g, '-')}`
+  }, [title])
+
   return (
     <div className="group relative flex flex-col justify-between overflow-hidden rounded-xl border border-border bg-surface-elevated p-3.5 shadow-sm transition-all hover:border-border-strong">
       {/* Top Header */}
@@ -152,9 +156,9 @@ function MiniChart({
             onMouseLeave={() => setHoverIdx(null)}
           >
             <defs>
-              <linearGradient id={`grad-${title.replace(/\s+/g, '')}`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={color} stopOpacity="0.25" />
-                <stop offset="100%" stopColor={color} stopOpacity="0.0" />
+              <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={color} stopOpacity={0.22} />
+                <stop offset="100%" stopColor={color} stopOpacity={0.0} />
               </linearGradient>
             </defs>
 
@@ -164,7 +168,7 @@ function MiniChart({
             <line x1="10" y1="75" x2="370" y2="75" stroke="var(--app-border)" />
 
             {/* Area fill */}
-            {areaD && <path d={areaD} fill={`url(#grad-${title.replace(/\s+/g, '')})`} />}
+            {areaD && <path d={areaD} fill={`url(#${gradId})`} />}
 
             {/* Curve stroke */}
             <path

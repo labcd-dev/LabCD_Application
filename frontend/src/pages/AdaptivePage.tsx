@@ -3,7 +3,6 @@ import { Link, useSearchParams } from 'react-router-dom'
 import {
   AlertCircle,
   ArrowLeft,
-  CheckCircle2,
   Loader2,
   Play,
   RotateCcw,
@@ -245,25 +244,6 @@ export function AdaptivePage() {
     setError(null)
   }
 
-  // Stages for visual flow strip
-  const flowStages = [
-    { id: 'clarify', label: 'Clarifier' },
-    { id: 'design', label: 'Designer' },
-    { id: 'build', label: 'Simulate' },
-    { id: 'tune', label: 'Tuner' },
-    { id: 'done', label: 'Completed' },
-  ]
-
-  const currentStageIndex = () => {
-    if (!job) return -1
-    if (job.status === 'completed') return 4
-    if (job.stage === 'tune') return 3
-    if (job.stage === 'build') return 2
-    if (job.stage === 'design') return 1
-    if (job.stage === 'clarify' || job.status === 'clarifying') return 0
-    return 0
-  }
-
   return (
     <div className="relative flex min-h-screen flex-col bg-transparent text-foreground">
       {/* Atmosphere Glows */}
@@ -339,25 +319,26 @@ export function AdaptivePage() {
         </div>
       </header>
 
-      {/* Main Content Area */}
-      <main className="mx-auto flex w-full max-w-[1880px] 2xl:max-w-[2100px] flex-1 flex-col lg:flex-row gap-6 p-4 sm:p-6 lg:p-8 xl:p-10">
-        {/* Left Column: Stage View */}
-        <div className="flex-1 min-w-0 space-y-6">
-          {error && (
-            <div className="flex items-start gap-2.5 rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-xs text-rose-300">
-              <AlertCircle className="size-4 shrink-0 mt-0.5" />
-              <div>
-                <span className="font-semibold block">Error in Adaptive pipeline:</span>
-                {error}
-              </div>
+      {/* Main Content Area: Standardized Full-Width Grid matching MPC */}
+      <main className="mx-auto flex w-full max-w-[1880px] 2xl:max-w-[2100px] flex-1 flex-col gap-6 p-4 sm:p-6 lg:p-8 xl:p-10">
+        {error && (
+          <div className="flex items-start gap-2.5 rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-xs text-rose-300">
+            <AlertCircle className="size-4 shrink-0 mt-0.5" />
+            <div>
+              <span className="font-semibold block">Error in Adaptive pipeline:</span>
+              {error}
             </div>
-          )}
+          </div>
+        )}
 
-          {/* If no active job: Setup & Launch Card */}
-          {!job && (
-            <div className="relative overflow-hidden rounded-2xl border border-border bg-surface-elevated p-6 sm:p-7 shadow-sm">
-              {/* Top gradient highlight beam */}
-              <div className="pointer-events-none absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-cyan-500/70 to-transparent" />
+        {/* Setup Screen when no job running */}
+        {!job && (
+          <div className="relative overflow-hidden rounded-2xl border border-border bg-surface-elevated p-6 sm:p-7 shadow-sm">
+            {/* Top gradient highlight beam */}
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-cyan-500/70 to-transparent" />
+
+            {/* Header with Title & Launch Button */}
+            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border pb-5">
               <div className="max-w-xl">
                 <div className="flex items-center gap-2.5 text-cyan-600 dark:text-cyan-400">
                   <Sparkles className="size-5" />
@@ -365,243 +346,162 @@ export function AdaptivePage() {
                     AgentAdaptive Control Suite
                   </span>
                 </div>
-                <h1 className="mt-2 text-xl font-bold text-foreground">
+                <h1 className="mt-1 text-xl font-bold text-foreground">
                   Sliding Mode & Backstepping Controller Design
                 </h1>
-                <p className="mt-2 text-xs text-muted-text leading-relaxed">
+                <p className="mt-1 text-xs text-muted-text leading-relaxed">
                   Synthesizes robust nonlinear control laws with radial basis function (RBF) neural
-                  networks for unmodeled friction, parametric drift, and external disturbances.
-                  Guaranteed stability via constructive Lyapunov functions.
+                  networks for unmodeled dynamics and disturbances. Guaranteed stability via constructive Lyapunov functions.
                 </p>
               </div>
 
-              <div className="mt-6 border-t border-border pt-6 space-y-6">
-                {/* Desired Reference Trajectory */}
-                <div>
-                  <label className="text-xs font-bold uppercase tracking-wider text-cyan-600 dark:text-cyan-400 block mb-2">
-                    1. Desired Reference Trajectory
-                  </label>
-                  <div className="rounded-xl border border-border bg-surface-muted/30 p-4">
-                    <label className={fieldLabel}>Reference Trajectory xd(t)</label>
-                    <input
-                      type="text"
-                      value={referenceFn}
-                      onChange={(e) => setReferenceFn(e.target.value)}
-                      placeholder="sin(t)"
-                      className={fieldInput}
-                    />
-                    <span className="text-[10.5px] text-muted-text font-mono mt-1 block">
-                      Target continuous state tracking trajectory, e.g. sin(t), cos(0.5*t), 1.0, or step command
-                    </span>
-                  </div>
-                </div>
+              <button
+                type="button"
+                onClick={handleStartJob}
+                disabled={loading}
+                className={`${btnBase} ${btnPrimary} flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-cyan-600 to-teal-600 text-white font-semibold border-none shadow-[0_0_20px_rgba(6,182,212,0.35)]`}
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" /> Starting Agent Pipeline...
+                  </>
+                ) : (
+                  <>
+                    <Play className="size-4" /> Start Adaptive Tuning
+                  </>
+                )}
+              </button>
+            </div>
 
-                {/* Clarification & Tuning Options */}
-                <div>
-                  <label className="text-xs font-bold uppercase tracking-wider text-cyan-600 dark:text-cyan-400 block mb-2">
-                    2. Clarification &amp; Adaptive Tuning Options
-                  </label>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 rounded-xl border border-border bg-surface-muted/30 p-4">
-                    <div>
-                      <label className={fieldLabel}>Enable Iterative Parameter Tuning</label>
-                      <div className="flex items-center gap-3 mt-2">
-                        <button
-                          type="button"
-                          onClick={() => setEnableTuning(!enableTuning)}
-                          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-cyan-500/40 ${
-                            enableTuning
-                              ? 'bg-cyan-500 border-cyan-500'
-                              : 'border-border-input bg-surface hover:border-cyan-500/40 dark:bg-white/10 dark:border-white/20'
-                          }`}
-                        >
-                          <span
-                            className={`pointer-events-none inline-block size-5 transform rounded-full bg-white shadow-sm ring-1 ring-black/5 transition duration-200 ease-in-out ${
-                              enableTuning ? 'translate-x-5' : 'translate-x-0.5'
-                            }`}
-                          />
-                        </button>
-                        <span className="text-xs font-semibold text-foreground dark:text-slate-100">
-                          {enableTuning ? 'Active (Tuner Agent)' : 'Single Derivation'}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className={fieldLabel}>Skip Clarification Q&A</label>
-                      <div className="flex items-center gap-3 mt-2">
-                        <button
-                          type="button"
-                          onClick={() => setSkipClarify(!skipClarify)}
-                          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-cyan-500/40 ${
-                            skipClarify
-                              ? 'bg-cyan-500 border-cyan-500'
-                              : 'border-border-input bg-surface hover:border-cyan-500/40 dark:bg-white/10 dark:border-white/20'
-                          }`}
-                        >
-                          <span
-                            className={`pointer-events-none inline-block size-5 transform rounded-full bg-white shadow-sm ring-1 ring-black/5 transition duration-200 ease-in-out ${
-                              skipClarify ? 'translate-x-5' : 'translate-x-0.5'
-                            }`}
-                          />
-                        </button>
-                        <span className="text-xs font-semibold text-foreground dark:text-slate-100">
-                          {skipClarify ? 'Use Conservative Defaults' : 'Interactive Dialogue'}
-                        </span>
-                      </div>
-                    </div>
-
-                    {enableTuning && (
-                      <>
-                        <div className="pt-2 border-t border-border">
-                          <label className={fieldLabel}>Target Tracking RMS Fraction</label>
-                          <input
-                            type="number"
-                            step="0.005"
-                            min="0.001"
-                            max="0.5"
-                            value={targetRms}
-                            onChange={(e) => setTargetRms(parseFloat(e.target.value) || 0.02)}
-                            className={fieldInput}
-                          />
-                        </div>
-                        <div className="pt-2 border-t border-border">
-                          <label className={fieldLabel}>Max Tuning Iterations</label>
-                          <input
-                            type="number"
-                            min="1"
-                            max="10"
-                            value={maxRounds}
-                            onChange={(e) => setMaxRounds(parseInt(e.target.value) || 4)}
-                            className={fieldInput}
-                          />
-                        </div>
-                      </>
-                    )}
-                  </div>
+            <div className="mt-6 space-y-6">
+              {/* Desired Reference Trajectory */}
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wider text-cyan-600 dark:text-cyan-400 block mb-2">
+                  1. Desired Reference Trajectory
+                </label>
+                <div className="rounded-xl border border-border bg-surface-muted/30 p-4">
+                  <label className={fieldLabel}>Reference Trajectory xd(t)</label>
+                  <input
+                    type="text"
+                    value={referenceFn}
+                    onChange={(e) => setReferenceFn(e.target.value)}
+                    placeholder="sin(t)"
+                    className={fieldInput}
+                  />
+                  <span className="text-[10.5px] text-muted-text font-mono mt-1 block">
+                    Target continuous state tracking trajectory, e.g. sin(t), cos(0.5*t), 1.0, or step command
+                  </span>
                 </div>
               </div>
 
-              <div className="mt-8 flex justify-end">
-                <button
-                  type="button"
-                  onClick={handleStartJob}
-                  disabled={loading}
-                  className={`${btnBase} ${btnPrimary} flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-cyan-600 to-teal-600 text-white font-semibold border-none shadow-md`}
-                >
-                  {loading ? (
-                    <>
-                      <Loader2 className="size-4 animate-spin" /> Starting Agent Pipeline...
-                    </>
-                  ) : (
-                    <>
-                      <Play className="size-4" /> Start Adaptive Tuning
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Clarifier Mode */}
-          {job && job.status === 'clarifying' && (
-            <AdaptiveClarifierChat
-              job={job}
-              onSubmitAnswer={handleClarifySubmit}
-              submitting={submitting}
-            />
-          )}
-
-          {/* Running / Progress Mode */}
-          {job && (job.status === 'designing' || job.status === 'building' || job.status === 'tuning') && (
-            <div className="rounded-2xl border border-border bg-surface-elevated p-8 text-center shadow-sm">
-              <div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20">
-                <Loader2 className="size-7 animate-spin" />
-              </div>
-              <h3 className="mt-4 text-base font-semibold text-foreground">
-                {job.stage === 'tune'
-                  ? 'Tuning Controller Parameters...'
-                  : job.stage === 'build'
-                  ? 'Simulating Derived Control Law...'
-                  : 'Synthesizing Control Law (Designer Agent)...'}
-              </h3>
-              <p className="mt-1 text-xs text-muted max-w-md mx-auto">
-                {job.message || 'Integrating differential equations with Lyapunov stability verification.'}
-              </p>
-            </div>
-          )}
-
-          {/* Results Mode */}
-          {job && job.status === 'completed' && results && (
-            <AdaptiveDashboard results={results} />
-          )}
-        </div>
-
-        {/* Right Column: Pipeline Status & Activity Strip */}
-        <div className="w-full lg:w-84 xl:w-96 shrink-0 space-y-5">
-          {/* Flow Strip */}
-          <div className="rounded-2xl border border-border bg-surface-elevated p-5 shadow-sm">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-muted">
-              Pipeline Stages
-            </span>
-            <div className="mt-4 space-y-3">
-              {flowStages.map((stage, idx) => {
-                const active = currentStageIndex() === idx
-                const completed = currentStageIndex() > idx
-                return (
-                  <div
-                    key={stage.id}
-                    className={`flex items-center justify-between rounded-xl border p-3 text-xs transition-all ${
-                      active
-                        ? 'border-cyan-500/50 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 font-semibold'
-                        : completed
-                        ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 font-semibold'
-                        : 'border-border bg-surface-muted text-muted'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <span
-                        className={`flex size-6 items-center justify-center rounded-lg text-xs ${
-                          completed
-                            ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400'
-                            : active
-                            ? 'bg-cyan-500/20 text-cyan-600 dark:text-cyan-400'
-                            : 'border border-border bg-surface text-muted'
+              {/* Clarification & Tuning Options */}
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wider text-cyan-600 dark:text-cyan-400 block mb-2">
+                  2. Clarification &amp; Adaptive Tuning Options
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 rounded-xl border border-border bg-surface-muted/30 p-4">
+                  <div>
+                    <label className={fieldLabel}>Enable Iterative Parameter Tuning</label>
+                    <div className="flex items-center gap-3 mt-2">
+                      <button
+                        type="button"
+                        onClick={() => setEnableTuning(!enableTuning)}
+                        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-cyan-500/40 ${
+                          enableTuning
+                            ? 'bg-cyan-500 border-cyan-500'
+                            : 'border-border-input bg-surface hover:border-cyan-500/40 dark:bg-white/10 dark:border-white/20'
                         }`}
                       >
-                        {completed ? <CheckCircle2 className="size-3.5" /> : idx + 1}
+                        <span
+                          className={`pointer-events-none inline-block size-5 transform rounded-full bg-white shadow-sm ring-1 ring-black/5 transition duration-200 ease-in-out ${
+                            enableTuning ? 'translate-x-5' : 'translate-x-0.5'
+                          }`}
+                        />
+                      </button>
+                      <span className="text-xs font-semibold text-foreground dark:text-slate-100">
+                        {enableTuning ? 'Active (Tuner Agent)' : 'Single Derivation'}
                       </span>
-                      <span>{stage.label}</span>
                     </div>
-                    {active && <span className="size-2 rounded-full bg-cyan-500 animate-ping" />}
                   </div>
-                )
-              })}
-            </div>
-          </div>
 
-          {/* Live Activity Feed */}
-          {job && job.progress && job.progress.length > 0 && (
-            <div className="rounded-2xl border border-border bg-surface-elevated p-5 shadow-sm">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-muted">
-                Agent Events
-              </span>
-              <div className="mt-3 max-h-64 overflow-y-auto space-y-2 pr-1 text-xs scrollbar-thin">
-                {job.progress.map((ev, i) => (
-                  <div
-                    key={i}
-                    className="rounded-lg border border-border bg-surface p-2.5 text-[11.5px] leading-relaxed text-muted-text"
-                  >
-                    <div className="flex items-center justify-between text-[10px] text-muted font-mono mb-1">
-                      <span className="text-cyan-600 dark:text-cyan-400 font-semibold uppercase">{ev.stage || 'info'}</span>
-                      <span>{ev.ts ? new Date(ev.ts * 1000).toLocaleTimeString() : ''}</span>
+                  <div>
+                    <label className={fieldLabel}>Skip Clarification Q&A</label>
+                    <div className="flex items-center gap-3 mt-2">
+                      <button
+                        type="button"
+                        onClick={() => setSkipClarify(!skipClarify)}
+                        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-cyan-500/40 ${
+                          skipClarify
+                            ? 'bg-cyan-500 border-cyan-500'
+                            : 'border-border-input bg-surface hover:border-cyan-500/40 dark:bg-white/10 dark:border-white/20'
+                        }`}
+                      >
+                        <span
+                          className={`pointer-events-none inline-block size-5 transform rounded-full bg-white shadow-sm ring-1 ring-black/5 transition duration-200 ease-in-out ${
+                            skipClarify ? 'translate-x-5' : 'translate-x-0.5'
+                          }`}
+                        />
+                      </button>
+                      <span className="text-xs font-semibold text-foreground dark:text-slate-100">
+                        {skipClarify ? 'Use Conservative Defaults' : 'Interactive Dialogue'}
+                      </span>
                     </div>
-                    <div>{ev.text}</div>
                   </div>
-                ))}
+
+                  {enableTuning && (
+                    <>
+                      <div className="pt-2 border-t border-border">
+                        <label className={fieldLabel}>Target Tracking RMS Fraction</label>
+                        <input
+                          type="number"
+                          step="0.005"
+                          min="0.001"
+                          max="0.5"
+                          value={targetRms}
+                          onChange={(e) => setTargetRms(parseFloat(e.target.value) || 0.02)}
+                          className={fieldInput}
+                        />
+                      </div>
+                      <div className="pt-2 border-t border-border">
+                        <label className={fieldLabel}>Max Tuning Iterations</label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="10"
+                          value={maxRounds}
+                          onChange={(e) => setMaxRounds(parseInt(e.target.value) || 4)}
+                          className={fieldInput}
+                        />
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
+
+        {/* Clarifier Mode when questions pending */}
+        {job && job.status === 'clarifying' && job.clarify_pending && (
+          <AdaptiveClarifierChat
+            job={job}
+            onSubmitAnswer={handleClarifySubmit}
+            submitting={submitting}
+          />
+        )}
+
+        {/* Active Job View: Adaptive Dashboard (Standardized with MPC) */}
+        {job && (!job.clarify_pending || job.status !== 'clarifying') && (
+          <AdaptiveDashboard
+            job={job}
+            results={results}
+            onDownloadReport={() => {
+              if (jobId) {
+                window.open(adaptiveApi.getReportPdfUrl(jobId), '_blank')
+              }
+            }}
+          />
+        )}
       </main>
     </div>
   )

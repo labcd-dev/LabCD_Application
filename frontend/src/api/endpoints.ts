@@ -1019,6 +1019,7 @@ export const adaptiveApi = {
     onEvent: (event: string, data: any) => void,
     onError?: (err: unknown) => void,
   ) => streamEvents(`/adaptive/jobs/${jobId}/events`, onEvent, onError),
+  getReportPdfUrl: (jobId: string) => `${API_BASE}/adaptive/jobs/${jobId}/report.pdf`,
 }
 
 export const mpcApi = {

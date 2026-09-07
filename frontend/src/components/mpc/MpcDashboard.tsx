@@ -49,7 +49,7 @@ export function MpcDashboard({
   results,
   onDownloadReport,
 }: MpcDashboardProps) {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'oscilloscope' | 'logs' | 'sandbox'>('dashboard')
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'logs' | 'sandbox'>('dashboard')
   const [reasoningFilter, setReasoningFilter] = useState('')
   const logScrollRef = useRef<HTMLDivElement>(null)
 
@@ -320,19 +320,7 @@ print(f"MPC Controller initialized: Np={Np}, Nc={Nc}, dt={dt}")
                 : 'text-muted-text hover:text-foreground'
             }`}
           >
-            <Activity className="size-3.5" /> Dashboard
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('oscilloscope')}
-            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 transition-all shrink-0 whitespace-nowrap ${
-              activeTab === 'oscilloscope'
-                ? 'bg-purple-600 text-white shadow-sm'
-                : 'text-muted-text hover:text-foreground'
-            }`}
-          >
-            <Gauge className="size-3.5" /> Time-Domain Oscilloscope
+            <Activity className="size-3.5" /> Dashboard &amp; Waveform
           </button>
 
           <button
@@ -472,80 +460,96 @@ print(f"MPC Controller initialized: Np={Np}, Nc={Nc}, dt={dt}")
             </div>
           </div>
 
-          {/* Row 2: Multi-Agent Reasoning Telemetry (Showing last 10 in view, scroll up for earlier, Max 7 words ...) */}
-          <div className="rounded-2xl border border-border bg-surface-elevated p-3 sm:p-4 shadow-sm space-y-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 min-w-0">
-                <div className="flex size-6 sm:size-7 shrink-0 items-center justify-center rounded-lg bg-purple-500/15 text-purple-600 dark:text-purple-300 border border-purple-500/30">
-                  <Sparkles className="size-3.5" />
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-xs font-bold text-foreground truncate">
-                      Multi-Agent Reasoning Telemetry
-                    </h3>
-                    <span className="shrink-0 text-[9.5px] text-muted-text font-mono bg-surface-muted px-1.5 py-0.2 rounded border border-border">
-                      Max 7 words ...
-                    </span>
-                  </div>
-                  <p className="text-[10px] text-muted-text hidden xs:block truncate">
-                    Live cognitive stream from Actor, Evaluator, Terminator &amp; Juror agents
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 shrink-0">
-                <span className="text-[10px] font-mono text-muted-text">
-                  {reasoningLogs.length} events
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('logs')}
-                  className="text-[10.5px] font-semibold text-purple-600 dark:text-purple-400 hover:text-purple-500 hover:underline flex items-center gap-1 transition-colors whitespace-nowrap"
-                >
-                  Full Logs Tab <ArrowRight className="size-3" />
-                </button>
-              </div>
+          {/* Row 2: 3 Columns Waveform Plot + 1 Column Reasoning Telemetry Box */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-stretch">
+            {/* 3 Columns (lg:col-span-8 xl:col-span-9): Closed-Loop Time-Domain Oscilloscope */}
+            <div className="lg:col-span-8 xl:col-span-9">
+              <MpcSimulationPlot
+                series={results?.series as SimSeriesData | null}
+                baselineSeries={results?.baseline_series as SimSeriesData | null}
+                currentIteration={currentIter}
+                bestMse={bestMse}
+              />
             </div>
 
-            {/* Scrollable feed: auto-scrolls to bottom so latest 10 are in view, scroll up for earlier logs */}
-            <div
-              ref={logScrollRef}
-              className="max-h-48 overflow-y-auto space-y-1.5 pr-1 rounded-xl border border-border/70 bg-surface p-2 scrollbar-thin"
-            >
-              {reasoningLogs.length > 0 ? (
-                reasoningLogs.map((log) => {
-                  const summary = summarizeToSevenWords(log.text)
-                  return (
-                    <div
-                      key={log.id}
-                      title={log.text}
-                      className="flex items-center justify-between gap-2 rounded-lg border border-border/60 bg-surface-elevated px-2.5 py-1 text-xs transition-colors hover:border-purple-500/40 hover:bg-surface-hover cursor-help"
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span
-                          className={`shrink-0 rounded px-1.5 py-0.2 text-[9.5px] font-bold ${log.badgeColor}`}
-                        >
-                          {log.agent}
-                        </span>
-                        <span className="truncate text-[11px] text-foreground font-medium">
-                          {summary}
-                        </span>
-                      </div>
-                      {log.round !== undefined && log.round !== null && (
-                        <span className="shrink-0 text-[9.5px] font-mono text-muted-text bg-surface-muted px-1.5 py-0.2 rounded border border-border/50">
-                          R{log.round}
-                        </span>
-                      )}
+            {/* 1 Column (lg:col-span-4 xl:col-span-3): Multi-Agent Reasoning Telemetry Box */}
+            <div className="lg:col-span-4 xl:col-span-3 rounded-2xl border border-border bg-surface-elevated p-4 shadow-sm flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between border-b border-border/80 pb-3 mb-3">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-purple-500/15 text-purple-600 dark:text-purple-300 border border-purple-500/30">
+                      <Sparkles className="size-3.5" />
                     </div>
-                  )
-                })
-              ) : (
-                <div className="flex items-center justify-center gap-2 py-4 text-[11px] text-muted-text">
-                  <span className="size-1.5 rounded-full bg-purple-500 animate-pulse" />
-                  Waiting for multi-agent reasoning telemetry stream...
+                    <div className="min-w-0">
+                      <h3 className="text-xs font-bold text-foreground truncate">
+                        Reasoning Telemetry
+                      </h3>
+                      <span className="text-[9.5px] text-muted-text font-mono truncate block">
+                        Max 7 words ...
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className="text-[10px] font-mono text-muted-text">
+                      {reasoningLogs.length} events
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('logs')}
+                      className="text-[10.5px] font-semibold text-purple-600 dark:text-purple-400 hover:text-purple-500 hover:underline flex items-center gap-0.5 transition-colors whitespace-nowrap"
+                    >
+                      Logs <ArrowRight className="size-3" />
+                    </button>
+                  </div>
                 </div>
-              )}
+
+                {/* Scrollable feed: auto-scrolls to bottom, fits compactly without horizontal dead space */}
+                <div
+                  ref={logScrollRef}
+                  className="max-h-72 overflow-y-auto space-y-1.5 pr-1 rounded-xl border border-border/70 bg-surface p-2 scrollbar-thin"
+                >
+                  {reasoningLogs.length > 0 ? (
+                    reasoningLogs.map((log) => {
+                      const summary = summarizeToSevenWords(log.text)
+                      return (
+                        <div
+                          key={log.id}
+                          title={log.text}
+                          className="flex items-center justify-between gap-1.5 rounded-lg border border-border/60 bg-surface-elevated px-2 py-1 text-xs transition-colors hover:border-purple-500/40 hover:bg-surface-hover cursor-help"
+                        >
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span
+                              className={`shrink-0 rounded px-1.5 py-0.2 text-[9px] font-bold ${log.badgeColor}`}
+                            >
+                              {log.agent}
+                            </span>
+                            <span className="truncate text-[10.5px] text-foreground font-medium">
+                              {summary}
+                            </span>
+                          </div>
+                          {log.round !== undefined && log.round !== null && (
+                            <span className="shrink-0 text-[9px] font-mono text-muted-text bg-surface-muted px-1 py-0.2 rounded border border-border/50">
+                              R{log.round}
+                            </span>
+                          )}
+                        </div>
+                      )
+                    })
+                  ) : (
+                    <div className="flex items-center justify-center gap-2 py-8 text-[11px] text-muted-text">
+                      <span className="size-1.5 rounded-full bg-purple-500 animate-pulse" />
+                      Awaiting telemetry...
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-2 text-right">
+                <span className="text-[9.5px] text-muted-text font-mono">
+                  Auto-scrolled · Latest active
+                </span>
+              </div>
             </div>
           </div>
 
@@ -615,16 +619,6 @@ print(f"MPC Controller initialized: Np={Np}, Nc={Nc}, dt={dt}")
             )}
           </div>
         </div>
-      )}
-
-      {/* SEPARATE TAB: Time-Domain Oscilloscope */}
-      {activeTab === 'oscilloscope' && (
-        <MpcSimulationPlot
-          series={results?.series as SimSeriesData | null}
-          baselineSeries={results?.baseline_series as SimSeriesData | null}
-          currentIteration={currentIter}
-          bestMse={bestMse}
-        />
       )}
 
       {/* SEPARATE TAB: Manual Simulation Sandbox */}
