@@ -40,6 +40,11 @@ class AdaptiveJobOptions(BaseModel):
     skip_clarify: bool = False
     model: str | None = None
     description: str = ""
+    tuning_objectives: dict[str, int] | None = None
+    sim_time: float | None = None
+    solver_step: float | None = None
+    x0: list[float] | None = None
+    references: dict[str, Any] | None = None
 
 
 class AdaptiveJobCreateRequest(BaseModel):

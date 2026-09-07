@@ -202,6 +202,23 @@ def _run_pipeline_thread(job_id: str, store: InMemoryAdaptiveJobStore) -> None:
         if spec and spec.get("dynamics", {}).get("states"):
             sim_overrides = clarifier.sim_overrides_from_spec(spec)
 
+        if sim_overrides is None:
+            sim_overrides = {}
+        if options.get("sim_time") is not None and "t_end" not in sim_overrides:
+            sim_overrides["t_end"] = float(options["sim_time"])
+        if options.get("solver_step") is not None and "dt" not in sim_overrides:
+            sim_overrides["dt"] = float(options["solver_step"])
+        if options.get("x0") is not None and "x0" not in sim_overrides:
+            sim_overrides["x0"] = list(options["x0"])
+        if not sim_overrides:
+            sim_overrides = None
+
+        tuning_objs = options.get("tuning_objectives")
+        if isinstance(tuning_objs, dict) and tuning_objs:
+            tuning_objs = {str(k): int(v) for k, v in tuning_objs.items() if v is not None}
+        else:
+            tuning_objs = None
+
         result, usage, tuning_log, tuning_best = run_full_pipeline(
             options.get("description") or "",
             enable_tuning=bool(options.get("enable_tuning")),
@@ -212,6 +229,7 @@ def _run_pipeline_thread(job_id: str, store: InMemoryAdaptiveJobStore) -> None:
             clarification_record=record.clarification_record or None,
             sim_overrides=sim_overrides,
             clarifier_usage=record.clarifier_usage or None,
+            tuning_objectives=tuning_objs,
             system_spec=spec if spec and (spec.get("dynamics") or {}).get("states") else None,
         )
 

@@ -733,6 +733,7 @@ export interface AdaptiveJobOptions {
   solver_step?: number
   x0?: number[]
   references?: Record<string, string>
+  tuning_objectives?: Record<string, number> | null
 }
 
 export interface AdaptiveJobCreateRequest {

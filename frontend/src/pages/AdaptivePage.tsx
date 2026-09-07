@@ -3,6 +3,9 @@ import { Link, useSearchParams } from 'react-router-dom'
 import {
   AlertCircle,
   ArrowLeft,
+  ChevronDown,
+  ChevronUp,
+  Gauge,
   Loader2,
   Play,
   RotateCcw,
@@ -10,7 +13,7 @@ import {
   StopCircle,
   Zap,
 } from 'lucide-react'
-import { adaptiveApi } from '../api/endpoints'
+import { adaptiveApi, plantArtifactApi } from '../api/endpoints'
 import type {
   AdaptiveJobOptions,
   AdaptiveJobResultsResponse,
@@ -18,6 +21,7 @@ import type {
 } from '../api/types'
 import { AdaptiveClarifierChat } from '../components/adaptive/AdaptiveClarifierChat'
 import { AdaptiveDashboard } from '../components/adaptive/AdaptiveDashboard'
+import { AdaptiveTuningPriorities } from '../components/adaptive/AdaptiveTuningPriorities'
 import { usePipeline } from '../context/PipelineContext'
 import { btnBase, btnCompact, btnPrimary, fieldInput, fieldLabel } from '../lib/classes'
 
@@ -37,14 +41,41 @@ export function AdaptivePage() {
   const [targetRms, setTargetRms] = useState(0.02)
   const [maxRounds, setMaxRounds] = useState(4)
   const [skipClarify, setSkipClarify] = useState(false)
+  const [tuningPriorities, setTuningPriorities] = useState<Record<string, number>>({})
 
-  // Simulation & Plant Knobs (Inherited from Plant Model Chat / System Spec)
-  const simTime = 10.0
-  const solverStep = 0.01
-  const x0Str = '0.0'
-  const [referenceFn, setReferenceFn] = useState('sin(t)')
+  // Simulation & Plant Knobs (Inherited from Plant Model Chat / Pre-Launch Artifact)
+  const [simTime, setSimTime] = useState<number>(10.0)
+  const [solverStep, setSolverStep] = useState<number>(0.01)
+  const [x0Str, setX0Str] = useState<string>('0.0, 0.0')
+  const [referenceFn, setReferenceFn] = useState<string>('sin(t)')
+  const [showSimKnobs, setShowSimKnobs] = useState<boolean>(false)
 
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // Prepopulate from compiled artifact if available
+  useEffect(() => {
+    const artifactId = sessionStorage.getItem('labcd_last_artifact_id')
+    if (!artifactId) return
+    let active = true
+    plantArtifactApi
+      .getArtifact(artifactId)
+      .then((art) => {
+        if (!active || !art?.pre_launch) return
+        if (typeof art.pre_launch.total_simulation_time === 'number') {
+          setSimTime(art.pre_launch.total_simulation_time)
+        }
+        if (typeof art.pre_launch.solver_sample_time === 'number') {
+          setSolverStep(art.pre_launch.solver_sample_time)
+        }
+        if (Array.isArray(art.pre_launch.initial_state) && art.pre_launch.initial_state.length > 0) {
+          setX0Str(art.pre_launch.initial_state.join(', '))
+        }
+      })
+      .catch(() => {})
+    return () => {
+      active = false
+    }
+  }, [])
 
   // Start polling when jobId is set and job is not terminal
   useEffect(() => {
@@ -173,6 +204,8 @@ export function AdaptivePage() {
       solver_step: solverStep,
       x0,
       references: { x: referenceFn },
+      tuning_objectives:
+        enableTuning && Object.keys(tuningPriorities).length > 0 ? tuningPriorities : undefined,
     }
 
     try {
@@ -261,7 +294,7 @@ export function AdaptivePage() {
             to="/case-studies"
             className="flex items-center gap-1.5 text-muted-text hover:text-foreground transition-colors font-medium"
           >
-            <ArrowLeft className="size-3.5" /> Case Studies & Projects
+            <ArrowLeft className="size-3.5" /> Case Studies &amp; Projects
           </Link>
           <span className="text-muted/40">/</span>
           <span className="font-semibold text-cyan-600 dark:text-cyan-400 flex items-center gap-1.5">
@@ -349,7 +382,7 @@ export function AdaptivePage() {
                   </span>
                 </div>
                 <h1 className="mt-1 text-xl font-bold text-foreground">
-                  Sliding Mode & Backstepping Controller Design
+                  Sliding Mode &amp; Backstepping Controller Design
                 </h1>
                 <p className="mt-1 text-xs text-muted-text leading-relaxed">
                   Synthesizes robust nonlinear control laws with radial basis function (RBF) neural
@@ -376,30 +409,139 @@ export function AdaptivePage() {
             </div>
 
             <div className="mt-6 space-y-6">
-              {/* Desired Reference Trajectory */}
+              {/* 1. Desired Reference Trajectory & Simulation Setup */}
               <div>
                 <label className="text-xs font-bold uppercase tracking-wider text-cyan-600 dark:text-cyan-400 block mb-2">
-                  1. Desired Reference Trajectory
+                  1. Desired Reference Trajectory &amp; Simulation Horizon
                 </label>
-                <div className="rounded-xl border border-border bg-surface-muted/30 p-4">
-                  <label className={fieldLabel}>Reference Trajectory xd(t)</label>
-                  <input
-                    type="text"
-                    value={referenceFn}
-                    onChange={(e) => setReferenceFn(e.target.value)}
-                    placeholder="sin(t)"
-                    className={fieldInput}
-                  />
-                  <span className="text-[10.5px] text-muted-text font-mono mt-1 block">
-                    Target continuous state tracking trajectory, e.g. sin(t), cos(0.5*t), 1.0, or step command
-                  </span>
+                <div className="rounded-xl border border-border bg-surface-muted/30 p-4 space-y-3">
+                  <div>
+                    <label className={fieldLabel}>Reference Trajectory xd(t)</label>
+                    <input
+                      type="text"
+                      value={referenceFn}
+                      onChange={(e) => setReferenceFn(e.target.value)}
+                      placeholder="sin(t)"
+                      className={fieldInput}
+                    />
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                      <span className="text-[10px] text-muted-text font-mono">Quick Signals:</span>
+                      {[
+                        { label: 'sin(t)', val: 'sin(t)' },
+                        { label: 'cos(0.5·t)', val: 'cos(0.5*t)' },
+                        { label: '1.0 (Step)', val: '1.0' },
+                        { label: 'tanh(t)', val: 'tanh(t)' },
+                      ].map((s) => (
+                        <button
+                          key={s.val}
+                          type="button"
+                          onClick={() => setReferenceFn(s.val)}
+                          className="rounded-md border border-border bg-surface px-2 py-0.5 font-mono text-[10px] text-muted-text hover:text-cyan-500 hover:border-cyan-500/40 transition-colors"
+                        >
+                          {s.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Collapsible Advanced Simulation Setup */}
+                  <div className="pt-2 border-t border-border/60">
+                    <button
+                      type="button"
+                      onClick={() => setShowSimKnobs(!showSimKnobs)}
+                      className="flex items-center gap-1.5 text-xs font-semibold text-cyan-600 dark:text-cyan-400 hover:underline transition-all"
+                    >
+                      <Gauge className="size-3.5" />
+                      <span>{showSimKnobs ? 'Hide Advanced Simulation Parameters' : 'Adjust Simulation Time, Solver Step dt & Initial State x0'}</span>
+                      {showSimKnobs ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
+                    </button>
+
+                    {showSimKnobs && (
+                      <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3 rounded-lg border border-border/80 bg-surface p-3 animate-in fade-in-30">
+                        {/* Sim Time */}
+                        <div>
+                          <label className={fieldLabel}>Total Sim Time (s)</label>
+                          <input
+                            type="number"
+                            min="1"
+                            max="500"
+                            step="1"
+                            value={simTime}
+                            onChange={(e) => setSimTime(parseFloat(e.target.value) || 10)}
+                            className={fieldInput}
+                          />
+                          <div className="mt-1 flex gap-1">
+                            {[5, 10, 30, 100].map((t) => (
+                              <button
+                                key={t}
+                                type="button"
+                                onClick={() => setSimTime(t)}
+                                className={`rounded px-1.5 py-0.5 text-[9.5px] font-mono border transition-all ${
+                                  simTime === t
+                                    ? 'bg-cyan-500 text-white border-cyan-500'
+                                    : 'border-border bg-surface-muted text-muted-text hover:text-foreground'
+                                }`}
+                              >
+                                {t}s
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Solver Step */}
+                        <div>
+                          <label className={fieldLabel}>Solver Step dt (s)</label>
+                          <input
+                            type="number"
+                            min="0.00001"
+                            max="0.1"
+                            step="0.001"
+                            value={solverStep}
+                            onChange={(e) => setSolverStep(parseFloat(e.target.value) || 0.01)}
+                            className={fieldInput}
+                          />
+                          <div className="mt-1 flex gap-1">
+                            {[0.0001, 0.001, 0.01].map((dt) => (
+                              <button
+                                key={dt}
+                                type="button"
+                                onClick={() => setSolverStep(dt)}
+                                className={`rounded px-1.5 py-0.5 text-[9.5px] font-mono border transition-all ${
+                                  solverStep === dt
+                                    ? 'bg-cyan-500 text-white border-cyan-500'
+                                    : 'border-border bg-surface-muted text-muted-text hover:text-foreground'
+                                }`}
+                              >
+                                {dt}s
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Initial Condition x0 */}
+                        <div>
+                          <label className={fieldLabel}>Initial State Vector x0</label>
+                          <input
+                            type="text"
+                            value={x0Str}
+                            onChange={(e) => setX0Str(e.target.value)}
+                            placeholder="0.0, 0.0"
+                            className={fieldInput}
+                          />
+                          <span className="text-[10px] text-muted-text font-mono mt-1 block">
+                            Comma-separated initial state vector
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
-              {/* Clarification & Tuning Options */}
+              {/* 2. Clarification & Parameter Tuning Strategy */}
               <div>
                 <label className="text-xs font-bold uppercase tracking-wider text-cyan-600 dark:text-cyan-400 block mb-2">
-                  2. Clarification &amp; Adaptive Tuning Options
+                  2. Clarification &amp; Adaptive Tuning Strategy
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 rounded-xl border border-border bg-surface-muted/30 p-4">
                   <div>
@@ -421,13 +563,13 @@ export function AdaptivePage() {
                         />
                       </button>
                       <span className="text-xs font-semibold text-foreground dark:text-slate-100">
-                        {enableTuning ? 'Active (Tuner Agent)' : 'Single Derivation'}
+                        {enableTuning ? 'Active (Lyapunov Tuner Agent)' : 'Single Synthesis Run'}
                       </span>
                     </div>
                   </div>
 
                   <div>
-                    <label className={fieldLabel}>Skip Clarification Q&A</label>
+                    <label className={fieldLabel}>Skip Clarification Dialogue</label>
                     <div className="flex items-center gap-3 mt-2">
                       <button
                         type="button"
@@ -445,7 +587,7 @@ export function AdaptivePage() {
                         />
                       </button>
                       <span className="text-xs font-semibold text-foreground dark:text-slate-100">
-                        {skipClarify ? 'Use Conservative Defaults' : 'Interactive Dialogue'}
+                        {skipClarify ? 'Direct Run (Conservative Defaults)' : 'Interactive Dialogue'}
                       </span>
                     </div>
                   </div>
@@ -479,6 +621,20 @@ export function AdaptivePage() {
                   )}
                 </div>
               </div>
+
+              {/* 3. State-of-the-Art Adaptive Tuning Priorities */}
+              {enableTuning && (
+                <div className="animate-in fade-in-50 duration-200">
+                  <label className="text-xs font-bold uppercase tracking-wider text-cyan-600 dark:text-cyan-400 block mb-2">
+                    3. Objective Prioritization (1 to 5)
+                  </label>
+                  <AdaptiveTuningPriorities
+                    weights={tuningPriorities}
+                    onChange={setTuningPriorities}
+                    disabled={loading}
+                  />
+                </div>
+              )}
             </div>
           </div>
         )}

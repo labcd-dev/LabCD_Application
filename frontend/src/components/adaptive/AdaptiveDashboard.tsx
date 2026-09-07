@@ -1017,6 +1017,26 @@ title('LabCD Adaptive Closed-Loop Response'); legend('show', 'Location', 'best')
             )}
           </div>
 
+          {/* Tuning Objectives In Force (if configured) */}
+          {job?.options?.tuning_objectives && Object.keys(job.options.tuning_objectives).length > 0 && (
+            <div className="rounded-xl border border-cyan-500/25 bg-surface p-3.5 text-xs flex flex-wrap items-center gap-2">
+              <span className="font-bold text-cyan-600 dark:text-cyan-400 font-mono text-[11px]">
+                Configured Objective Priorities:
+              </span>
+              {Object.entries(job.options.tuning_objectives).map(([k, v]) => (
+                <span
+                  key={k}
+                  className="rounded-lg bg-surface-muted border border-border px-2.5 py-1 text-[11px] font-mono text-foreground flex items-center gap-1.5"
+                >
+                  <span>{k.replace(/_/g, ' ')}</span>
+                  <span className="rounded bg-cyan-500/20 px-1 py-0.2 text-[10px] font-bold text-cyan-600 dark:text-cyan-300">
+                    weight: {v}
+                  </span>
+                </span>
+              ))}
+            </div>
+          )}
+
           {/* Tuning Rounds History Table */}
           {results?.tuning_log && results.tuning_log.length > 0 && (
             <div className="rounded-2xl border border-border bg-surface-elevated p-5 shadow-sm">
