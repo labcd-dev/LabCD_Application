@@ -19,6 +19,25 @@ from backend_core.AgentAdaptive.tools.series_export import (
 )
 
 
+def _d_hat_from_alog(alog):
+    """Best available disturbance / uncertainty estimate series for UI export."""
+    if not isinstance(alog, dict) or not alog:
+        return None
+    for key in ("g_hat", "D_hat", "Delta_hat"):
+        arr = alog.get(key)
+        if arr is None:
+            continue
+        try:
+            import numpy as np
+            a = np.asarray(arr, dtype=float)
+            if a.size:
+                return a
+        except Exception:
+            continue
+    return None
+
+
+
 def _run_smc(states, dynamics, inputs, outputs, x0, refs,
              has_delta, has_disturbance, delta_exprs, dist_exprs,
              surface_lambda, K, Lam, phi_layer,
@@ -128,7 +147,7 @@ def _run_smc(states, dynamics, inputs, outputs, x0, refs,
         }
         attach_series(components, t, y_on, ref, u_on, x_on, dt=dt, t_end=t_end,
                       outputs=outputs, inputs=inputs, states=states,
-                      include=not for_tuning)
+                      d_hat=_d_hat_from_alog(alog), include=not for_tuning)
         return components, metrics
 
     # the "off" run and disturbance-observer comparison only feed comparison
@@ -174,7 +193,7 @@ def _run_smc(states, dynamics, inputs, outputs, x0, refs,
     }
     attach_series(components, t, y_on, ref, u_on, x_on, dt=dt, t_end=t_end,
                   outputs=outputs, inputs=inputs, states=states,
-                  include=not for_tuning)
+                  d_hat=_d_hat_from_alog(alog), include=not for_tuning)
     return components, metrics
 
 
@@ -281,7 +300,7 @@ def _run_backstepping(states, dynamics, inputs, outputs, x0, refs,
         }
         attach_series(components, t, y_on, ref, u_on, x_on, dt=dt, t_end=t_end,
                       outputs=outputs, inputs=inputs, states=states,
-                      include=not for_tuning)
+                      d_hat=_d_hat_from_alog(alog), include=not for_tuning)
         return components, metrics
 
     if not for_tuning and should_create_plots():
@@ -327,5 +346,5 @@ def _run_backstepping(states, dynamics, inputs, outputs, x0, refs,
     }
     attach_series(components, t, y_on, ref, u_on, x_on, dt=dt, t_end=t_end,
                   outputs=outputs, inputs=inputs, states=states,
-                  include=not for_tuning)
+                  d_hat=_d_hat_from_alog(alog), include=not for_tuning)
     return components, metrics

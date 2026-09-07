@@ -1020,6 +1020,30 @@ export const adaptiveApi = {
     onError?: (err: unknown) => void,
   ) => streamEvents(`/adaptive/jobs/${jobId}/events`, onEvent, onError),
   getReportPdfUrl: (jobId: string) => `${API_BASE}/adaptive/jobs/${jobId}/report.pdf`,
+  /** Authenticated PDF download — browser navigation does not send JWT. */
+  downloadReportPdf: async (jobId: string, filename?: string): Promise<void> => {
+    const token = getAuthToken()
+    const response = await fetch(`${API_BASE}/adaptive/jobs/${jobId}/report.pdf`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+    if (!response.ok) {
+      let detail = `Failed to download PDF (${response.status})`
+      try {
+        const body = await response.json()
+        if (body?.detail) detail = String(body.detail)
+      } catch {
+        /* ignore non-JSON */
+      }
+      throw new Error(detail)
+    }
+    const blob = await response.blob()
+    const disposition = response.headers.get('Content-Disposition') || ''
+    const match = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(disposition)
+    const name =
+      filename ||
+      (match ? match[1].replace(/['"]/g, '') : `adaptive_${jobId}_report.pdf`)
+    triggerBlobDownload(blob, name)
+  },
 }
 
 export const mpcApi = {

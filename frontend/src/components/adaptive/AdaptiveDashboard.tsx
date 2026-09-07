@@ -64,101 +64,217 @@ export function AdaptiveDashboard({
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
   const logScrollRef = useRef<HTMLDivElement>(null)
 
-  const currentRound = typeof results?.tuning_best?.round === 'number'
-    ? results.tuning_best.round
-    : typeof job?.round === 'number'
-    ? job.round
-    : 1
+  const tuningLogLen = Array.isArray(results?.tuning_log) ? results.tuning_log.length : 0
+  const logRounds = (results?.tuning_log || [])
+    .map((e) => (typeof (e as { round?: number }).round === 'number' ? (e as { round: number }).round : null))
+    .filter((n): n is number => n !== null)
+  // Display the last completed evaluation round (matches Multi-Metric history count-1),
+  // not only tuning_best which can be an earlier round.
+  const lastLogRound = logRounds.length ? Math.max(...logRounds) : null
+  const bestRound =
+    typeof results?.tuning_best?.round === 'number' ? results.tuning_best.round : null
+  const currentRound =
+    lastLogRound !== null
+      ? lastLogRound
+      : bestRound !== null
+        ? bestRound
+        : results?.status === 'completed' || results?.status === 'failed'
+          ? 1
+          : 0
   const maxRounds = job?.options?.max_tuning_rounds ?? 4
+  const tuningEnabled = Boolean(job?.options?.enable_tuning)
+  const evalCount = tuningLogLen
 
-  const metrics = results?.final_metrics || {}
-  const bestRms = typeof metrics.tracking_rms === 'number'
-    ? metrics.tracking_rms
-    : typeof metrics.rms === 'number'
-    ? metrics.rms
-    : 0.0124
+  // Backend scoring uses lists / nested keys (steady_rms, control_max, tracking_mse.steady),
+  // not the flat UI aliases (tracking_rms, max_u). Normalize here.
+  const firstFinite = (value: unknown): number | null => {
+    if (typeof value === 'number' && Number.isFinite(value)) return value
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        const n = typeof item === 'number' ? item : Number(item)
+        if (Number.isFinite(n)) return n
+      }
+    }
+    return null
+  }
+  const maxAbsFinite = (value: unknown): number | null => {
+    if (typeof value === 'number' && Number.isFinite(value)) return Math.abs(value)
+    if (Array.isArray(value)) {
+      const nums = value
+        .map((item) => (typeof item === 'number' ? item : Number(item)))
+        .filter((n) => Number.isFinite(n))
+        .map((n) => Math.abs(n))
+      if (nums.length) return Math.max(...nums)
+    }
+    return null
+  }
 
-  const maxEffort = typeof metrics.max_u === 'number'
-    ? metrics.max_u
-    : typeof metrics.control_effort === 'number'
-    ? metrics.control_effort
-    : 4.85
+  const metrics = (results?.final_metrics || {}) as Record<string, unknown>
+  const trackingMse = (metrics.tracking_mse || {}) as Record<string, unknown>
 
-  const settlingTime = typeof metrics.settling_time === 'number'
-    ? metrics.settling_time
-    : 1.42
+  const bestRms =
+    firstFinite(metrics.tracking_rms) ??
+    firstFinite(metrics.rms) ??
+    firstFinite(metrics.steady_rms) ??
+    firstFinite(trackingMse.steady) ??
+    firstFinite(trackingMse.full) ??
+    firstFinite(metrics.transient_rms)
 
-  // Improvement vs initial round
+  const maxEffort =
+    firstFinite(metrics.max_u) ??
+    firstFinite(metrics.control_effort) ??
+    maxAbsFinite(metrics.control_max) ??
+    maxAbsFinite(metrics.control_rms)
+
+  const settlingFromLog = (() => {
+    const log = results?.tuning_log || []
+    for (let i = log.length - 1; i >= 0; i--) {
+      const v = firstFinite((log[i] as Record<string, unknown>).settling_time)
+      if (v !== null) return v
+    }
+    const best = results?.tuning_best as { metrics?: Record<string, unknown> } | undefined
+    if (best?.metrics) return firstFinite(best.metrics.settling_time)
+    return null
+  })()
+  const settlingReached =
+    metrics.settling_time_reached === true ||
+    (metrics.settling_time_reached !== false && firstFinite(metrics.settling_time) !== null)
+  const settlingTime =
+    firstFinite(metrics.settling_time) ??
+    settlingFromLog
+
+  const trackingPct =
+    firstFinite(metrics.tracking_pct_headline) ??
+    firstFinite(metrics.tracking_pct_mean)
+
+  const hasRealMetrics = Boolean(
+    results?.final_metrics &&
+      (bestRms !== null || maxEffort !== null || settlingTime !== null || trackingPct !== null),
+  )
+
+  const extractionFailed =
+    Boolean(results?.error) ||
+    results?.status === 'failed' ||
+    (typeof results?.report === 'string' && results.report.includes('EXTRACTION FAILED'))
+
+  // Nested usage: { total: { total_tokens, ... }, agent, tuner, clarifier, ... }
+  const usageRoot = (results?.usage || {}) as Record<string, unknown>
+  const usageTotalBucket =
+    usageRoot.total && typeof usageRoot.total === 'object'
+      ? (usageRoot.total as Record<string, unknown>)
+      : usageRoot
+  const totalTokens =
+    firstFinite(usageRoot.total_tokens) ??
+    firstFinite(usageTotalBucket.total_tokens)
+  const totalCost =
+    firstFinite(usageRoot.total_cost) ??
+    firstFinite(usageRoot.cost_usd) ??
+    firstFinite(usageTotalBucket.cost)
+
+  // Improvement vs initial round — compare true steady RMS only (not tracking %)
   const improvementPct = useMemo(() => {
     const log = results?.tuning_log || []
     if (log.length > 1) {
-      const first = Number(log[0]?.rms ?? log[0]?.cost ?? 0)
-      const last = bestRms
-      if (first > 0 && last > 0 && first > last) {
+      const first = firstFinite(log[0]?.rms) ?? firstFinite(log[0]?.steady_rms)
+      const last =
+        firstFinite(log[log.length - 1]?.rms) ??
+        firstFinite(log[log.length - 1]?.steady_rms) ??
+        bestRms
+      if (first !== null && last !== null && first > 0 && last >= 0 && first > last) {
         return (((first - last) / first) * 100).toFixed(1)
       }
     }
-    return '68.4'
+    return null
   }, [results, bestRms])
 
   // Parse Series Data
+  // Backend series_export.build_series stores matrices as time-major:
+  //   channels.x.data[tIndex] = [x0, x1, ...] at that time
+  // Plot code expects channel-major: data[channelIndex] = full time series.
+  const transposeTimeMajor = (matrix: unknown): number[][] => {
+    if (!Array.isArray(matrix) || matrix.length === 0) return []
+    const first = matrix[0]
+    // Already channel-major: first element is a long number array (time series)
+    if (Array.isArray(first) && first.length > 0 && typeof first[0] === 'number' && !Array.isArray(first[0])) {
+      // Heuristic: if row length is small vs number of rows, treat as time-major
+      const nRows = matrix.length
+      const nCols = (first as number[]).length
+      if (nCols > 0 && nRows >= nCols) {
+        // time-major → channel-major
+        const out: number[][] = Array.from({ length: nCols }, () => [])
+        for (let t = 0; t < nRows; t++) {
+          const row = matrix[t]
+          if (!Array.isArray(row)) continue
+          for (let c = 0; c < nCols; c++) {
+            const v = row[c]
+            out[c].push(typeof v === 'number' && Number.isFinite(v) ? v : NaN)
+          }
+        }
+        return out
+      }
+      // Assume already channel-major
+      return (matrix as number[][]).map((ch) =>
+        Array.isArray(ch)
+          ? ch.map((v) => (typeof v === 'number' && Number.isFinite(v) ? v : NaN))
+          : [],
+      )
+    }
+    // Flat 1-D series → single channel
+    if (typeof first === 'number') {
+      return [(matrix as number[]).map((v) => (typeof v === 'number' && Number.isFinite(v) ? v : NaN))]
+    }
+    return []
+  }
+
   const normalizedSeries = useMemo<NormalizedSeries | null>(() => {
     const rawSeries = results?.series
     if (rawSeries && typeof rawSeries === 'object' && 'channels' in rawSeries) {
-      const channels = (rawSeries as Record<string, unknown>).channels as Record<string, { data?: unknown }> | undefined
-      if (channels?.t?.data && Array.isArray(channels.t.data) && channels.t.data.length > 0) {
+      const channels = (rawSeries as Record<string, unknown>).channels as
+        | Record<string, { data?: unknown }>
+        | undefined
+      const tRaw = channels?.t?.data
+      if (Array.isArray(tRaw) && tRaw.length > 0) {
+        const t = tRaw.map((v) => (typeof v === 'number' ? v : Number(v))).filter((v) => Number.isFinite(v))
+        if (!t.length) return null
+        const x = transposeTimeMajor(channels?.x?.data)
+        const y = transposeTimeMajor(channels?.y?.data)
+        const ref = transposeTimeMajor(channels?.ref?.data ?? channels?.xd?.data)
+        const u = transposeTimeMajor(channels?.u?.data)
+        const dHat = transposeTimeMajor(channels?.d_hat?.data)
         return {
-          t: channels.t.data as number[],
-          x: (channels.x?.data || []) as number[][],
-          xd: (channels.ref?.data || channels.xd?.data || []) as number[][],
-          y: (channels.y?.data || []) as number[][],
-          u: (channels.u?.data || []) as number[][],
-          d_hat: (channels.d_hat?.data || []) as number[][],
+          t,
+          x: x.length ? x : y,
+          xd: ref,
+          y: y.length ? y : x,
+          u,
+          d_hat: dHat,
         }
       }
     }
 
-    if (rawSeries && Array.isArray(rawSeries.t) && rawSeries.t.length > 0) {
-      return {
-        t: rawSeries.t as number[],
-        x: (rawSeries.x || []) as number[][],
-        xd: (rawSeries.xd || []) as number[][],
-        y: (rawSeries.x || []) as number[][],
-        u: (rawSeries.u || []) as number[][],
-        d_hat: (rawSeries.d_hat || []) as number[][],
+    if (rawSeries && Array.isArray((rawSeries as { t?: unknown }).t)) {
+      const legacy = rawSeries as {
+        t: number[]
+        x?: number[][]
+        xd?: number[][]
+        u?: number[][]
+        d_hat?: number[][]
+      }
+      if (legacy.t.length > 0) {
+        return {
+          t: legacy.t,
+          x: transposeTimeMajor(legacy.x || []),
+          xd: transposeTimeMajor(legacy.xd || []),
+          y: transposeTimeMajor(legacy.x || []),
+          u: transposeTimeMajor(legacy.u || []),
+          d_hat: transposeTimeMajor(legacy.d_hat || []),
+        }
       }
     }
 
-    // High fidelity synthetic response curve for visualization
-    const numPoints = 250
-    const tEnd = 8.0
-    const dt = tEnd / numPoints
-    const tArr: number[] = []
-    const xArr: number[] = []
-    const xdArr: number[] = []
-    const uArr: number[] = []
-    const dHatArr: number[] = []
-    const decay = 3.0 / Math.max(0.4, settlingTime)
-
-    for (let i = 0; i < numPoints; i++) {
-      const t = i * dt
-      tArr.push(t)
-      const refVal = Math.sin(t * 1.0)
-      xdArr.push(refVal)
-      const transient = 0.55 * Math.exp(-decay * t) * Math.cos(t * 3.8)
-      xArr.push(refVal + transient)
-      uArr.push(refVal * 2.2 + transient * 4.1)
-      dHatArr.push(0.18 * Math.sin(t * 0.75))
-    }
-    return {
-      t: tArr,
-      x: [xArr],
-      xd: [xdArr],
-      y: [xArr],
-      u: [uArr],
-      d_hat: [dHatArr],
-    }
-  }, [results, settlingTime])
+    // No real series — show empty state instead of synthetic waveforms.
+    return null
+  }, [results])
 
   // Plot coordinates for Oscilloscope SVG
   const plotData = useMemo(() => {
@@ -184,24 +300,37 @@ export function AdaptiveDashboard({
       primaryY = x.map((val, i) => val - (xd[i] ?? 0))
     }
 
-    if (!primaryY.length) {
-      primaryY = t.map((val) => Math.sin(val * 2) * Math.exp(-val * 0.4))
-      referenceY = t.map(() => 0)
+    // Align series length to time axis (pad/truncate)
+    const align = (arr: number[]) => {
+      if (arr.length === t.length) return arr
+      if (arr.length > t.length) return arr.slice(0, t.length)
+      return arr.concat(Array(t.length - arr.length).fill(NaN))
+    }
+    primaryY = align(primaryY)
+    referenceY = referenceY.length ? align(referenceY) : []
+
+    const finitePrimary = primaryY.filter((v) => Number.isFinite(v))
+    if (!finitePrimary.length) {
+      return null
     }
 
-    const allValues = [...primaryY, ...referenceY]
+    const allValues = [...finitePrimary, ...referenceY.filter((v) => Number.isFinite(v))]
     const yMin = Math.min(...allValues) - 0.2
     const yMax = Math.max(...allValues) + 0.2
     const yRange = yMax - yMin || 1
 
     const toSvg = (arr: number[]) => {
-      return arr
-        .map((y, i) => {
-          const normX = ((t[i] - tMin) / tRange) * 600
-          const normY = 200 - ((y - yMin) / yRange) * 180 - 10
-          return `${i === 0 ? 'M' : 'L'} ${normX.toFixed(1)} ${normY.toFixed(1)}`
-        })
-        .join(' ')
+      let d = ''
+      let started = false
+      for (let i = 0; i < arr.length; i++) {
+        const y = arr[i]
+        if (!Number.isFinite(y) || !Number.isFinite(t[i])) continue
+        const normX = ((t[i] - tMin) / tRange) * 600
+        const normY = 200 - ((y - yMin) / yRange) * 180 - 10
+        d += `${started ? 'L' : 'M'} ${normX.toFixed(1)} ${normY.toFixed(1)} `
+        started = true
+      }
+      return d.trim()
     }
 
     return {
@@ -219,44 +348,59 @@ export function AdaptiveDashboard({
     }
   }, [normalizedSeries, selectedSignal])
 
-  // Multi-Agent Reasoning Telemetry
+  // Multi-Agent Reasoning Telemetry — only real progress events with content
   const reasoningLogs = useMemo(() => {
-    const rawHistory =
-      job?.progress && job.progress.length > 0
-        ? job.progress
-        : [
-            { stage: 'clarify', text: 'Clarifier: Identified 2nd-order nonlinear dynamic plant with bounded matched disturbance.', round: 1 },
-            { stage: 'design', text: 'Designer: Synthesized sliding manifold s(t) = e_dot + 3.5e with backstepping virtual control.', round: 1 },
-            { stage: 'simul', text: 'Simulator: Numerical integration verifies tracking error stays in boundary layer epsilon=0.015.', round: 1 },
-            { stage: 'tune', text: 'Tuner: Refined adaptation learning rate Gamma=12.5 to minimize transient chattering.', round: 2 },
-            { stage: 'juror', text: 'Juror: Lyapunov function V verifies strict negative definiteness dV/dt <= -eta*|s|.', round: 2 },
-          ]
+    const rawHistory = Array.isArray(job?.progress) ? job.progress : []
 
-    return rawHistory.map((item, idx) => {
-      const text = item.text || ''
-      const round = item.round ?? null
-      const lower = text.toLowerCase()
-      let agent = 'Agent'
-      let badgeColor = 'bg-cyan-500/20 text-cyan-600 dark:text-cyan-300'
+    return rawHistory
+      .map((item, idx) => {
+        const extra =
+          item && typeof item === 'object' && 'extra' in item && item.extra && typeof item.extra === 'object'
+            ? (item.extra as Record<string, unknown>)
+            : {}
+        const kind = String((item as { kind?: string }).kind || extra.kind || '')
+        const stage = String((item as { stage?: string }).stage || '')
+        let text = String((item as { text?: string }).text || extra.text || extra.detail || extra.reasoning || '')
+        if (!text && kind === 'stage_start' && stage) {
+          text = `Stage started: ${stage}`
+        } else if (!text && kind === 'stage_done' && stage) {
+          text = `Stage completed: ${stage}`
+        } else if (!text && kind === 'note' && stage) {
+          text = String(extra.report || extra.message || '')
+        }
+        text = text.trim()
+        const round =
+          typeof (item as { round?: number }).round === 'number'
+            ? (item as { round: number }).round
+            : typeof extra.round === 'number'
+              ? (extra.round as number)
+              : null
+        const lower = `${stage} ${kind} ${text}`.toLowerCase()
+        let agent = 'Agent'
+        let badgeColor = 'bg-cyan-500/20 text-cyan-600 dark:text-cyan-300'
 
-      if (lower.includes('clarif') || item.stage === 'clarify') {
-        agent = 'Clarifier'
-        badgeColor = 'bg-blue-500/20 text-blue-600 dark:text-blue-300'
-      } else if (lower.includes('design') || item.stage === 'design') {
-        agent = 'Designer'
-        badgeColor = 'bg-cyan-500/20 text-cyan-600 dark:text-cyan-300'
-      } else if (lower.includes('simul') || lower.includes('build') || item.stage === 'build') {
-        agent = 'Simulator'
-        badgeColor = 'bg-teal-500/20 text-teal-600 dark:text-teal-300'
-      } else if (lower.includes('tune') || item.stage === 'tune') {
-        agent = 'Tuner'
-        badgeColor = 'bg-purple-500/20 text-purple-600 dark:text-purple-300'
-      } else if (lower.includes('juror') || lower.includes('certif') || lower.includes('judge')) {
-        agent = 'Juror'
-        badgeColor = 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-300'
-      }
-      return { id: idx, agent, badgeColor, text, round }
-    })
+        if (lower.includes('clarif') || stage === 'clarify') {
+          agent = 'Clarifier'
+          badgeColor = 'bg-blue-500/20 text-blue-600 dark:text-blue-300'
+        } else if (lower.includes('design') || stage === 'design') {
+          agent = 'Designer'
+          badgeColor = 'bg-cyan-500/20 text-cyan-600 dark:text-cyan-300'
+        } else if (lower.includes('simul') || lower.includes('build') || stage === 'build') {
+          agent = 'Simulator'
+          badgeColor = 'bg-teal-500/20 text-teal-600 dark:text-teal-300'
+        } else if (lower.includes('tune') || stage === 'tune' || stage === 'tuning') {
+          agent = 'Tuner'
+          badgeColor = 'bg-purple-500/20 text-purple-600 dark:text-purple-300'
+        } else if (lower.includes('report') || stage === 'report') {
+          agent = 'Reporter'
+          badgeColor = 'bg-amber-500/20 text-amber-600 dark:text-amber-300'
+        } else if (lower.includes('juror') || lower.includes('certif') || lower.includes('judge')) {
+          agent = 'Juror'
+          badgeColor = 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-300'
+        }
+        return { id: idx, agent, badgeColor, text, round, kind, stage }
+      })
+      .filter((log) => log.text.length > 0)
   }, [job])
 
   useEffect(() => {
@@ -313,8 +457,10 @@ print("Adaptive Controller Initialized with Lyapunov certified parameters.")
     const rows = ['time,simulated,reference']
     for (let i = 0; i < plotData.t.length; i++) {
       const timeVal = plotData.t[i].toFixed(4)
-      const simVal = plotData.primaryY[i] !== undefined ? plotData.primaryY[i].toFixed(5) : ''
-      const refVal = plotData.referenceY[i] !== undefined ? plotData.referenceY[i].toFixed(5) : ''
+      const sim = plotData.primaryY[i]
+      const ref = plotData.referenceY[i]
+      const simVal = typeof sim === 'number' && Number.isFinite(sim) ? sim.toFixed(5) : ''
+      const refVal = typeof ref === 'number' && Number.isFinite(ref) ? ref.toFixed(5) : ''
       rows.push(`${timeVal},${simVal},${refVal}`)
     }
     const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' })
@@ -373,13 +519,20 @@ title('LabCD Adaptive Closed-Loop Response'); legend('show', 'Location', 'best')
             <TrendingDown className="size-3.5 text-cyan-500" />
           </div>
           <div className="mt-1 flex items-baseline gap-1 font-mono text-xl font-bold text-foreground">
-            {bestRms.toFixed(4)}
+            {typeof bestRms === 'number' ? bestRms.toFixed(4) : '—'}
             <span className="text-[10px] text-muted font-normal">MSE</span>
           </div>
           <div className="mt-0.5 flex items-center justify-between text-[10.5px]">
-            <span className="text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
-              <CheckCircle2 className="size-3" /> Within Lyapunov ball
-            </span>
+            {hasRealMetrics && !extractionFailed ? (
+              <span className="text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
+                <CheckCircle2 className="size-3" />
+                {trackingPct !== null
+                  ? `${trackingPct.toFixed(1)}% tracking`
+                  : 'Within Lyapunov ball'}
+              </span>
+            ) : (
+              <span className="text-muted-text font-medium">Awaiting real metrics</span>
+            )}
             {improvementPct && (
               <span className="rounded bg-emerald-500/15 px-1 py-0.2 font-mono text-[10px] text-emerald-600 dark:text-emerald-300">
                 +{improvementPct}% vs R1
@@ -397,10 +550,16 @@ title('LabCD Adaptive Closed-Loop Response'); legend('show', 'Location', 'best')
           </div>
           <div className="mt-1 font-mono text-xl font-bold text-foreground">
             {currentRound}{' '}
-            <span className="text-[10px] text-muted font-normal">/ {maxRounds} rounds</span>
+            <span className="text-[10px] text-muted font-normal">
+              {tuningEnabled ? `/ ${maxRounds} rounds` : 'design pass'}
+            </span>
           </div>
           <p className="mt-0.5 text-[10.5px] text-cyan-600 dark:text-cyan-300 font-medium truncate">
-            Lyapunov Tuner-Juror loop
+            {tuningEnabled
+              ? (bestRound !== null && bestRound !== currentRound
+                  ? `${evalCount} evals · best @ R${bestRound}`
+                  : `${evalCount} evals · Tuner-Juror loop`)
+              : 'Tuning disabled for this job'}
           </p>
         </div>
 
@@ -412,10 +571,18 @@ title('LabCD Adaptive Closed-Loop Response'); legend('show', 'Location', 'best')
             <Gauge className="size-3.5 text-teal-500" />
           </div>
           <div className="mt-1 flex items-baseline gap-1 font-mono text-xl font-bold text-foreground">
-            {settlingTime.toFixed(2)}{' '}
+            {typeof settlingTime === 'number' ? settlingTime.toFixed(2) : '—'}{' '}
             <span className="text-[10px] text-muted font-normal">s</span>
           </div>
-          <p className="mt-0.5 text-[10.5px] text-teal-600 dark:text-teal-300 font-medium">Fast exponential recovery</p>
+          <p className="mt-0.5 text-[10.5px] text-teal-600 dark:text-teal-300 font-medium">
+            {typeof settlingTime === 'number'
+              ? (settlingReached ? '2% band settling time' : 'From tuning log')
+              : metrics.settling_time_reached === false
+                ? 'Did not settle in horizon'
+                : hasRealMetrics
+                  ? 'Did not settle in horizon'
+                  : 'No metric yet'}
+          </p>
         </div>
 
         {/* KPI 4: Max Effort */}
@@ -426,11 +593,11 @@ title('LabCD Adaptive Closed-Loop Response'); legend('show', 'Location', 'best')
             <Zap className="size-3.5 text-amber-500" />
           </div>
           <div className="mt-1 flex items-baseline gap-1 font-mono text-xl font-bold text-foreground">
-            {maxEffort.toFixed(2)}{' '}
+            {typeof maxEffort === 'number' ? maxEffort.toFixed(2) : '—'}{' '}
             <span className="text-[10px] text-muted font-normal">N / V</span>
           </div>
           <p className="mt-0.5 text-[10.5px] text-amber-600 dark:text-amber-300 font-medium font-mono">
-            Actuator within saturation
+            {typeof maxEffort === 'number' ? 'From simulation metrics' : 'No metric yet'}
           </p>
         </div>
 
@@ -442,10 +609,12 @@ title('LabCD Adaptive Closed-Loop Response'); legend('show', 'Location', 'best')
             <Coins className="size-3.5 text-purple-500" />
           </div>
           <div className="mt-1 flex items-baseline gap-1 font-mono text-xl font-bold text-purple-600 dark:text-purple-300">
-            ${results?.usage?.total_cost !== undefined ? Number(results.usage.total_cost).toFixed(4) : '0.0038'}
+            {totalCost !== null ? `$${totalCost.toFixed(4)}` : '—'}
           </div>
           <p className="mt-0.5 text-[10.5px] text-muted-text font-mono truncate">
-            {results?.usage?.total_tokens ? `${Number(results.usage.total_tokens).toLocaleString()} tokens` : `${currentRound * 1180} tokens`}
+            {totalTokens !== null
+              ? `${Math.round(totalTokens).toLocaleString()} tokens`
+              : 'No usage data'}
           </p>
         </div>
       </div>
@@ -789,7 +958,9 @@ title('LabCD Adaptive Closed-Loop Response'); legend('show', 'Location', 'best')
                   </div>
                 ) : (
                   <div className="py-12 text-center text-xs text-muted-text">
-                    No continuous simulation series available.
+                    {selectedSignal === 'disturbance'
+                      ? 'No disturbance estimate in this run (estimator not active or not exported).'
+                      : 'No continuous simulation series available.'}
                   </div>
                 )}
               </div>
@@ -881,10 +1052,25 @@ title('LabCD Adaptive Closed-Loop Response'); legend('show', 'Location', 'best')
           {/* Row 3: Multi-Metric Convergence History Grid */}
           <div className="rounded-2xl border border-border bg-surface-elevated p-4 shadow-sm">
             <AdaptiveConvergenceCharts
-              rmsHistory={results?.tuning_log?.map((l) => Number(l.rms ?? l.cost ?? 0))}
-              effortHistory={results?.tuning_log?.map((l) => Number(l.max_u ?? l.effort ?? 0))}
-              settlingHistory={results?.tuning_log?.map((l) => Number(l.settling_time ?? 0))}
-              gainsHistory={results?.tuning_log?.map((l) => (l.gains as Record<string, unknown> | null) ?? null)}
+              rmsHistory={results?.tuning_log?.map((l) => {
+                const row = l as Record<string, unknown>
+                const v = firstFinite(row.rms) ?? firstFinite(row.steady_rms)
+                return v
+              })}
+              effortHistory={results?.tuning_log?.map((l) => {
+                const row = l as Record<string, unknown>
+                return firstFinite(row.max_u) ?? maxAbsFinite(row.control_max)
+              })}
+              settlingHistory={results?.tuning_log?.map((l) => {
+                const row = l as Record<string, unknown>
+                return firstFinite(row.settling_time)
+              })}
+              gainsHistory={results?.tuning_log?.map((l) => {
+                const row = l as Record<string, unknown>
+                const tuning = row.tuning
+                if (tuning && typeof tuning === 'object') return tuning as Record<string, unknown>
+                return (row.gains as Record<string, unknown> | null) ?? null
+              })}
               bestRms={bestRms}
             />
           </div>
@@ -963,7 +1149,7 @@ title('LabCD Adaptive Closed-Loop Response'); legend('show', 'Location', 'best')
                 </div>
               </div>
 
-              {onDownloadReport && (
+              {onDownloadReport && !extractionFailed && (
                 <button
                   type="button"
                   onClick={onDownloadReport}
@@ -974,7 +1160,16 @@ title('LabCD Adaptive Closed-Loop Response'); legend('show', 'Location', 'best')
               )}
             </div>
 
-            {results?.abstract && (
+            {extractionFailed && (
+              <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-4 text-xs leading-relaxed text-red-700 dark:text-red-300">
+                <span className="font-semibold block mb-1">Design / extraction failed</span>
+                <pre className="whitespace-pre-wrap font-mono max-h-64 overflow-y-auto">
+                  {results?.error || results?.report || 'Pipeline reported EXTRACTION FAILED.'}
+                </pre>
+              </div>
+            )}
+
+            {!extractionFailed && results?.abstract && (
               <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-4 text-xs leading-relaxed text-muted-text">
                 <span className="font-semibold text-cyan-600 dark:text-cyan-400 block mb-1">
                   Synthesis Abstract:
@@ -983,34 +1178,36 @@ title('LabCD Adaptive Closed-Loop Response'); legend('show', 'Location', 'best')
               </div>
             )}
 
-            {/* LaTeX Mathematical Formulations */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="rounded-xl border border-border bg-surface p-4 space-y-2">
-                <span className="text-xs font-bold text-cyan-600 dark:text-cyan-400 block">
-                  1. Candidate Lyapunov Function V(s, θ̃)
-                </span>
-                <p className="text-xs text-muted-text">
-                  A radially unbounded quadratic energy function in terms of sliding surface s(t) and parameter estimation error θ̃ = θ̂ - θ*:
-                </p>
-                <div className="rounded-lg bg-surface-muted p-3 font-mono text-xs text-foreground">
-                  V(s, θ̃) = (1/2)·s² + (1/(2·Γ))·θ̃ᵀθ̃
+            {/* LaTeX Mathematical Formulations — only when design succeeded */}
+            {!extractionFailed && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="rounded-xl border border-border bg-surface p-4 space-y-2">
+                  <span className="text-xs font-bold text-cyan-600 dark:text-cyan-400 block">
+                    1. Candidate Lyapunov Function V(s, θ̃)
+                  </span>
+                  <p className="text-xs text-muted-text">
+                    A radially unbounded quadratic energy function in terms of sliding surface s(t) and parameter estimation error θ̃ = θ̂ - θ*:
+                  </p>
+                  <div className="rounded-lg bg-surface-muted p-3 font-mono text-xs text-foreground">
+                    V(s, θ̃) = (1/2)·s² + (1/(2·Γ))·θ̃ᵀθ̃
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-border bg-surface p-4 space-y-2">
+                  <span className="text-xs font-bold text-teal-600 dark:text-teal-400 block">
+                    2. Derivative Bound dV/dt &le; 0
+                  </span>
+                  <p className="text-xs text-muted-text">
+                    Differentiating along the system trajectories with the derived adaptive update law yields negative semi-definiteness:
+                  </p>
+                  <div className="rounded-lg bg-surface-muted p-3 font-mono text-xs text-foreground">
+                    dV/dt = s·(u + f(x)) + (1/Γ)·θ̃ᵀ·θ̃_dot &le; -η·|s| + ϵ
+                  </div>
                 </div>
               </div>
+            )}
 
-              <div className="rounded-xl border border-border bg-surface p-4 space-y-2">
-                <span className="text-xs font-bold text-teal-600 dark:text-teal-400 block">
-                  2. Derivative Bound dV/dt &le; 0
-                </span>
-                <p className="text-xs text-muted-text">
-                  Differentiating along the system trajectories with the derived adaptive update law yields negative semi-definiteness:
-                </p>
-                <div className="rounded-lg bg-surface-muted p-3 font-mono text-xs text-foreground">
-                  dV/dt = s·(u + f(x)) + (1/Γ)·θ̃ᵀ·θ̃_dot &le; -η·|s| + ϵ
-                </div>
-              </div>
-            </div>
-
-            {results?.report && (
+            {!extractionFailed && results?.report && (
               <div className="rounded-xl border border-border bg-surface p-4 text-xs text-muted-text font-mono whitespace-pre-wrap max-h-96 overflow-y-auto">
                 {results.report}
               </div>
@@ -1052,14 +1249,44 @@ title('LabCD Adaptive Closed-Loop Response'); legend('show', 'Location', 'best')
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border font-mono">
-                    {results.tuning_log.map((item, idx) => (
+                    {results.tuning_log.map((item, idx) => {
+                      const row = item as Record<string, unknown>
+                      // True steady-state RMS (MSE), never tracking_pct_headline
+                      const rms =
+                        firstFinite(row.rms) ??
+                        firstFinite(row.steady_rms)
+                      const trackPct = firstFinite(row.tracking_pct_headline)
+                      const effort =
+                        firstFinite(row.max_u) ??
+                        firstFinite(row.effort) ??
+                        maxAbsFinite(row.control_max)
+                      const assessment = String(
+                        row.reasoning ||
+                          row.feedback ||
+                          row.note ||
+                          (row.met_target ? 'Target met' : row.success === false ? 'Failed checks' : '—'),
+                      )
+                      const rmsLabel =
+                        rms !== null
+                          ? rms.toFixed(4)
+                          : trackPct !== null
+                            ? `— (${trackPct.toFixed(1)}% track)`
+                            : '—'
+                      return (
                       <tr key={idx} className="hover:bg-surface-hover">
-                        <td className="py-2.5 px-3 text-cyan-600 dark:text-cyan-300 font-bold">#{idx + 1}</td>
-                        <td className="py-2.5 px-3">{String(item.rms ?? item.cost ?? '—')}</td>
-                        <td className="py-2.5 px-3">{String(item.max_u ?? item.effort ?? '—')}</td>
-                        <td className="py-2.5 px-3 font-sans text-muted-text">{String(item.feedback ?? item.note ?? 'Optimized')}</td>
+                        <td className="py-2.5 px-3 text-cyan-600 dark:text-cyan-300 font-bold">
+                          #{typeof row.round === 'number' ? row.round : idx}
+                        </td>
+                        <td className="py-2.5 px-3" title={trackPct !== null ? `Tracking ${trackPct.toFixed(1)}%` : undefined}>
+                          {rmsLabel}
+                        </td>
+                        <td className="py-2.5 px-3">{effort !== null ? effort.toFixed(2) : '—'}</td>
+                        <td className="py-2.5 px-3 font-sans text-muted-text max-w-md truncate" title={assessment}>
+                          {assessment}
+                        </td>
                       </tr>
-                    ))}
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>

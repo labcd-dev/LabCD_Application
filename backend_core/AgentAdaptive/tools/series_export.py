@@ -125,18 +125,25 @@ def build_series(
     output_names: Optional[Sequence[Any]] = None,
     input_names: Optional[Sequence[Any]] = None,
     state_names: Optional[Sequence[Any]] = None,
+    d_hat: Any = None,
     max_points: Optional[int] = None,
 ) -> Dict[str, Any]:
-    """Build the series contract described in ASSIGNMENT_SERIES_DATAPOINTS."""
+    """Build the series contract described in ASSIGNMENT_SERIES_DATAPOINTS.
+
+    Channel matrices are time-major: data[t_index] = [ch0, ch1, ...].
+    """
     t_arr = np.asarray(t, dtype=float).reshape(-1)
     y2 = _as_2d(y)
     ref2 = _as_2d(ref)
     u2 = _as_2d(u)
     x2 = _as_2d(x_states)
+    d2 = _as_2d(d_hat) if d_hat is not None else None
 
     n = int(t_arr.shape[0])
     # Align lengths defensively
     n = min(n, y2.shape[0], ref2.shape[0], u2.shape[0], x2.shape[0]) if n else 0
+    if d2 is not None and d2.shape[0]:
+        n = min(n, d2.shape[0]) if n else int(d2.shape[0])
     if n == 0:
         return {
             "version": 1,
@@ -151,11 +158,14 @@ def build_series(
                 "ref": {"label": "references", "names": [], "data": []},
                 "u": {"label": "inputs", "names": [], "data": []},
                 "x": {"label": "states", "names": [], "data": []},
+                "d_hat": {"label": "disturbance_estimate", "names": [], "data": []},
             },
         }
 
     t_arr = t_arr[:n]
     y2, ref2, u2, x2 = y2[:n], ref2[:n], u2[:n], x2[:n]
+    if d2 is not None:
+        d2 = d2[:n]
 
     cap = int(max_points if max_points is not None else _env_max_points())
     cap = max(10, cap)
@@ -173,6 +183,39 @@ def build_series(
     n_in = int(u2.shape[1]) if u2.ndim > 1 else 1
     n_st = int(x2.shape[1]) if x2.ndim > 1 else 1
 
+    channels: Dict[str, Any] = {
+        "t": {"label": "time", "unit": "s", "data": t_data},
+        "y": {
+            "label": "outputs",
+            "names": _name_list(output_names, n_out, "y"),
+            "data": _channel_matrix(y2, indices),
+        },
+        "ref": {
+            "label": "references",
+            "names": _name_list(output_names, n_out, "ref"),
+            "data": _channel_matrix(ref2, indices),
+        },
+        "u": {
+            "label": "inputs",
+            "names": _name_list(input_names, n_in, "u"),
+            "data": _channel_matrix(u2, indices),
+        },
+        "x": {
+            "label": "states",
+            "names": _name_list(state_names, n_st, "x"),
+            "data": _channel_matrix(x2, indices),
+        },
+    }
+    if d2 is not None and d2.size:
+        n_d = int(d2.shape[1]) if d2.ndim > 1 else 1
+        channels["d_hat"] = {
+            "label": "disturbance_estimate",
+            "names": _name_list(None, n_d, "d"),
+            "data": _channel_matrix(d2, indices),
+        }
+    else:
+        channels["d_hat"] = {"label": "disturbance_estimate", "names": [], "data": []}
+
     return {
         "version": 1,
         "dt": float(dt),
@@ -180,29 +223,7 @@ def build_series(
         "n_points": int(len(indices)),
         "downsampled": bool(downsampled),
         "max_points": cap,
-        "channels": {
-            "t": {"label": "time", "unit": "s", "data": t_data},
-            "y": {
-                "label": "outputs",
-                "names": _name_list(output_names, n_out, "y"),
-                "data": _channel_matrix(y2, indices),
-            },
-            "ref": {
-                "label": "references",
-                "names": _name_list(output_names, n_out, "ref"),
-                "data": _channel_matrix(ref2, indices),
-            },
-            "u": {
-                "label": "inputs",
-                "names": _name_list(input_names, n_in, "u"),
-                "data": _channel_matrix(u2, indices),
-            },
-            "x": {
-                "label": "states",
-                "names": _name_list(state_names, n_st, "x"),
-                "data": _channel_matrix(x2, indices),
-            },
-        },
+        "channels": channels,
     }
 
 
@@ -219,6 +240,7 @@ def attach_series(
     outputs: Optional[Sequence[Any]] = None,
     inputs: Optional[Sequence[Any]] = None,
     states: Optional[Sequence[Any]] = None,
+    d_hat: Any = None,
     max_points: Optional[int] = None,
     include: bool = True,
 ) -> Dict[str, Any]:
@@ -236,6 +258,7 @@ def attach_series(
         output_names=outputs,
         input_names=inputs,
         state_names=states,
+        d_hat=d_hat,
         max_points=max_points,
     )
     return components

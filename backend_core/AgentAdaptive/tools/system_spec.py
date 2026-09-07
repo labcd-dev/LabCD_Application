@@ -447,7 +447,138 @@ def normalize_defaults(spec):
         spec["dynamics"]["sim_time"] = DEFAULT_SIM_TIME
     if not spec["dynamics"]["solver_step"] or spec["dynamics"]["solver_step"] <= 0:
         spec["dynamics"]["solver_step"] = DEFAULT_SOLVER_STEP
-    return spec
+    return ensure_output_references(spec)
+
+
+def ensure_output_references(spec, fallback_expr="0"):
+    """Ensure every dynamics.outputs entry has a non-empty references[].expr.
+
+    Maps mis-keyed UI refs (e.g. {x: 'sin(t)'} when outputs are ['x1']) onto
+    real output names, and defaults missing exprs to fallback_expr so
+    structure_build never sees a blank reference for an output.
+    """
+    if not isinstance(spec, dict):
+        return spec
+    dyn = dict(spec.get("dynamics") or {})
+    outputs = _text_list(dyn.get("outputs"))
+    states = _text_list(dyn.get("states"))
+    # Prefer explicit outputs; fall back to states when outputs were omitted.
+    targets = outputs if outputs else states
+    if not targets:
+        if "references" in dyn:
+            dyn["references"] = _pair_list(dyn.get("references"), "output")
+            spec = dict(spec)
+            spec["dynamics"] = dyn
+        return spec
+
+    raw_refs = dyn.get("references")
+    by_output = {}
+    for entry in _pair_list(raw_refs, "output"):
+        name = _text(entry.get("output"))
+        expr = _text(entry.get("expr"))
+        if name:
+            by_output[name] = expr
+
+    # Map single generic UI key onto the real sole output name.
+    if len(targets) == 1 and targets[0] not in by_output:
+        for name, expr in list(by_output.items()):
+            if expr and name not in targets and name not in states:
+                by_output[targets[0]] = expr
+                break
+        if targets[0] not in by_output and isinstance(raw_refs, dict) and len(raw_refs) == 1:
+            only_expr = _expression_of(next(iter(raw_refs.values())))
+            if only_expr:
+                by_output[targets[0]] = only_expr
+
+    fallback = _text(fallback_expr) or "0"
+    refs = []
+    for out in targets:
+        expr = by_output.get(out) or ""
+        if not expr:
+            leftovers = [e for n, e in by_output.items() if e and n not in targets]
+            expr = leftovers[0] if len(leftovers) == 1 else fallback
+        refs.append({"output": out, "expr": expr})
+
+    if not outputs and states:
+        dyn["outputs"] = list(states)
+    dyn["references"] = refs
+    out_spec = dict(spec)
+    out_spec["dynamics"] = dyn
+    return out_spec
+
+
+def deep_merge_system_spec(base, overlay):
+    """Deep-merge two system_spec dicts so plant dynamics are not wiped.
+
+    Request payloads that only carry artifact_id / source / sim knobs must not
+    overwrite states, equations, parameters, etc. from the artifact adaptive-spec.
+    """
+    if not isinstance(base, dict):
+        base = {}
+    if not isinstance(overlay, dict):
+        return dict(base)
+
+    merged = dict(base)
+    for key, value in overlay.items():
+        if key == "dynamics" and isinstance(value, dict):
+            base_dyn = merged.get("dynamics") if isinstance(merged.get("dynamics"), dict) else {}
+            dyn = dict(base_dyn)
+            for dkey, dval in value.items():
+                if dval is None:
+                    continue
+                if dkey in ("states", "state_meanings", "inputs", "outputs",
+                            "state_equations", "assumptions") and dval == []:
+                    continue
+                if dkey == "parameters" and dval == {}:
+                    continue
+                if dkey == "source" and not dval:
+                    continue
+                dyn[dkey] = dval
+            if not dyn.get("source") and base_dyn.get("source"):
+                dyn["source"] = base_dyn["source"]
+            merged["dynamics"] = dyn
+        elif key == "simulation" and isinstance(value, dict):
+            merged["simulation"] = {**(merged.get("simulation") or {}), **value}
+        elif value is not None:
+            if key == "system_name" and not str(value).strip() and merged.get("system_name"):
+                continue
+            merged[key] = value
+    return merged
+
+
+def fold_simulation_into_dynamics(spec, options=None):
+    """Move simulation / options sim knobs into dynamics and ensure references."""
+    if not isinstance(spec, dict):
+        return spec
+    spec = dict(spec)
+    dyn = dict(spec.get("dynamics") or {})
+    sim = spec.get("simulation") if isinstance(spec.get("simulation"), dict) else {}
+    opts = options if isinstance(options, dict) else {}
+
+    def _pick(key, *sources):
+        for src in sources:
+            if isinstance(src, dict) and src.get(key) is not None:
+                return src.get(key)
+        return None
+
+    # Options (UI knobs) override nested simulation; plant dynamics as last resort.
+    st = _pick("sim_time", opts, sim, dyn)
+    if st is not None:
+        dyn["sim_time"] = _float_or_none(st)
+    ss = _pick("solver_step", opts, sim, dyn)
+    if ss is not None:
+        dyn["solver_step"] = _float_or_none(ss)
+    x0 = _pick("x0", opts, sim, dyn)
+    if x0 is not None:
+        dyn["x0"] = _float_list(x0)
+
+    refs = _pick("references", opts, sim, dyn)
+    if refs is not None:
+        dyn["references"] = refs
+
+    spec.pop("simulation", None)
+    spec["dynamics"] = dyn
+    return ensure_output_references(normalize_defaults(spec))
 
 
 def sim_overrides_from_spec(spec):

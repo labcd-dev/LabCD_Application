@@ -143,69 +143,94 @@ export function AdaptivePage() {
     setError(null)
     setLoading(true)
 
-    // Retrieve last artifact or build default spec
     const artifactId = sessionStorage.getItem('labcd_last_artifact_id')
     const x0 = x0Str.split(',').map((v) => parseFloat(v.trim()) || 0.0)
-    const simKnobs = {
-      sim_time: simTime,
-      solver_step: solverStep,
-      x0,
-      references: { x: referenceFn },
-    }
-
-    let spec: Record<string, unknown> | null = null
-
-    if (artifactId) {
-      spec = {
-        artifact_id: artifactId,
-        system_name: pipeline.fileName || 'adaptive_plant',
-        dynamics: pipeline.fileContent ? { source: pipeline.fileContent } : undefined,
-        simulation: simKnobs,
-      }
-    } else if (pipeline.fileContent) {
-      spec = {
-        system_name: pipeline.fileName?.replace('.py', '') || 'adaptive_system',
-        dynamics: {
-          states: ['x1', 'x2'],
-          inputs: ['u'],
-          source: pipeline.fileContent,
-        },
-        simulation: simKnobs,
-      }
-    } else {
-      spec = {
-        system_name: 'smoke_integrator',
-        dynamics: {
-          system_name: 'smoke_integrator',
-          states: ['x'],
-          state_meanings: ['integrator state'],
-          inputs: ['u'],
-          outputs: ['x'],
-          state_equations: ['u'],
-          parameters: {},
-          system_type: 'SISO',
-          assumptions: ['unit integrator for benchmark demo'],
-        },
-        simulation: simKnobs,
-      }
-    }
-
-    const options: AdaptiveJobOptions = {
-      enable_tuning: enableTuning,
-      target_rms_frac: targetRms,
-      max_tuning_rounds: maxRounds,
-      skip_clarify: skipClarify,
-      model: pipeline.model,
-      description: `Adaptive design for ${pipeline.fileName || 'system'}`,
-      sim_time: simTime,
-      solver_step: solverStep,
-      x0,
-      references: { x: referenceFn },
-      tuning_objectives:
-        enableTuning && Object.keys(tuningPriorities).length > 0 ? tuningPriorities : undefined,
-    }
 
     try {
+      let spec: Record<string, unknown> | null = null
+      let outputNames: string[] = []
+
+      if (artifactId) {
+        // Fetch full adaptive-spec so real states/outputs reach the pipeline.
+        let artSpec: Record<string, unknown> | null = null
+        try {
+          artSpec = await plantArtifactApi.getAdaptiveSpec(artifactId)
+        } catch {
+          artSpec = null
+        }
+        if (!artSpec || typeof artSpec !== 'object') {
+          setError(
+            'Could not load plant adaptive-spec for the selected artifact. ' +
+              'Re-compile the plant from Plant Model Chat and try again.',
+          )
+          setLoading(false)
+          return
+        }
+        const dyn = (artSpec.dynamics as Record<string, unknown> | undefined) || {}
+        const states = Array.isArray(dyn.states) ? (dyn.states as string[]) : []
+        const outputs = Array.isArray(dyn.outputs) ? (dyn.outputs as string[]) : []
+        outputNames = outputs.length > 0 ? outputs : states
+        if (outputNames.length === 0) {
+          setError(
+            'Plant adaptive-spec has no states/outputs. Re-compile the plant and try again.',
+          )
+          setLoading(false)
+          return
+        }
+        const references = outputNames.map((out) => ({
+          output: out,
+          expr: referenceFn || '0',
+        }))
+        spec = {
+          ...artSpec,
+          artifact_id: artifactId,
+          system_name:
+            (artSpec.system_name as string) ||
+            pipeline.fileName?.replace(/\.py$/, '') ||
+            'adaptive_plant',
+          dynamics: {
+            ...dyn,
+            sim_time: simTime,
+            solver_step: solverStep,
+            x0,
+            references,
+            ...(pipeline.fileContent ? { source: pipeline.fileContent } : {}),
+          },
+        }
+      } else if (pipeline.fileContent) {
+        // No artifact: refuse to invent generic states for arbitrary source.
+        setError(
+          'No compiled plant artifact found. Open Plant Model Chat, compile the plant, ' +
+            'then launch Adaptive so the real states/outputs are used.',
+        )
+        setLoading(false)
+        return
+      } else {
+        setError(
+          'No plant selected. Provide a compiled plant artifact before starting Adaptive design.',
+        )
+        setLoading(false)
+        return
+      }
+
+      const options: AdaptiveJobOptions = {
+        enable_tuning: enableTuning,
+        target_rms_frac: targetRms,
+        max_tuning_rounds: maxRounds,
+        skip_clarify: skipClarify,
+        model: pipeline.model,
+        description: `Adaptive design for ${pipeline.fileName || (spec.system_name as string) || 'system'}`,
+        sim_time: simTime,
+        solver_step: solverStep,
+        x0,
+        references:
+          outputNames.length > 0
+            ? Object.fromEntries(outputNames.map((o) => [o, referenceFn || '0']))
+            : { [outputNames[0] || 'y']: referenceFn || '0' },
+        tuning_objectives:
+          enableTuning && Object.keys(tuningPriorities).length > 0 ? tuningPriorities : undefined,
+      }
+
       const res = await adaptiveApi.createJob({
         system_spec: spec,
         options,
@@ -571,9 +596,15 @@ export function AdaptivePage() {
           <AdaptiveDashboard
             job={job}
             results={results}
-            onDownloadReport={() => {
+            onDownloadReport={async () => {
               if (jobId) {
-                window.open(adaptiveApi.getReportPdfUrl(jobId), '_blank')
+                try {
+                  await adaptiveApi.downloadReportPdf(jobId)
+                } catch (err) {
+                  setError(
+                    err instanceof Error ? err.message : 'Failed to download PDF report',
+                  )
+                }
               }
             }}
           />

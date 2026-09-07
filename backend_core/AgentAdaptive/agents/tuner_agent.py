@@ -425,6 +425,39 @@ def run_tuning_loop(fixed_args, initial_components, initial_metrics,
 
     explicit_unc = bool(fixed_args.get("delta_exprs")) or bool(fixed_args.get("dist_exprs"))
     initial_met = _target_met(initial_metrics, target_rms_frac, selection)
+    def _log_metric_scalars(m):
+        if not isinstance(m, dict):
+            return {}
+        steady = m.get("steady_rms")
+        control_max = m.get("control_max")
+        rms = None
+        if isinstance(steady, (list, tuple)) and steady:
+            try:
+                rms = float(steady[0])
+            except (TypeError, ValueError):
+                rms = None
+        max_u = None
+        if isinstance(control_max, (list, tuple)) and control_max:
+            try:
+                max_u = float(max(abs(float(v)) for v in control_max))
+            except (TypeError, ValueError):
+                max_u = None
+        settling = m.get("settling_time")
+        try:
+            settling = float(settling) if settling is not None else None
+        except (TypeError, ValueError):
+            settling = None
+        return {
+            "rms": rms,
+            "steady_rms": steady,
+            "max_u": max_u,
+            "control_max": control_max,
+            "settling_time": settling,
+            "control_rms": m.get("control_rms"),
+            "steady_rms_frac": m.get("steady_rms_frac"),
+        }
+
+    _m0 = _log_metric_scalars(initial_metrics)
     tuning_log = [{
         "round": 0,
         "reasoning": ("(initial design already meets the target: no tuning needed)"
@@ -440,6 +473,7 @@ def run_tuning_loop(fixed_args, initial_components, initial_metrics,
         "objective_values": tuning_objectives_mod.objective_rows(
             selection, initial_metrics, fixed_args),
         "objectives": dict(selection),
+        **_m0,
     }]
     best = {"components": initial_components, "metrics": initial_metrics,
             "tuning": dict(current_tuning), "round": 0}
@@ -530,12 +564,14 @@ def run_tuning_loop(fixed_args, initial_components, initial_metrics,
         changed = _tuning_diff(tuning_log[-1]["tuning"], entry["tuning"])
         objective_values = tuning_objectives_mod.objective_rows(
             selection, entry["metrics"], fixed_args)
+        _mr = _log_metric_scalars(entry["metrics"])
         tuning_log.append({
             "round": round_num, "reasoning": entry["reasoning"], "report": report,
             "met_target": met, "tuning": dict(entry["tuning"]), "changed": changed,
             "success": entry["metrics"].get("success", True),
             "tracking_pct_headline": entry["metrics"].get("tracking_pct_headline"),
             "objective_values": objective_values,
+            **_mr,
         })
         ledger_rows.append({
             "round": round_num, "changed": changed, "symptom": entry.get("symptom", "?"),

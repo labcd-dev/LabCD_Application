@@ -16,9 +16,23 @@ def _pct_cell(value) -> str:
 
 
 def _normalize_figure(fig):
+    """Accept bytes, (png_bytes, title) tuples, or {"png": ..., "title": ...} dicts."""
     if isinstance(fig, (bytes, bytearray)):
         return bytes(fig), ""
-    return fig["png"], fig.get("title") or ""
+    if isinstance(fig, (tuple, list)) and len(fig) >= 1:
+        png = fig[0]
+        title = fig[1] if len(fig) > 1 else ""
+        return bytes(png) if isinstance(png, (bytes, bytearray)) else png, str(title or "")
+    if isinstance(fig, dict):
+        png = fig.get("png") or fig.get("bytes") or fig.get("data")
+        title = fig.get("title") or fig.get("caption") or ""
+        if isinstance(png, (bytes, bytearray)):
+            return bytes(png), str(title)
+        return png, str(title)
+    raise TypeError(
+        "figure must be bytes, (bytes, title) tuple, or dict with 'png' key; got %s"
+        % type(fig).__name__
+    )
 
 
 def _add_run_scores_section(rb: ReportBuilder, final_metrics) -> None:
@@ -235,12 +249,22 @@ def _add_usage_section(rb: ReportBuilder, usage) -> None:
 def build_pdf_report(summary_markdown: str, figures,
                       usage=None, log_text=None, tuning_log=None,
                       tuning_best=None, clarification_record=None,
-                      final_metrics=None, abstract_markdown=None) -> bytes:
-    # AUTO: this report is full of real math, so it wants xelatex when available,
-    # but still produces something (math as literal text) without a TeX install.
+                      final_metrics=None, abstract_markdown=None,
+                      prefer_xelatex: bool = True) -> bytes:
+    # Prefer XeLaTeX for real math typesetting (same path as Streamlit).
+    # Fall back to AUTO/reportlab only when xelatex is not installed.
+    try:
+        from labcd_pdfmaker import xelatex_available
+        has_xelatex = bool(xelatex_available())
+    except Exception:
+        has_xelatex = False
+    if prefer_xelatex and has_xelatex:
+        backend = Backend.XELATEX
+    else:
+        backend = Backend.AUTO
     rb = ReportBuilder(
         title="Agentic Nonlinear Control Designer: Report",
-        backend=Backend.AUTO,
+        backend=backend,
         date=datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
     )
 
