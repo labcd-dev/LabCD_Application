@@ -98,7 +98,7 @@ def _run_smc(states, dynamics, inputs, outputs, x0, refs,
                       "stability": stability_proof, "rms_str": None}
         attach_series(components, t, y, ref, u, x_states, dt=dt, t_end=t_end,
                       outputs=outputs, inputs=inputs, states=states,
-                      include=True)
+                      include=not for_tuning)
         return components, metrics
 
     if not explicit_uncertainty:
@@ -128,7 +128,7 @@ def _run_smc(states, dynamics, inputs, outputs, x0, refs,
         }
         attach_series(components, t, y_on, ref, u_on, x_on, dt=dt, t_end=t_end,
                       outputs=outputs, inputs=inputs, states=states,
-                      include=True)
+                      include=not for_tuning)
         return components, metrics
 
     # the "off" run and disturbance-observer comparison only feed comparison
@@ -174,7 +174,7 @@ def _run_smc(states, dynamics, inputs, outputs, x0, refs,
     }
     attach_series(components, t, y_on, ref, u_on, x_on, dt=dt, t_end=t_end,
                   outputs=outputs, inputs=inputs, states=states,
-                  include=True)
+                  include=not for_tuning)
     return components, metrics
 
 
@@ -252,7 +252,7 @@ def _run_backstepping(states, dynamics, inputs, outputs, x0, refs,
                       "stability": stability_proof, "rms_str": None}
         attach_series(components, t, y, ref, u, x_states, dt=dt, t_end=t_end,
                       outputs=outputs, inputs=inputs, states=states,
-                      include=True)
+                      include=not for_tuning)
         return components, metrics
 
     if not explicit_uncertainty:
@@ -281,7 +281,7 @@ def _run_backstepping(states, dynamics, inputs, outputs, x0, refs,
         }
         attach_series(components, t, y_on, ref, u_on, x_on, dt=dt, t_end=t_end,
                       outputs=outputs, inputs=inputs, states=states,
-                      include=True)
+                      include=not for_tuning)
         return components, metrics
 
     if not for_tuning and should_create_plots():
@@ -327,5 +327,5 @@ def _run_backstepping(states, dynamics, inputs, outputs, x0, refs,
     }
     attach_series(components, t, y_on, ref, u_on, x_on, dt=dt, t_end=t_end,
                   outputs=outputs, inputs=inputs, states=states,
-                  include=True)
+                  include=not for_tuning)
     return components, metrics
