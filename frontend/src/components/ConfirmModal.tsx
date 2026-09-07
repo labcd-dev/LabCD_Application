@@ -1,6 +1,5 @@
 import { useEffect } from 'react'
 import { AlertTriangle, Loader2, X } from 'lucide-react'
-import { btnBase, btnCompact, btnPrimary } from '../lib/classes'
 
 interface ConfirmModalProps {
   open: boolean
@@ -48,12 +47,12 @@ export function ConfirmModal({
       }}
     >
       <div
-        className="w-[420px] max-w-full rounded-[18px] border border-border bg-surface-elevated p-5 shadow-[0_30px_80px_rgba(0,0,0,0.5)] animate-in zoom-in-95 duration-150"
+        className="w-[440px] max-w-full rounded-2xl border border-border bg-surface-elevated p-5 sm:p-6 shadow-[0_30px_80px_rgba(0,0,0,0.5)] animate-in zoom-in-95 duration-150"
         role="dialog"
         aria-modal="true"
         aria-labelledby="confirm-modal-title"
       >
-        <div className="flex items-start gap-3">
+        <div className="flex items-start gap-3.5">
           <div
             className={`flex size-10 shrink-0 items-center justify-center rounded-xl border ${
               isDanger
@@ -68,12 +67,12 @@ export function ConfirmModal({
 
           <div className="min-w-0 flex-1 pt-0.5">
             <div className="flex items-start justify-between gap-2">
-              <h2 id="confirm-modal-title" className="m-0 text-base font-bold text-foreground leading-tight">
+              <h2 id="confirm-modal-title" className="m-0 text-base font-bold text-foreground leading-snug">
                 {title}
               </h2>
               <button
                 type="button"
-                className="border-none bg-transparent p-1 text-muted hover:text-foreground -mt-1 -mr-1"
+                className="border-none bg-transparent p-1 text-muted hover:text-foreground -mt-1 -mr-1 cursor-pointer transition-colors"
                 aria-label="Close"
                 disabled={loading}
                 onClick={onClose}
@@ -90,10 +89,11 @@ export function ConfirmModal({
           </div>
         </div>
 
-        <div className="mt-6 flex items-center justify-end gap-2.5 pt-3 border-t border-border/70">
+        {/* Buttons Row: Symmetrically Matched Height and Padding */}
+        <div className="mt-6 flex items-center justify-end gap-2.5 pt-3.5 border-t border-border/70">
           <button
             type="button"
-            className={`${btnBase} ${btnCompact} text-xs text-muted-text hover:text-foreground`}
+            className="inline-flex items-center justify-center h-9 min-w-[100px] px-4 rounded-xl border border-border bg-surface hover:bg-surface-hover text-xs font-semibold text-foreground transition-all duration-150 disabled:opacity-60 cursor-pointer shadow-2xs"
             disabled={loading}
             onClick={onClose}
           >
@@ -102,12 +102,12 @@ export function ConfirmModal({
 
           <button
             type="button"
-            className={`flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-semibold shadow-sm transition-all ${
+            className={`inline-flex items-center justify-center gap-1.5 h-9 min-w-[100px] px-4 rounded-xl text-xs font-semibold text-white shadow-sm transition-all duration-150 disabled:opacity-60 cursor-pointer ${
               isDanger
-                ? 'bg-rose-600 hover:bg-rose-700 text-white active:bg-rose-800'
+                ? 'bg-rose-600 hover:bg-rose-700 active:bg-rose-800'
                 : isWarning
-                ? 'bg-amber-600 hover:bg-amber-700 text-white'
-                : `${btnPrimary} ${btnCompact}`
+                ? 'bg-amber-600 hover:bg-amber-700 active:bg-amber-800'
+                : 'bg-primary hover:brightness-110 active:scale-[0.98]'
             }`}
             disabled={loading}
             onClick={() => void onConfirm()}
