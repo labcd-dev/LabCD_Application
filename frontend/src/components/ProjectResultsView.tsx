@@ -1,11 +1,19 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { FileText } from 'lucide-react'
-import { adminApi, projectsApi } from '../api/endpoints'
-import type { ProjectPipelineType } from '../api/types'
+import { adminApi, projectsApi, mpcApi, adaptiveApi } from '../api/endpoints'
+import type {
+  ProjectPipelineType,
+  MPCJobResultsResponse,
+  AdaptiveJobResultsResponse,
+  MPCJobStatusResponse,
+  AdaptiveJobStatusResponse,
+} from '../api/types'
 import { DesignIterationReport } from './DesignIterationReport'
 import { DesignMonitorDashboard } from './DesignMonitorDashboard'
 import { SiloPerformancePanel } from './SiloPerformancePanel'
 import { SiloSummaryPanel } from './SiloSummaryPanel'
+import { MpcDashboard } from './mpc/MpcDashboard'
+import { AdaptiveDashboard } from './adaptive/AdaptiveDashboard'
 import { CodePreview } from './CodePreview'
 import { JsonViewer } from './JsonViewer'
 import { PlotlyChart } from './PlotlyChart'
@@ -305,6 +313,18 @@ export function ProjectResultsView({
   jobId,
   artifactScope = 'user',
 }: ProjectResultsViewProps) {
+  const [mpcJob, setMpcJob] = useState<MPCJobStatusResponse | null>(null)
+  const [adaptiveJob, setAdaptiveJob] = useState<AdaptiveJobStatusResponse | null>(null)
+
+  useEffect(() => {
+    if (!jobId) return
+    if (pipelineType === 'mpcDesign') {
+      mpcApi.getJob(jobId).then(setMpcJob).catch(() => {})
+    } else if (pipelineType === 'adaptiveDesign') {
+      adaptiveApi.getJob(jobId).then(setAdaptiveJob).catch(() => {})
+    }
+  }, [jobId, pipelineType])
+
   if (!results) {
     return <p className={mutedText}>No results saved yet.</p>
   }
@@ -341,6 +361,38 @@ export function ProjectResultsView({
 
   if (pipelineType === 'muloDesign') {
     return <MuloResults results={results} />
+  }
+
+  if (pipelineType === 'mpcDesign') {
+    return (
+      <div className="space-y-4">
+        <MpcDashboard
+          job={mpcJob}
+          results={results as unknown as MPCJobResultsResponse}
+          onDownloadReport={() => {
+            if (jobId) {
+              window.open(mpcApi.getReportPdfUrl(jobId), '_blank')
+            }
+          }}
+        />
+      </div>
+    )
+  }
+
+  if (pipelineType === 'adaptiveDesign') {
+    return (
+      <div className="space-y-4">
+        <AdaptiveDashboard
+          job={adaptiveJob}
+          results={results as unknown as AdaptiveJobResultsResponse}
+          onDownloadReport={() => {
+            if (jobId) {
+              window.open(adaptiveApi.getReportPdfUrl(jobId), '_blank')
+            }
+          }}
+        />
+      </div>
+    )
   }
 
   return <CodePreview value={JSON.stringify(results, null, 2)} readOnly />

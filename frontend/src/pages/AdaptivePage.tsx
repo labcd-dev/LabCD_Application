@@ -25,7 +25,7 @@ export function AdaptivePage() {
   const [searchParams] = useSearchParams()
   const pipeline = usePipeline()
 
-  const [jobId, setJobId] = useState<string | null>(searchParams.get('job_id'))
+  const [jobId, setJobId] = useState<string | null>(searchParams.get('job_id') || searchParams.get('job'))
   const [job, setJob] = useState<AdaptiveJobStatusResponse | null>(null)
   const [results, setResults] = useState<AdaptiveJobResultsResponse | null>(null)
   const [loading, setLoading] = useState(false)
@@ -178,6 +178,7 @@ export function AdaptivePage() {
       const res = await adaptiveApi.createJob({
         system_spec: spec,
         options,
+        project_id: pipeline.projectId ? String(pipeline.projectId) : undefined,
       })
       setJobId(res.job_id)
       setJob({

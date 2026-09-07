@@ -254,6 +254,20 @@ def _run_pipeline_thread(job_id: str, store: InMemoryAdaptiveJobStore) -> None:
             system_spec=spec,
             series=series if isinstance(series, dict) else None,
         )
+
+        # Sync completed results to persisted Project
+        rec_now = store.get(job_id)
+        if rec_now and rec_now.project_id:
+            try:
+                from backend_api.http.services.project_service import sync_project_from_job
+                sync_project_from_job(
+                    project_id=int(rec_now.project_id),
+                    job_id=job_id,
+                    status="completed",
+                    results=_to_results(rec_now).model_dump(),
+                )
+            except Exception:
+                pass
     except Exception as exc:  # noqa: BLE001
         store.update(
             job_id,
@@ -262,6 +276,19 @@ def _run_pipeline_thread(job_id: str, store: InMemoryAdaptiveJobStore) -> None:
             message="Pipeline failed",
             error=f"{type(exc).__name__}: {exc}",
         )
+
+        rec_now = store.get(job_id)
+        if rec_now and rec_now.project_id:
+            try:
+                from backend_api.http.services.project_service import sync_project_from_job
+                sync_project_from_job(
+                    project_id=int(rec_now.project_id),
+                    job_id=job_id,
+                    status="failed",
+                    error=f"{type(exc).__name__}: {exc}",
+                )
+            except Exception:
+                pass
 
 
 def _start_pipeline_async(job_id: str, store: InMemoryAdaptiveJobStore) -> None:
@@ -282,6 +309,30 @@ def submit_job(
         project_id=request.project_id,
     )
     job_id = record.job_id
+
+    # Automatically link or create in Project database so it appears in Projects history
+    sys_name = _system_name(request.system_spec) or "adaptive_system"
+    source_code = ""
+    if isinstance(request.system_spec, dict):
+        dyn = request.system_spec.get("dynamics")
+        if isinstance(dyn, dict):
+            source_code = dyn.get("source") or ""
+
+    try:
+        from backend_api.http.services.project_service import link_or_create_for_job
+        linked_project_id = link_or_create_for_job(
+            user_id=request.user_id,
+            project_id=request.project_id,
+            pipeline_type="adaptiveDesign",
+            job_id=job_id,
+            file_name=f"{sys_name}.py",
+            file_content=source_code,
+            title=f"Adaptive: {sys_name}",
+        )
+        if linked_project_id is not None:
+            job_store.update(job_id, project_id=linked_project_id)
+    except Exception:
+        pass
 
     if options.get("skip_clarify"):
         job_store.update(

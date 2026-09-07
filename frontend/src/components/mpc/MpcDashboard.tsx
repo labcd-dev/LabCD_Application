@@ -473,79 +473,79 @@ print(f"MPC Controller initialized: Np={Np}, Nc={Nc}, dt={dt}")
             </div>
 
             {/* 1 Column (lg:col-span-4 xl:col-span-3): Multi-Agent Reasoning Telemetry Box */}
-            <div className="lg:col-span-4 xl:col-span-3 rounded-2xl border border-border bg-surface-elevated p-4 shadow-sm flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between border-b border-border/80 pb-3 mb-3">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-purple-500/15 text-purple-600 dark:text-purple-300 border border-purple-500/30">
-                      <Sparkles className="size-3.5" />
-                    </div>
-                    <div className="min-w-0">
-                      <h3 className="text-xs font-bold text-foreground truncate">
-                        Reasoning Telemetry
-                      </h3>
-                      <span className="text-[9.5px] text-muted-text font-mono truncate block">
-                        Max 7 words ...
-                      </span>
-                    </div>
+            <div className="lg:col-span-4 xl:col-span-3 rounded-2xl border border-border bg-surface-elevated p-4 shadow-sm flex flex-col h-full">
+              {/* Header */}
+              <div className="flex items-center justify-between border-b border-border/80 pb-3 mb-3 shrink-0">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-purple-500/15 text-purple-600 dark:text-purple-300 border border-purple-500/30">
+                    <Sparkles className="size-3.5" />
                   </div>
-
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <span className="text-[10px] font-mono text-muted-text">
-                      {reasoningLogs.length} events
+                  <div className="min-w-0">
+                    <h3 className="text-xs font-bold text-foreground truncate">
+                      Reasoning Telemetry
+                    </h3>
+                    <span className="text-[9.5px] text-muted-text font-mono truncate block">
+                      Max 7 words ...
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab('logs')}
-                      className="text-[10.5px] font-semibold text-purple-600 dark:text-purple-400 hover:text-purple-500 hover:underline flex items-center gap-0.5 transition-colors whitespace-nowrap"
-                    >
-                      Logs <ArrowRight className="size-3" />
-                    </button>
                   </div>
                 </div>
 
-                {/* Scrollable feed: auto-scrolls to bottom, fits compactly without horizontal dead space */}
-                <div
-                  ref={logScrollRef}
-                  className="max-h-72 overflow-y-auto space-y-1.5 pr-1 rounded-xl border border-border/70 bg-surface p-2 scrollbar-thin"
-                >
-                  {reasoningLogs.length > 0 ? (
-                    reasoningLogs.map((log) => {
-                      const summary = summarizeToSevenWords(log.text)
-                      return (
-                        <div
-                          key={log.id}
-                          title={log.text}
-                          className="flex items-center justify-between gap-1.5 rounded-lg border border-border/60 bg-surface-elevated px-2 py-1 text-xs transition-colors hover:border-purple-500/40 hover:bg-surface-hover cursor-help"
-                        >
-                          <div className="flex items-center gap-1.5 min-w-0">
-                            <span
-                              className={`shrink-0 rounded px-1.5 py-0.2 text-[9px] font-bold ${log.badgeColor}`}
-                            >
-                              {log.agent}
-                            </span>
-                            <span className="truncate text-[10.5px] text-foreground font-medium">
-                              {summary}
-                            </span>
-                          </div>
-                          {log.round !== undefined && log.round !== null && (
-                            <span className="shrink-0 text-[9px] font-mono text-muted-text bg-surface-muted px-1 py-0.2 rounded border border-border/50">
-                              R{log.round}
-                            </span>
-                          )}
-                        </div>
-                      )
-                    })
-                  ) : (
-                    <div className="flex items-center justify-center gap-2 py-8 text-[11px] text-muted-text">
-                      <span className="size-1.5 rounded-full bg-purple-500 animate-pulse" />
-                      Awaiting telemetry...
-                    </div>
-                  )}
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className="text-[10px] font-mono text-muted-text">
+                    {reasoningLogs.length} events
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('logs')}
+                    className="text-[10.5px] font-semibold text-purple-600 dark:text-purple-400 hover:text-purple-500 hover:underline flex items-center gap-0.5 transition-colors whitespace-nowrap"
+                  >
+                    Logs <ArrowRight className="size-3" />
+                  </button>
                 </div>
               </div>
 
-              <div className="mt-2 text-right">
+              {/* Scrollable feed: auto-scrolls to bottom, expands to fill 100% available vertical height */}
+              <div
+                ref={logScrollRef}
+                className="flex-1 min-h-[360px] overflow-y-auto space-y-1.5 pr-1 rounded-xl border border-border/70 bg-surface p-2 scrollbar-thin"
+              >
+                {reasoningLogs.length > 0 ? (
+                  reasoningLogs.map((log) => {
+                    const summary = summarizeToSevenWords(log.text)
+                    return (
+                      <div
+                        key={log.id}
+                        title={log.text}
+                        className="flex items-center justify-between gap-1.5 rounded-lg border border-border/60 bg-surface-elevated px-2 py-1.5 text-xs transition-colors hover:border-purple-500/40 hover:bg-surface-hover cursor-help"
+                      >
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span
+                            className={`shrink-0 rounded px-1.5 py-0.2 text-[9px] font-bold ${log.badgeColor}`}
+                          >
+                            {log.agent}
+                          </span>
+                          <span className="truncate text-[10.5px] text-foreground font-medium">
+                            {summary}
+                          </span>
+                        </div>
+                        {log.round !== undefined && log.round !== null && (
+                          <span className="shrink-0 text-[9px] font-mono text-muted-text bg-surface-muted px-1 py-0.2 rounded border border-border/50">
+                            R{log.round}
+                          </span>
+                        )}
+                      </div>
+                    )
+                  })
+                ) : (
+                  <div className="flex items-center justify-center gap-2 h-full py-8 text-[11px] text-muted-text">
+                    <span className="size-1.5 rounded-full bg-purple-500 animate-pulse" />
+                    Awaiting telemetry...
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="mt-2 text-right shrink-0">
                 <span className="text-[9.5px] text-muted-text font-mono">
                   Auto-scrolled · Latest active
                 </span>

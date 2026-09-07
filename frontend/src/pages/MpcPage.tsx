@@ -28,7 +28,7 @@ export function MpcPage() {
   const [searchParams] = useSearchParams()
   const pipeline = usePipeline()
 
-  const [jobId, setJobId] = useState<string | null>(searchParams.get('job_id'))
+  const [jobId, setJobId] = useState<string | null>(searchParams.get('job_id') || searchParams.get('job'))
   const [job, setJob] = useState<MPCJobStatusResponse | null>(null)
   const [results, setResults] = useState<MPCJobResultsResponse | null>(null)
   const [loading, setLoading] = useState(false)
@@ -244,6 +244,7 @@ export function MpcPage() {
       const res = await mpcApi.createJob({
         dynamics: dynamicsPayload,
         options,
+        project_id: pipeline.projectId ? String(pipeline.projectId) : undefined,
       })
       setJobId(res.job_id)
       setJob({

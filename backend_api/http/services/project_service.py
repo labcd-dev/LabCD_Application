@@ -17,7 +17,7 @@ from backend_api.http.services.dynamics_file_service import (
     save_dynamics_file,
 )
 
-VALID_PIPELINE_TYPES = frozenset({"siloDesign", "muloDesign"})
+VALID_PIPELINE_TYPES = frozenset({"siloDesign", "muloDesign", "adaptiveDesign", "mpcDesign"})
 VALID_STATUSES = frozenset({"draft", "running", "completed", "failed", "cancelled"})
 
 
@@ -35,8 +35,15 @@ def _title_from(objective: str | None, file_name: str, pipeline_type: str) -> st
         return cleaned[:120]
     if file_name.strip():
         return file_name.strip()[:120]
-    label = "Single Loop" if pipeline_type == "siloDesign" else "Multi Loop"
+    labels = {
+        "siloDesign": "Single Loop",
+        "muloDesign": "Multi Loop",
+        "adaptiveDesign": "Adaptive Control",
+        "mpcDesign": "Agentic MPC",
+    }
+    label = labels.get(pipeline_type, "Control Design")
     return f"{label} project"
+
 
 
 def project_to_summary(project: Project, *, include_owner: bool = False) -> dict[str, Any]:

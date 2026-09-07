@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Pencil, RotateCcw } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Pencil, RotateCcw } from 'lucide-react'
 import { projectsApi, muloApi } from '../api/endpoints'
 import type { ProjectDetail } from '../api/types'
 import { CodePreview } from '../components/CodePreview'
@@ -203,7 +203,11 @@ export function ProjectDetailPage() {
     && Boolean(liveJobId)
     && !hasTrimmerResults
     && (project.status === 'running' || muloAwaitingContinue)
-  const showResults = !showSiloLive && !showMuloLive
+  const showMpcLive =
+    project.pipeline_type === 'mpcDesign' && project.status === 'running' && Boolean(liveJobId)
+  const showAdaptiveLive =
+    project.pipeline_type === 'adaptiveDesign' && project.status === 'running' && Boolean(liveJobId)
+  const showResults = !showSiloLive && !showMuloLive && !showMpcLive && !showAdaptiveLive
 
   return (
     <section className={pageSection}>
@@ -287,7 +291,7 @@ export function ProjectDetailPage() {
         </div>
       ) : null}
 
-      {(showSiloLive || showMuloLive) && (
+      {(showSiloLive || showMuloLive || showMpcLive || showAdaptiveLive) && (
         <div className={cardPanel}>
           <h3 className="m-0 mb-2 text-lg font-semibold text-foreground">
             {project.status === 'running' ? 'Running' : 'Design progress'}
@@ -310,6 +314,48 @@ export function ProjectDetailPage() {
               onAwaitingContinueChange={handleAwaitingContinue}
               onDesignSuccess={() => void promptAfterDesignSuccess('muloDesign')}
             />
+          )}
+          {showMpcLive && liveJobId && (
+            <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <span className="relative flex h-3 w-3">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-primary"></span>
+                </span>
+                <div>
+                  <p className="m-0 font-medium text-foreground">Agentic MPC optimization is currently in progress...</p>
+                  <p className="m-0 text-xs text-muted-text">Job ID: {liveJobId}</p>
+                </div>
+              </div>
+              <Link
+                to={`/mpc?job_id=${encodeURIComponent(liveJobId)}`}
+                className={`${btnBase} ${btnCompact} ${btnPrimary}`}
+              >
+                Open Live MPC Dashboard
+                <ArrowRight className="size-3.5" />
+              </Link>
+            </div>
+          )}
+          {showAdaptiveLive && liveJobId && (
+            <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <span className="relative flex h-3 w-3">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-primary"></span>
+                </span>
+                <div>
+                  <p className="m-0 font-medium text-foreground">Adaptive Control pipeline is currently in progress...</p>
+                  <p className="m-0 text-xs text-muted-text">Job ID: {liveJobId}</p>
+                </div>
+              </div>
+              <Link
+                to={`/adaptive?job_id=${encodeURIComponent(liveJobId)}`}
+                className={`${btnBase} ${btnCompact} ${btnPrimary}`}
+              >
+                Open Live Adaptive Dashboard
+                <ArrowRight className="size-3.5" />
+              </Link>
+            </div>
           )}
         </div>
       )}

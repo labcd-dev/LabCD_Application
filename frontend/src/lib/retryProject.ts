@@ -21,5 +21,13 @@ export async function retryProject(
     navigate('/mulo?step=recommender')
     return
   }
+  if (updated.pipeline_type === 'mpcDesign') {
+    navigate('/mpc')
+    return
+  }
+  if (updated.pipeline_type === 'adaptiveDesign') {
+    navigate('/adaptive')
+    return
+  }
   navigate('/silo')
 }
