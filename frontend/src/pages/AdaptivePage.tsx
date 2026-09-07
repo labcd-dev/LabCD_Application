@@ -39,14 +39,11 @@ export function AdaptivePage() {
   const [maxRounds, setMaxRounds] = useState(4)
   const [skipClarify, setSkipClarify] = useState(false)
 
-  // Simulation & Plant Knobs (React Parity with Notebook)
-  const [simTime, setSimTime] = useState(10.0)
-  const [solverStep, setSolverStep] = useState(0.01)
-  const [x0Str, setX0Str] = useState('0.0')
+  // Simulation & Plant Knobs (Inherited from Plant Model Chat / System Spec)
+  const simTime = 10.0
+  const solverStep = 0.01
+  const x0Str = '0.0'
   const [referenceFn, setReferenceFn] = useState('sin(t)')
-  const [plantMode, setPlantMode] = useState<'preset' | 'artifact' | 'custom'>(() => {
-    return sessionStorage.getItem('labcd_last_artifact_id') ? 'artifact' : 'preset'
-  })
 
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -131,7 +128,23 @@ export function AdaptivePage() {
 
     let spec: Record<string, unknown> | null = null
 
-    if (plantMode === 'preset') {
+    if (artifactId) {
+      spec = {
+        artifact_id: artifactId,
+        system_name: pipeline.fileName || 'adaptive_plant',
+        simulation: simKnobs,
+      }
+    } else if (pipeline.fileContent) {
+      spec = {
+        system_name: pipeline.fileName?.replace('.py', '') || 'adaptive_system',
+        dynamics: {
+          states: ['x1', 'x2'],
+          inputs: ['u'],
+          source: pipeline.fileContent,
+        },
+        simulation: simKnobs,
+      }
+    } else {
       spec = {
         system_name: 'smoke_integrator',
         dynamics: {
@@ -145,18 +158,6 @@ export function AdaptivePage() {
           system_type: 'SISO',
           assumptions: ['unit integrator for benchmark demo'],
         },
-        simulation: simKnobs,
-      }
-    } else if (plantMode === 'artifact' && artifactId) {
-      spec = {
-        artifact_id: artifactId,
-        system_name: pipeline.fileName || 'adaptive_plant',
-        simulation: simKnobs,
-      }
-    } else {
-      spec = {
-        system_name: pipeline.fileName?.replace('.py', '') || 'adaptive_system',
-        dynamics: { states: ['x1', 'x2'], inputs: ['u'] },
         simulation: simKnobs,
       }
     }
@@ -375,109 +376,13 @@ export function AdaptivePage() {
               </div>
 
               <div className="mt-6 border-t border-border pt-6 space-y-6">
-              {/* Plant Model Selection */}
-              <div>
-                <label className="text-xs font-bold uppercase tracking-wider text-cyan-600 dark:text-cyan-400 block mb-2">
-                  1. Plant Model Dynamics
-                </label>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                  <button
-                    type="button"
-                    onClick={() => setPlantMode('preset')}
-                    className={`rounded-xl border p-3.5 text-left transition-all ${
-                      plantMode === 'preset'
-                        ? 'border-cyan-500/80 bg-cyan-500/10 text-foreground ring-1 ring-cyan-500/30 shadow-xs'
-                        : 'border-border bg-surface-muted hover:bg-surface-hover text-muted-text'
-                    }`}
-                  >
-                    <div className="text-xs font-bold text-foreground mb-1">Preset Benchmark</div>
-                    <div className="text-[11.5px] text-muted leading-snug">
-                      smoke_integrator (Unit integrator SISO dx/dt = u)
-                    </div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setPlantMode('artifact')}
-                    className={`rounded-xl border p-3.5 text-left transition-all ${
-                      plantMode === 'artifact'
-                        ? 'border-cyan-500/80 bg-cyan-500/10 text-foreground ring-1 ring-cyan-500/30 shadow-xs'
-                        : 'border-border bg-surface-muted hover:bg-surface-hover text-muted-text'
-                    }`}
-                  >
-                    <div className="text-xs font-bold text-foreground mb-1">Synthesizer Artifact</div>
-                    <div className="text-[11.5px] text-muted leading-snug">
-                      {sessionStorage.getItem('labcd_last_artifact_id')
-                        ? `Loaded: ${sessionStorage.getItem('labcd_last_artifact_id')}`
-                        : 'Auto-compiled from Plant Synthesizer'}
-                    </div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setPlantMode('custom')}
-                    className={`rounded-xl border p-3.5 text-left transition-all ${
-                      plantMode === 'custom'
-                        ? 'border-cyan-500/80 bg-cyan-500/10 text-foreground ring-1 ring-cyan-500/30 shadow-xs'
-                        : 'border-border bg-surface-muted hover:bg-surface-hover text-muted-text'
-                    }`}
-                  >
-                    <div className="text-xs font-bold text-foreground mb-1">Custom Dynamics</div>
-                    <div className="text-[11.5px] text-muted leading-snug">
-                      User-specified state-space vectors
-                    </div>
-                  </button>
-                </div>
-              </div>
-
-              {/* Simulation & Reference Knobs */}
-              <div>
-                <label className="text-xs font-bold uppercase tracking-wider text-cyan-600 dark:text-cyan-400 block mb-2">
-                  2. Simulation &amp; Desired Trajectory Targets
-                </label>
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-                  <div>
-                    <label className={fieldLabel}>Sim Time (s)</label>
-                    <input
-                      type="number"
-                      step="1"
-                      min="1"
-                      max="100"
-                      value={simTime}
-                      onChange={(e) => setSimTime(parseFloat(e.target.value) || 10)}
-                      className={fieldInput}
-                    />
-                    <span className="text-[10.5px] text-slate-500 font-mono">Duration</span>
-                  </div>
-
-                  <div>
-                    <label className={fieldLabel}>Solver Step (s)</label>
-                    <input
-                      type="number"
-                      step="0.005"
-                      min="0.001"
-                      max="0.1"
-                      value={solverStep}
-                      onChange={(e) => setSolverStep(parseFloat(e.target.value) || 0.01)}
-                      className={fieldInput}
-                    />
-                    <span className="text-[10.5px] text-slate-500 font-mono">Integration dt</span>
-                  </div>
-
-                  <div>
-                    <label className={fieldLabel}>Initial State x₀</label>
-                    <input
-                      type="text"
-                      value={x0Str}
-                      onChange={(e) => setX0Str(e.target.value)}
-                      placeholder="0.0"
-                      className={fieldInput}
-                    />
-                    <span className="text-[10.5px] text-slate-500 font-mono">Comma-separated</span>
-                  </div>
-
-                  <div>
-                    <label className={fieldLabel}>Reference xd(t)</label>
+                {/* Desired Reference Trajectory */}
+                <div>
+                  <label className="text-xs font-bold uppercase tracking-wider text-cyan-600 dark:text-cyan-400 block mb-2">
+                    1. Desired Reference Trajectory
+                  </label>
+                  <div className="rounded-xl border border-border bg-surface-muted/30 p-4">
+                    <label className={fieldLabel}>Reference Trajectory xd(t)</label>
                     <input
                       type="text"
                       value={referenceFn}
@@ -485,88 +390,95 @@ export function AdaptivePage() {
                       placeholder="sin(t)"
                       className={fieldInput}
                     />
-                    <span className="text-[10.5px] text-slate-500 font-mono">e.g. sin(t), 1.0</span>
-                  </div>
-                </div>
-              </div>
-
-              <label className="text-xs font-bold uppercase tracking-wider text-cyan-300 block">
-                3. Clarification &amp; Adaptive Tuning Options
-              </label>
-            </div>
-
-            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-white/5 pt-4">
-                <div>
-                  <label className={fieldLabel}>Enable Iterative Parameter Tuning</label>
-                  <div className="flex items-center gap-3 mt-1.5">
-                    <button
-                      type="button"
-                      onClick={() => setEnableTuning(!enableTuning)}
-                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
-                        enableTuning ? 'bg-cyan-500' : 'bg-white/10'
-                      }`}
-                    >
-                      <span
-                        className={`pointer-events-none inline-block size-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                          enableTuning ? 'translate-x-5' : 'translate-x-0'
-                        }`}
-                      />
-                    </button>
-                    <span className="text-xs text-slate-300">
-                      {enableTuning ? 'Active (Tuner Agent)' : 'Single Derivation'}
+                    <span className="text-[10.5px] text-muted-text font-mono mt-1 block">
+                      Target continuous state tracking trajectory, e.g. sin(t), cos(0.5*t), 1.0, or step command
                     </span>
                   </div>
                 </div>
 
+                {/* Clarification & Tuning Options */}
                 <div>
-                  <label className={fieldLabel}>Skip Clarification Q&A</label>
-                  <div className="flex items-center gap-3 mt-1.5">
-                    <button
-                      type="button"
-                      onClick={() => setSkipClarify(!skipClarify)}
-                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
-                        skipClarify ? 'bg-cyan-500' : 'border-border bg-surface-muted'
-                      }`}
-                    >
-                      <span
-                        className={`pointer-events-none inline-block size-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                          skipClarify ? 'translate-x-5' : 'translate-x-0'
-                        }`}
-                      />
-                    </button>
-                    <span className="text-xs text-muted-text">
-                      {skipClarify ? 'Use Conservative Defaults' : 'Interactive Dialogue'}
-                    </span>
+                  <label className="text-xs font-bold uppercase tracking-wider text-cyan-600 dark:text-cyan-400 block mb-2">
+                    2. Clarification &amp; Adaptive Tuning Options
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 rounded-xl border border-border bg-surface-muted/30 p-4">
+                    <div>
+                      <label className={fieldLabel}>Enable Iterative Parameter Tuning</label>
+                      <div className="flex items-center gap-3 mt-2">
+                        <button
+                          type="button"
+                          onClick={() => setEnableTuning(!enableTuning)}
+                          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-cyan-500/40 ${
+                            enableTuning
+                              ? 'bg-cyan-500 border-cyan-500'
+                              : 'border-border-input bg-surface hover:border-cyan-500/40 dark:bg-white/10 dark:border-white/20'
+                          }`}
+                        >
+                          <span
+                            className={`pointer-events-none inline-block size-5 transform rounded-full bg-white shadow-sm ring-1 ring-black/5 transition duration-200 ease-in-out ${
+                              enableTuning ? 'translate-x-5' : 'translate-x-0.5'
+                            }`}
+                          />
+                        </button>
+                        <span className="text-xs font-semibold text-foreground dark:text-slate-100">
+                          {enableTuning ? 'Active (Tuner Agent)' : 'Single Derivation'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className={fieldLabel}>Skip Clarification Q&A</label>
+                      <div className="flex items-center gap-3 mt-2">
+                        <button
+                          type="button"
+                          onClick={() => setSkipClarify(!skipClarify)}
+                          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-cyan-500/40 ${
+                            skipClarify
+                              ? 'bg-cyan-500 border-cyan-500'
+                              : 'border-border-input bg-surface hover:border-cyan-500/40 dark:bg-white/10 dark:border-white/20'
+                          }`}
+                        >
+                          <span
+                            className={`pointer-events-none inline-block size-5 transform rounded-full bg-white shadow-sm ring-1 ring-black/5 transition duration-200 ease-in-out ${
+                              skipClarify ? 'translate-x-5' : 'translate-x-0.5'
+                            }`}
+                          />
+                        </button>
+                        <span className="text-xs font-semibold text-foreground dark:text-slate-100">
+                          {skipClarify ? 'Use Conservative Defaults' : 'Interactive Dialogue'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {enableTuning && (
+                      <>
+                        <div className="pt-2 border-t border-border">
+                          <label className={fieldLabel}>Target Tracking RMS Fraction</label>
+                          <input
+                            type="number"
+                            step="0.005"
+                            min="0.001"
+                            max="0.5"
+                            value={targetRms}
+                            onChange={(e) => setTargetRms(parseFloat(e.target.value) || 0.02)}
+                            className={fieldInput}
+                          />
+                        </div>
+                        <div className="pt-2 border-t border-border">
+                          <label className={fieldLabel}>Max Tuning Iterations</label>
+                          <input
+                            type="number"
+                            min="1"
+                            max="10"
+                            value={maxRounds}
+                            onChange={(e) => setMaxRounds(parseInt(e.target.value) || 4)}
+                            className={fieldInput}
+                          />
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
-
-                {enableTuning && (
-                  <>
-                    <div>
-                      <label className={fieldLabel}>Target Tracking RMS Fraction</label>
-                      <input
-                        type="number"
-                        step="0.005"
-                        min="0.001"
-                        max="0.5"
-                        value={targetRms}
-                        onChange={(e) => setTargetRms(parseFloat(e.target.value) || 0.02)}
-                        className={fieldInput}
-                      />
-                    </div>
-                    <div>
-                      <label className={fieldLabel}>Max Tuning Iterations</label>
-                      <input
-                        type="number"
-                        min="1"
-                        max="10"
-                        value={maxRounds}
-                        onChange={(e) => setMaxRounds(parseInt(e.target.value) || 4)}
-                        className={fieldInput}
-                      />
-                    </div>
-                  </>
-                )}
               </div>
 
               <div className="mt-8 flex justify-end">

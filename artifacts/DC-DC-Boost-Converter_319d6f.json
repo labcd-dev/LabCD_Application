@@ -1,0 +1,60 @@
+{
+  "artifact_id": "DC-DC-Boost-Converter_319d6f",
+  "system_name": "DC-DC Boost Converter",
+  "created_at": "2026-09-07T08:07:20.439427+00:00",
+  "version": "1.0",
+  "plant": {
+    "python_code": "import numpy as np\n\ndef dynamics(t, x, u):\n    i_L = x[0]  # inductor current (A)\n    v_out = x[1]  # output voltage (V)\n    D = u[0]  # duty cycle (0 to 1)\n    V_in = 12.0  # input voltage (V)\n    V_out_target = 48.0  # target output voltage (V)\n    R_L = 0.1  # inductor ESR (ohm)\n    R_C = 0.05  # capacitor ESR (ohm)\n\n    # Inductor dynamics\n    di_L_dt = (V_in - v_out) / R_L  # change in inductor current (A/s)\n\n    # Output voltage dynamics\n    dv_out_dt = (D * V_in - v_out) / (R_C + R_L)  # change in output voltage (V/s)\n\n    dx = np.array([di_L_dt, dv_out_dt])\n    return dx",
+    "metadata": {
+      "states": [
+        "x1",
+        "x2"
+      ],
+      "state_meanings": [
+        "State 1",
+        "State 2"
+      ],
+      "inputs": [
+        "u1"
+      ],
+      "outputs": [
+        "x1"
+      ],
+      "state_equations": [
+        "x2",
+        "-x2 + u1"
+      ],
+      "parameters": {},
+      "system_type": "SISO",
+      "assumptions": [
+        "Continuous-time state-space dynamics"
+      ]
+    }
+  },
+  "pre_launch": {
+    "total_simulation_time": 10.0,
+    "solver_sample_time": 0.01,
+    "initial_state": [
+      0.0,
+      0.0
+    ],
+    "default_target": [
+      0.0,
+      0.0
+    ]
+  },
+  "module_specific": {
+    "adaptive": {
+      "clarifier_record": null,
+      "designer_method": null,
+      "tuning_best": null
+    },
+    "mpc": {
+      "suggested_dt": null,
+      "suggested_Q": null,
+      "suggested_R": null,
+      "suggested_feedforward": null,
+      "derivative_pairs": null
+    }
+  }
+}

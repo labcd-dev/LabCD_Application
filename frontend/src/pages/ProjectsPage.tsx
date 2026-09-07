@@ -174,12 +174,15 @@ export function ProjectsPage({
   const bannerRow =
     newId != null && !Number.isNaN(newId)
       ? caseRows.find((row) => row.id === newId) ?? null
-      : null
+      : searchParams.get('artifact_id') && caseRows.length > 0
+        ? caseRows[0]
+        : null
 
   const dismissBanner = () => {
     setBannerDismissed(true)
     const url = new URL(window.location.href)
     url.searchParams.delete('new')
+    url.searchParams.delete('artifact_id')
     window.history.replaceState(null, '', url.toString())
   }
 

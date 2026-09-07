@@ -107,7 +107,10 @@ export function AppShell({ children, topbarActions }: AppShellProps) {
 
   const isDesign = location.pathname === '/design'
   const isProjects =
-    location.pathname.startsWith('/projects') || location.pathname.startsWith('/case-studies')
+    location.pathname.startsWith('/projects') ||
+    location.pathname.startsWith('/case-studies') ||
+    location.pathname.startsWith('/adaptive') ||
+    location.pathname.startsWith('/mpc')
   const isTutorials = location.pathname.startsWith('/tutorials')
   const isProfile = location.pathname === '/profile'
   const isMpc = location.pathname.startsWith('/mpc')

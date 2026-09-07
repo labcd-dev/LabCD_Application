@@ -89,8 +89,8 @@ export function PlantModelChat({
   onModelChange,
   disabled = false,
   onUseModel,
-  continueLabel = 'Configure & launch →',
-  continueIcon,
+  continueLabel: _continueLabel = 'Configure & launch →',
+  continueIcon: _continueIcon,
   isModalOpen = false,
 }: PlantModelChatProps) {
   const { user } = useAuth()
@@ -260,11 +260,6 @@ export function PlantModelChat({
       setLoading(false)
       requestAnimationFrame(() => threadInputRef.current?.focus())
     }
-  }
-
-  const handleConfirm = () => {
-    if (!finalResult) return
-    setToastOpen(true)
   }
 
   const caseStudiesHref =
@@ -647,9 +642,9 @@ export function PlantModelChat({
                   type="button"
                   className={`${btnPrimary} w-full justify-center py-2.5 text-[13.5px]`}
                   disabled={!finalResult || disabled}
-                  onClick={handleConfirm}
+                  onClick={handleLaunch}
                 >
-                  Confirm system
+                  Save &amp; View in Case Studies →
                 </button>
               </div>
             </aside>
@@ -663,9 +658,9 @@ export function PlantModelChat({
               type="button"
               className={`${btnPrimary} w-full justify-center`}
               disabled={disabled}
-              onClick={handleConfirm}
+              onClick={handleLaunch}
             >
-              Confirm system
+              Save &amp; View in Case Studies →
             </button>
           </div>
         )}
@@ -684,20 +679,19 @@ export function PlantModelChat({
             <Check className="size-[15px]" strokeWidth={2.5} aria-hidden />
           </div>
           <div>
-            <div className="text-[13px] font-semibold text-foreground">Ready for Control Design</div>
+            <div className="text-[13px] font-semibold text-foreground">Ready for Case Studies &amp; Control Design</div>
             <div className="text-xs text-muted">{finalResult?.system_name ?? 'Plant model'}</div>
           </div>
           <div className="ml-2 flex gap-2">
             <Link to={caseStudiesHref} className={`${btnBase} ${btnCompact}`}>
-              Library
+              Case Studies
             </Link>
             <button
               type="button"
               className={`${btnPrimary} ${btnCompact}`}
               onClick={handleLaunch}
             >
-              {continueLabel}
-              {continueIcon}
+              Save &amp; Launch →
             </button>
           </div>
         </div>

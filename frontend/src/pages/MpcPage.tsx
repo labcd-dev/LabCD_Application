@@ -35,40 +35,11 @@ export function MpcPage() {
   const [error, setError] = useState<string | null>(null)
 
   // Setup tabs
-  const [setupTab, setSetupTab] = useState<'system' | 'scenario' | 'tuning'>('system')
+  const [setupTab, setSetupTab] = useState<'scenario' | 'tuning'>('scenario')
 
   // Diagnostics pre-flight state
   const [testingDynamics, setTestingDynamics] = useState(false)
   const [diagnostics, setDiagnostics] = useState<MPCDiagnosticsResponse | null>(null)
-
-  // 1. System Tab Options
-  const [dynamicsMode, setDynamicsMode] = useState<'preset' | 'artifact' | 'custom'>(() => {
-    return sessionStorage.getItem('labcd_last_artifact_id') ? 'artifact' : 'preset'
-  })
-  const [selectedPluginId, setSelectedPluginId] = useState('example_pendulum')
-  const [customPluginSource, setCustomPluginSource] = useState(`"""Custom MPC Dynamics Plugin"""
-def create_config() -> "SystemConfig":
-    return SystemConfig(
-        n_states=2,
-        n_inputs=1,
-        params={"m": 1.0, "k": 2.0},
-        state_names=["position", "velocity"],
-        input_names=["force"],
-        default_initial_state=np.array([1.0, 0.0]),
-        default_target=np.array([0.0, 0.0]),
-        state_bounds=(np.array([-5.0, -10.0]), np.array([5.0, 10.0])),
-        input_bounds=(np.array([-10.0]), np.array([10.0])),
-    )
-
-class CustomOscillator(BaseDynamics):
-    def dynamics(self, x: "np.ndarray", u: "np.ndarray") -> "np.ndarray":
-        pos, vel = x[0], x[1]
-        accel = (u[0] - self.params["k"] * pos) / self.params["m"]
-        return np.array([vel, accel])
-
-    def get_equilibrium_input(self) -> "np.ndarray":
-        return np.zeros(self.n_inputs)
-`)
 
   // 2. Scenario Tab Options
   const [trajectoryMode, setTrajectoryMode] = useState<'reg' | 'sin' | 'pulse'>('reg')
@@ -187,26 +158,23 @@ class CustomOscillator(BaseDynamics):
     }
   }, [jobId])
 
+  // Helper to resolve plant dynamics payload
+  const resolveDynamicsPayload = (): { plugin_id?: string; source?: string } => {
+    const artifactId = sessionStorage.getItem('labcd_last_artifact_id')
+    if (artifactId) {
+      return { plugin_id: artifactId }
+    } else if (pipeline.fileContent) {
+      return { source: pipeline.fileContent }
+    } else {
+      return { plugin_id: 'example_pendulum' }
+    }
+  }
+
   // Pre-flight "Test Dynamics" execution
   const handleTestDynamics = async () => {
     setTestingDynamics(true)
     setError(null)
-    const artifactId = sessionStorage.getItem('labcd_last_artifact_id')
-    let dynamicsPayload: { plugin_id?: string; source?: string } = {}
-
-    if (dynamicsMode === 'preset') {
-      dynamicsPayload = { plugin_id: selectedPluginId }
-    } else if (dynamicsMode === 'artifact') {
-      if (artifactId) {
-        dynamicsPayload = { plugin_id: artifactId }
-      } else if (pipeline.fileContent) {
-        dynamicsPayload = { source: pipeline.fileContent }
-      } else {
-        dynamicsPayload = { plugin_id: 'example_pendulum' }
-      }
-    } else {
-      dynamicsPayload = { source: customPluginSource }
-    }
+    const dynamicsPayload = resolveDynamicsPayload()
 
     try {
       const res = await mpcApi.testDynamics({
@@ -240,22 +208,7 @@ class CustomOscillator(BaseDynamics):
     setError(null)
     setLoading(true)
 
-    const artifactId = sessionStorage.getItem('labcd_last_artifact_id')
-    let dynamicsPayload: { plugin_id?: string; source?: string } = {}
-
-    if (dynamicsMode === 'preset') {
-      dynamicsPayload = { plugin_id: selectedPluginId }
-    } else if (dynamicsMode === 'artifact') {
-      if (artifactId) {
-        dynamicsPayload = { plugin_id: artifactId }
-      } else if (pipeline.fileContent) {
-        dynamicsPayload = { source: pipeline.fileContent }
-      } else {
-        dynamicsPayload = { plugin_id: 'example_pendulum' }
-      }
-    } else {
-      dynamicsPayload = { source: customPluginSource }
-    }
+    const dynamicsPayload = resolveDynamicsPayload()
 
     const parsedQ = qWeightsInput
       .split(',')
@@ -284,10 +237,7 @@ class CustomOscillator(BaseDynamics):
       q_weights: parsedQ.length ? parsedQ : [10.0, 1.0],
       r_weights: parsedR.length ? parsedR : [0.1],
       model: pipeline.model,
-      system_name:
-        dynamicsMode === 'preset'
-          ? 'Inverted Pendulum Cart-Pole'
-          : pipeline.fileName?.replace('.py', '') || 'mpc_system',
+      system_name: pipeline.fileName?.replace('.py', '') || 'Inverted Pendulum Cart-Pole',
     }
 
     try {
@@ -462,19 +412,8 @@ class CustomOscillator(BaseDynamics):
               </button>
             </div>
 
-            {/* 3 Tabs */}
+            {/* 2 Tabs */}
             <div className="mt-6 flex border-b border-border text-xs font-semibold">
-              <button
-                type="button"
-                onClick={() => setSetupTab('system')}
-                className={`border-b-2 px-5 py-3 transition-all ${
-                  setupTab === 'system'
-                    ? 'border-purple-500 text-purple-600 dark:text-purple-300 font-bold bg-surface-muted/60'
-                    : 'border-transparent text-muted-text hover:text-foreground'
-                }`}
-              >
-                1 · System &amp; Diagnostics
-              </button>
               <button
                 type="button"
                 onClick={() => setSetupTab('scenario')}
@@ -484,7 +423,7 @@ class CustomOscillator(BaseDynamics):
                     : 'border-transparent text-muted-text hover:text-foreground'
                 }`}
               >
-                2 · Scenario &amp; Trajectory
+                1 · Scenario &amp; Trajectory
               </button>
               <button
                 type="button"
@@ -495,232 +434,9 @@ class CustomOscillator(BaseDynamics):
                     : 'border-transparent text-muted-text hover:text-foreground'
                 }`}
               >
-                3 · Tuning &amp; Constraints
+                2 · Tuning &amp; Diagnostics
               </button>
             </div>
-
-            {/* TAB 1: SYSTEM & PRE-FLIGHT DIAGNOSTICS */}
-            {setupTab === 'system' && (
-              <div className="mt-6 space-y-6">
-                <div>
-                  <label className="text-xs font-bold uppercase tracking-wider text-purple-600 dark:text-purple-300 block mb-2">
-                    Dynamics Model Origin
-                  </label>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setDynamicsMode('preset')
-                        setSelectedPluginId('example_pendulum')
-                      }}
-                      className={`rounded-xl border p-4 text-left transition-all ${
-                        dynamicsMode === 'preset'
-                          ? 'border-purple-500 bg-purple-500/10 ring-1 ring-purple-500/30'
-                          : 'border-border bg-surface-muted/50 text-muted-text hover:border-border-input hover:bg-surface-hover'
-                      }`}
-                    >
-                      <div className="text-xs font-bold text-foreground mb-1">Preset Benchmark</div>
-                      <div className="text-[11.5px] text-muted-text">
-                        example_pendulum (Inverted Cart-Pole, 4-state nonlinear)
-                      </div>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setDynamicsMode('artifact')}
-                      className={`rounded-xl border p-4 text-left transition-all ${
-                        dynamicsMode === 'artifact'
-                          ? 'border-purple-500 bg-purple-500/10 ring-1 ring-purple-500/30'
-                          : 'border-border bg-surface-muted/50 text-muted-text hover:border-border-input hover:bg-surface-hover'
-                      }`}
-                    >
-                      <div className="text-xs font-bold text-foreground mb-1">Synthesizer Artifact</div>
-                      <div className="text-[11.5px] text-muted-text">
-                        {sessionStorage.getItem('labcd_last_artifact_id')
-                          ? `Artifact: ${sessionStorage.getItem('labcd_last_artifact_id')}`
-                          : 'Linked from Plant Synthesizer'}
-                      </div>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setDynamicsMode('custom')}
-                      className={`rounded-xl border p-4 text-left transition-all ${
-                        dynamicsMode === 'custom'
-                          ? 'border-purple-500 bg-purple-500/10 ring-1 ring-purple-500/30'
-                          : 'border-border bg-surface-muted/50 text-muted-text hover:border-border-input hover:bg-surface-hover'
-                      }`}
-                    >
-                      <div className="text-xs font-bold text-foreground mb-1">Custom Plugin (.py)</div>
-                      <div className="text-[11.5px] text-muted-text">
-                        Custom BaseDynamics class and SystemConfig function
-                      </div>
-                    </button>
-                  </div>
-
-                  {dynamicsMode === 'custom' && (
-                    <div className="mt-3 rounded-xl border border-border bg-surface p-3.5">
-                      <textarea
-                        rows={7}
-                        value={customPluginSource}
-                        onChange={(e) => setCustomPluginSource(e.target.value)}
-                        className="w-full font-mono text-xs text-foreground bg-transparent border-none outline-none resize-y"
-                      />
-                    </div>
-                  )}
-                </div>
-
-                {/* Pre-flight Dynamics Diagnostics Panel */}
-                <div className="rounded-xl border border-cyan-500/30 bg-cyan-500/5 p-5 space-y-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <Gauge className="size-4 text-cyan-500" />
-                        <h4 className="text-xs font-bold text-foreground uppercase tracking-wider">
-                          Pre-Flight Dynamics Diagnostics &amp; Bryson Seed Estimation
-                        </h4>
-                      </div>
-                      <p className="text-[11.5px] text-muted-text mt-1">
-                        Runs open-loop step response probe, checks linearized eigenvalues, verifies controllability rank, and calculates Bryson seed weights Q and R.
-                      </p>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={handleTestDynamics}
-                      disabled={testingDynamics}
-                      className={`${btnBase} ${btnCompact} border-cyan-500/40 bg-cyan-500/10 text-cyan-600 dark:text-cyan-300 hover:bg-cyan-500/20 flex items-center gap-1.5 text-xs font-semibold`}
-                    >
-                      {testingDynamics ? (
-                        <>
-                          <Cpu className="size-3.5 animate-spin" /> Probing Dynamics...
-                        </>
-                      ) : (
-                        <>
-                          <Zap className="size-3.5 text-cyan-500" /> Test Dynamics &amp; Bryson Probe
-                        </>
-                      )}
-                    </button>
-                  </div>
-
-                  {/* Diagnostics Results Cards */}
-                  {diagnostics && (
-                    <div className="space-y-4 pt-2 border-t border-cyan-500/20">
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono">
-                        <div className="rounded-lg border border-border bg-surface-elevated p-3">
-                          <span className="text-[10.5px] text-muted-text block mb-1">Open-Loop Stability</span>
-                          <span
-                            className={`font-bold flex items-center gap-1 text-sm ${
-                              diagnostics.is_stable ? 'text-emerald-500 dark:text-emerald-400' : 'text-amber-500 dark:text-amber-400'
-                            }`}
-                          >
-                            {diagnostics.is_stable ? <CheckCircle2 className="size-3.5" /> : <AlertTriangle className="size-3.5" />}
-                            {diagnostics.is_stable ? 'Stable' : 'Unstable Mode'}
-                          </span>
-                        </div>
-
-                        <div className="rounded-lg border border-border bg-surface-elevated p-3">
-                          <span className="text-[10.5px] text-muted-text block mb-1">Controllability</span>
-                          <span className="font-bold text-emerald-500 dark:text-emerald-400 text-sm flex items-center gap-1">
-                            <CheckCircle2 className="size-3.5" />
-                            Rank {diagnostics.controllability_rank} / {diagnostics.n_states}
-                          </span>
-                        </div>
-
-                        <div className="rounded-lg border border-border bg-surface-elevated p-3">
-                          <span className="text-[10.5px] text-muted-text block mb-1">Suggested Sample Time</span>
-                          <span className="font-bold text-cyan-600 dark:text-cyan-300 text-sm">
-                            dt = {diagnostics.suggested_dt.toFixed(4)}s
-                          </span>
-                        </div>
-
-                        <div className="rounded-lg border border-border bg-surface-elevated p-3">
-                          <span className="text-[10.5px] text-muted-text block mb-1">Eigenvalues Count</span>
-                          <span className="font-bold text-purple-600 dark:text-purple-300 text-sm">
-                            {diagnostics.eigenvalues.length} poles
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Open-Loop Step Response Probe Trajectory Chart */}
-                      {diagnostics.probe_trajectory?.t && diagnostics.probe_trajectory.t.length > 0 && (
-                        <div className="rounded-lg border border-border bg-surface-elevated p-3.5">
-                          <div className="flex items-center justify-between mb-2 text-xs">
-                            <span className="font-semibold text-foreground">
-                              Open-Loop Step-Response Probe Trajectory (Characteristic Range for Bryson's Rule)
-                            </span>
-                            <span className="text-[10.5px] text-muted-text font-mono">
-                              Probe Window: 2.0s · RK4 Integration
-                            </span>
-                          </div>
-
-                          <div className="h-32 w-full">
-                            <svg viewBox="0 0 600 120" className="size-full overflow-visible">
-                              <line x1="20" y1="20" x2="580" y2="20" stroke="var(--app-border)" strokeDasharray="3 3" />
-                              <line x1="20" y1="60" x2="580" y2="60" stroke="var(--app-border)" />
-                              <line x1="20" y1="100" x2="580" y2="100" stroke="var(--app-border)" strokeDasharray="3 3" />
-
-                              {diagnostics.state_names.map((name, i) => {
-                                const vals = diagnostics.probe_trajectory.x?.[name] || []
-                                if (!vals.length) return null
-                                const color = ['#38bdf8', '#a855f7', '#34d399', '#f59e0b'][i % 4]
-
-                                const min = Math.min(...vals)
-                                const max = Math.max(...vals)
-                                const range = max - min || 1.0
-
-                                const d = vals
-                                  .map((v, idx) => {
-                                    const x = 20 + (idx / (vals.length - 1)) * 560
-                                    const y = 100 - ((v - min) / range) * 80
-                                    return `${idx === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`
-                                  })
-                                  .join(' ')
-
-                                return (
-                                  <path
-                                    key={name}
-                                    d={d}
-                                    fill="none"
-                                    stroke={color}
-                                    strokeWidth="1.8"
-                                    strokeLinecap="round"
-                                  />
-                                )
-                              })}
-                            </svg>
-                          </div>
-
-                          <div className="mt-2 flex flex-wrap gap-4 text-[10.5px] font-mono text-muted-text">
-                            {diagnostics.state_names.map((name, i) => (
-                              <div key={name} className="flex items-center gap-1.5">
-                                <span
-                                  className="size-2 rounded-full"
-                                  style={{
-                                    backgroundColor: ['#38bdf8', '#a855f7', '#34d399', '#f59e0b'][i % 4],
-                                  }}
-                                />
-                                <span>{name}: range={diagnostics.probe_trajectory.ranges?.[name] ?? '--'}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Notes list */}
-                      <div className="rounded-lg border border-border bg-surface-muted p-3 text-[11px] font-mono text-muted-text space-y-1">
-                        {diagnostics.notes.map((note, idx) => (
-                          <div key={idx} className="flex items-start gap-2">
-                            <span className="text-cyan-500">&gt;</span>
-                            <span>{note}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
 
             {/* TAB 2: SCENARIO & TRAJECTORY */}
             {setupTab === 'scenario' && (
@@ -968,9 +684,158 @@ class CustomOscillator(BaseDynamics):
               </div>
             )}
 
-            {/* TAB 3: TUNING & CONSTRAINTS */}
+            {/* TAB 2: TUNING, CONSTRAINTS & PRE-FLIGHT DIAGNOSTICS */}
             {setupTab === 'tuning' && (
               <div className="mt-6 space-y-6">
+                {/* Pre-flight Dynamics Diagnostics Panel */}
+                <div className="rounded-xl border border-cyan-500/30 bg-cyan-500/5 p-5 space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <Gauge className="size-4 text-cyan-500" />
+                        <h4 className="text-xs font-bold text-foreground uppercase tracking-wider">
+                          Pre-Flight Dynamics Diagnostics &amp; Bryson Seed Estimation
+                        </h4>
+                      </div>
+                      <p className="text-[11.5px] text-muted-text mt-1">
+                        Runs open-loop step response probe, checks linearized eigenvalues, verifies controllability rank, and calculates Bryson seed weights Q and R.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleTestDynamics}
+                      disabled={testingDynamics}
+                      className={`${btnBase} ${btnCompact} border-cyan-500/40 bg-cyan-500/10 text-cyan-600 dark:text-cyan-300 hover:bg-cyan-500/20 flex items-center gap-1.5 text-xs font-semibold`}
+                    >
+                      {testingDynamics ? (
+                        <>
+                          <Cpu className="size-3.5 animate-spin" /> Probing Dynamics...
+                        </>
+                      ) : (
+                        <>
+                          <Zap className="size-3.5 text-cyan-500" /> Test Dynamics &amp; Bryson Probe
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Diagnostics Results Cards */}
+                  {diagnostics && (
+                    <div className="space-y-4 pt-2 border-t border-cyan-500/20">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono">
+                        <div className="rounded-lg border border-border bg-surface-elevated p-3">
+                          <span className="text-[10.5px] text-muted-text block mb-1">Open-Loop Stability</span>
+                          <span
+                            className={`font-bold flex items-center gap-1 text-sm ${
+                              diagnostics.is_stable ? 'text-emerald-500 dark:text-emerald-400' : 'text-amber-500 dark:text-amber-400'
+                            }`}
+                          >
+                            {diagnostics.is_stable ? <CheckCircle2 className="size-3.5" /> : <AlertTriangle className="size-3.5" />}
+                            {diagnostics.is_stable ? 'Stable' : 'Unstable Mode'}
+                          </span>
+                        </div>
+
+                        <div className="rounded-lg border border-border bg-surface-elevated p-3">
+                          <span className="text-[10.5px] text-muted-text block mb-1">Controllability</span>
+                          <span className="font-bold text-emerald-500 dark:text-emerald-400 text-sm flex items-center gap-1">
+                            <CheckCircle2 className="size-3.5" />
+                            Rank {diagnostics.controllability_rank} / {diagnostics.n_states}
+                          </span>
+                        </div>
+
+                        <div className="rounded-lg border border-border bg-surface-elevated p-3">
+                          <span className="text-[10.5px] text-muted-text block mb-1">Suggested Sample Time</span>
+                          <span className="font-bold text-cyan-600 dark:text-cyan-300 text-sm">
+                            dt = {diagnostics.suggested_dt.toFixed(4)}s
+                          </span>
+                        </div>
+
+                        <div className="rounded-lg border border-border bg-surface-elevated p-3">
+                          <span className="text-[10.5px] text-muted-text block mb-1">Eigenvalues Count</span>
+                          <span className="font-bold text-purple-600 dark:text-purple-300 text-sm">
+                            {diagnostics.eigenvalues.length} poles
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Open-Loop Step Response Probe Trajectory Chart */}
+                      {diagnostics.probe_trajectory?.t && diagnostics.probe_trajectory.t.length > 0 && (
+                        <div className="rounded-lg border border-border bg-surface-elevated p-3.5">
+                          <div className="flex items-center justify-between mb-2 text-xs">
+                            <span className="font-semibold text-foreground">
+                              Open-Loop Step-Response Probe Trajectory (Characteristic Range for Bryson's Rule)
+                            </span>
+                            <span className="text-[10.5px] text-muted-text font-mono">
+                              Probe Window: 2.0s · RK4 Integration
+                            </span>
+                          </div>
+
+                          <div className="h-32 w-full">
+                            <svg viewBox="0 0 600 120" className="size-full overflow-visible">
+                              <line x1="20" y1="20" x2="580" y2="20" stroke="var(--app-border)" strokeDasharray="3 3" />
+                              <line x1="20" y1="60" x2="580" y2="60" stroke="var(--app-border)" />
+                              <line x1="20" y1="100" x2="580" y2="100" stroke="var(--app-border)" strokeDasharray="3 3" />
+
+                              {diagnostics.state_names.map((name, i) => {
+                                const vals = diagnostics.probe_trajectory.x?.[name] || []
+                                if (!vals.length) return null
+                                const color = ['#38bdf8', '#a855f7', '#34d399', '#f59e0b'][i % 4]
+
+                                const min = Math.min(...vals)
+                                const max = Math.max(...vals)
+                                const range = max - min || 1.0
+
+                                const d = vals
+                                  .map((v, idx) => {
+                                    const x = 20 + (idx / (vals.length - 1)) * 560
+                                    const y = 100 - ((v - min) / range) * 80
+                                    return `${idx === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`
+                                  })
+                                  .join(' ')
+
+                                return (
+                                  <path
+                                    key={name}
+                                    d={d}
+                                    fill="none"
+                                    stroke={color}
+                                    strokeWidth="1.8"
+                                    strokeLinecap="round"
+                                  />
+                                )
+                              })}
+                            </svg>
+                          </div>
+
+                          <div className="mt-2 flex flex-wrap gap-4 text-[10.5px] font-mono text-muted-text">
+                            {diagnostics.state_names.map((name, i) => (
+                              <div key={name} className="flex items-center gap-1.5">
+                                <span
+                                  className="size-2 rounded-full"
+                                  style={{
+                                    backgroundColor: ['#38bdf8', '#a855f7', '#34d399', '#f59e0b'][i % 4],
+                                  }}
+                                />
+                                <span>{name}: range={diagnostics.probe_trajectory.ranges?.[name] ?? '--'}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Notes list */}
+                      <div className="rounded-lg border border-border bg-surface-muted p-3 text-[11px] font-mono text-muted-text space-y-1">
+                        {diagnostics.notes.map((note, idx) => (
+                          <div key={idx} className="flex items-start gap-2">
+                            <span className="text-cyan-500">&gt;</span>
+                            <span>{note}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs font-mono">
                   <div className="rounded-xl border border-border bg-surface-elevated p-4 space-y-1">
                     <div className="flex justify-between text-muted-text">

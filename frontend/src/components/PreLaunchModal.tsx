@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { AlertCircle, CheckCircle2, ChevronDown, ChevronUp, Loader2, Sparkles, X } from 'lucide-react'
+import { AlertCircle, Loader2, Sparkles, X } from 'lucide-react'
 import { plantArtifactApi } from '../api/endpoints'
 import type { PlantPayload, PreLaunchConfig } from '../api/types'
 import { btnBase, btnCompact, btnPrimary, fieldInput, fieldLabel } from '../lib/classes'
@@ -27,12 +27,6 @@ export function PreLaunchModal({
 }: PreLaunchModalProps) {
   const [tSim, setTSim] = useState(initialConfig?.total_simulation_time ?? 10)
   const [dt, setDt] = useState(initialConfig?.solver_sample_time ?? 0.01)
-  const [mode, setMode] = useState<'reg' | 'sin' | 'pulse'>(
-    initialConfig?.trajectory_mode ?? 'reg'
-  )
-  const [amp, setAmp] = useState(initialConfig?.trajectory_amplitude ?? 1.0)
-  const [freq, setFreq] = useState(initialConfig?.trajectory_frequency ?? 0.5)
-  const [offset, setOffset] = useState(initialConfig?.trajectory_offset ?? 0.0)
 
   // Default initial states & target
   const defaultStatesStr = useMemo(() => {
@@ -53,7 +47,6 @@ export function PreLaunchModal({
 
   const [x0Str, setX0Str] = useState(defaultStatesStr)
   const [targetStr, setTargetStr] = useState(defaultTargetStr)
-  const [showPreview, setShowPreview] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [warnings, setWarnings] = useState<string[]>([])
@@ -66,38 +59,6 @@ export function PreLaunchModal({
       .filter((s) => s.length > 0)
       .map(Number)
   }
-
-  // Trajectory preview points (SVG)
-  const previewPoints = useMemo(() => {
-    const steps = 100
-    const horizon = Math.max(tSim, 1)
-    const points: { x: number; y: number }[] = []
-
-    for (let i = 0; i <= steps; i++) {
-      const t = (i / steps) * horizon
-      let val = offset
-      if (mode === 'sin') {
-        val = offset + amp * Math.sin(2 * Math.PI * freq * t)
-      } else if (mode === 'pulse') {
-        val = offset + (Math.sin(2 * Math.PI * freq * t) >= 0 ? amp : -amp)
-      }
-      points.push({ x: t, y: val })
-    }
-
-    const yMin = Math.min(-1, ...points.map((p) => p.y)) - 0.5
-    const yMax = Math.max(1, ...points.map((p) => p.y)) + 0.5
-    const rangeY = yMax - yMin || 1
-
-    return points.map((p) => ({
-      normX: (p.x / horizon) * 300,
-      normY: 100 - ((p.y - yMin) / rangeY) * 90 - 5,
-    }))
-  }, [tSim, mode, amp, freq, offset])
-
-  const pathD = useMemo(() => {
-    if (!previewPoints.length) return ''
-    return previewPoints.reduce((acc, p, i) => `${acc} ${i === 0 ? 'M' : 'L'} ${p.normX.toFixed(1)} ${p.normY.toFixed(1)}`, '')
-  }, [previewPoints])
 
   if (!isOpen) return null
 
@@ -121,10 +82,6 @@ export function PreLaunchModal({
       solver_sample_time: Number(dt),
       initial_state: parsedX0,
       default_target: parsedTarget,
-      trajectory_mode: mode,
-      trajectory_amplitude: Number(amp),
-      trajectory_frequency: Number(freq),
-      trajectory_offset: Number(offset),
     }
 
     setSubmitting(true)
@@ -232,61 +189,6 @@ export function PreLaunchModal({
             </div>
 
             <div className="sm:col-span-2">
-              <label className={fieldLabel}>Trajectory Reference Mode</label>
-              <div className="grid grid-cols-3 gap-2">
-                {(['reg', 'sin', 'pulse'] as const).map((m) => (
-                  <button
-                    key={m}
-                    type="button"
-                    onClick={() => setMode(m)}
-                    className={`rounded-lg border px-3 py-2 text-xs font-semibold transition-all cursor-pointer ${
-                      mode === m
-                        ? 'border-cyan-500 bg-cyan-500/10 text-cyan-600 dark:bg-cyan-500/20 dark:text-cyan-300 shadow-sm'
-                        : 'border-border bg-surface text-muted-text hover:bg-surface-hover hover:border-border hover:text-foreground'
-                    }`}
-                  >
-                    {m === 'reg' ? 'Regulation (Constant)' : m === 'sin' ? 'Sine Wave' : 'Pulse / Step'}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {mode !== 'reg' && (
-              <>
-                <div>
-                  <label className={fieldLabel}>Amplitude</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={amp}
-                    onChange={(e) => setAmp(parseFloat(e.target.value) || 0)}
-                    className={fieldInput}
-                  />
-                </div>
-                <div>
-                  <label className={fieldLabel}>Frequency (Hz)</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={freq}
-                    onChange={(e) => setFreq(parseFloat(e.target.value) || 0)}
-                    className={fieldInput}
-                  />
-                </div>
-                <div>
-                  <label className={fieldLabel}>Offset</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={offset}
-                    onChange={(e) => setOffset(parseFloat(e.target.value) || 0)}
-                    className={fieldInput}
-                  />
-                </div>
-              </>
-            )}
-
-            <div className="sm:col-span-2">
               <label className={fieldLabel}>Initial State Vector x0 (comma-separated)</label>
               <input
                 type="text"
@@ -313,34 +215,6 @@ export function PreLaunchModal({
                 Setpoint destination for state regulation
               </span>
             </div>
-          </div>
-
-          {/* Reference Signal Preview Toggle */}
-          <div className="rounded-xl border border-border bg-surface-muted p-3.5">
-            <button
-              type="button"
-              onClick={() => setShowPreview(!showPreview)}
-              className="flex w-full items-center justify-between text-xs font-semibold text-muted-text hover:text-foreground"
-            >
-              <span className="flex items-center gap-1.5">
-                <CheckCircle2 className="size-3.5 text-cyan-500 dark:text-cyan-400" />
-                Preview Reference Trajectory Signal
-              </span>
-              {showPreview ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
-            </button>
-
-            {showPreview && (
-              <div className="mt-3">
-                <svg viewBox="0 0 300 100" className="w-full h-24 rounded-lg bg-surface border border-border">
-                  <line x1="0" y1="50" x2="300" y2="50" stroke="var(--app-border)" strokeDasharray="3 3" />
-                  <path d={pathD} fill="none" stroke="#06b6d4" strokeWidth="2" />
-                </svg>
-                <div className="mt-1 flex justify-between text-[10px] text-muted font-mono">
-                  <span>t = 0 s</span>
-                  <span>t = {tSim} s</span>
-                </div>
-              </div>
-            )}
           </div>
         </div>
 

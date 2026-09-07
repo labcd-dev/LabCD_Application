@@ -61,8 +61,8 @@ function MiniChart({
     const range = max - min || 1.0
 
     const W = 380
-    const H = 160
-    const PAD = 20
+    const H = 90
+    const PAD = 10
 
     const coords = valid.map((d, i) => {
       const x = valid.length === 1 ? W / 2 : PAD + (i / (valid.length - 1)) * (W - 2 * PAD)
@@ -104,27 +104,27 @@ function MiniChart({
     : deltaPct !== null && deltaPct >= 0
 
   return (
-    <div className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-border bg-surface-elevated p-4.5 shadow-sm transition-all hover:border-border-strong">
+    <div className="group relative flex flex-col justify-between overflow-hidden rounded-xl border border-border bg-surface-elevated p-3.5 shadow-sm transition-all hover:border-border-strong">
       {/* Top Header */}
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2">
+      <div className="flex items-start justify-between gap-2 mb-1">
+        <div className="flex items-center gap-2 truncate">
           <div
-            className="flex size-7 items-center justify-center rounded-lg border border-border"
+            className="flex size-7 shrink-0 items-center justify-center rounded-lg border border-border"
             style={{ backgroundColor: `${color}18`, color }}
           >
             <Icon className="size-3.5" />
           </div>
-          <div>
-            <h4 className="text-xs font-bold text-foreground tracking-wide">{title}</h4>
-            <span className="text-[10px] text-muted-text">{subtitle}</span>
+          <div className="truncate">
+            <h4 className="text-xs font-bold text-foreground tracking-wide truncate">{title}</h4>
+            <span className="text-[10.5px] text-muted-text truncate block">{subtitle}</span>
           </div>
         </div>
 
-        <div className="text-right">
+        <div className="text-right shrink-0">
           <div className="font-mono text-sm font-bold text-foreground">
             {latestVal !== undefined ? (
               <>
-                {latestVal >= 1000 ? latestVal.toFixed(1) : latestVal.toFixed(4)}
+                {latestVal >= 1000 ? latestVal.toFixed(1) : latestVal.toFixed(3)}
                 {unit && <span className="ml-0.5 text-[10px] text-muted-text font-normal">{unit}</span>}
               </>
             ) : (
@@ -144,24 +144,24 @@ function MiniChart({
       </div>
 
       {/* SVG Chart Area */}
-      <div className="relative mt-3 h-36 w-full">
+      <div className="relative mt-1.5 h-20 w-full">
         {points.length > 0 ? (
           <svg
-            viewBox="0 0 380 160"
+            viewBox="0 0 380 90"
             className="size-full overflow-visible"
             onMouseLeave={() => setHoverIdx(null)}
           >
             <defs>
               <linearGradient id={`grad-${title.replace(/\s+/g, '')}`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={color} stopOpacity="0.28" />
+                <stop offset="0%" stopColor={color} stopOpacity="0.25" />
                 <stop offset="100%" stopColor={color} stopOpacity="0.0" />
               </linearGradient>
             </defs>
 
             {/* Grid horizontal dashed lines */}
-            <line x1="20" y1="20" x2="360" y2="20" stroke="var(--app-border)" strokeDasharray="3 3" />
-            <line x1="20" y1="80" x2="360" y2="80" stroke="var(--app-border)" strokeDasharray="3 3" />
-            <line x1="20" y1="140" x2="360" y2="140" stroke="var(--app-border)" />
+            <line x1="10" y1="15" x2="370" y2="15" stroke="var(--app-border)" strokeDasharray="3 3" />
+            <line x1="10" y1="45" x2="370" y2="45" stroke="var(--app-border)" strokeDasharray="3 3" />
+            <line x1="10" y1="75" x2="370" y2="75" stroke="var(--app-border)" />
 
             {/* Area fill */}
             {areaD && <path d={areaD} fill={`url(#grad-${title.replace(/\s+/g, '')})`} />}
@@ -182,27 +182,27 @@ function MiniChart({
                 key={i}
                 cx={pt.x}
                 cy={pt.y}
-                r={hoverIdx === i ? 4.5 : 2.5}
+                r={hoverIdx === i ? 4 : 2}
                 fill="var(--app-surface-elevated)"
                 stroke={color}
-                strokeWidth={hoverIdx === i ? 2.5 : 1.5}
+                strokeWidth={hoverIdx === i ? 2 : 1}
                 className="cursor-pointer transition-all"
                 onMouseEnter={() => setHoverIdx(i)}
               />
             ))}
 
-            {/* Hover Crosshair & Tooltip */}
+            {/* Hover Crosshair */}
             {hoverIdx !== null && points[hoverIdx] && (
               <g>
                 <line
                   x1={points[hoverIdx].x}
-                  y1="10"
+                  y1="5"
                   x2={points[hoverIdx].x}
-                  y2="150"
+                  y2="85"
                   stroke="var(--app-border)"
                   strokeDasharray="2 2"
                 />
-                <circle cx={points[hoverIdx].x} cy={points[hoverIdx].y} r="5" fill={color} />
+                <circle cx={points[hoverIdx].x} cy={points[hoverIdx].y} r="4" fill={color} />
               </g>
             )}
           </svg>
@@ -215,13 +215,13 @@ function MiniChart({
         {/* Hover Pill */}
         {hoverIdx !== null && points[hoverIdx] && (
           <div
-            className="pointer-events-none absolute -top-1 rounded border border-border bg-surface-elevated/95 px-2 py-0.5 text-[10.5px] font-mono text-foreground shadow-md backdrop-blur-md"
+            className="pointer-events-none absolute -top-1 rounded border border-border bg-surface-elevated/95 px-2 py-0.5 text-[10px] font-mono text-foreground shadow-md backdrop-blur-md"
             style={{
               left: `${Math.min(Math.max((points[hoverIdx].x / 380) * 100, 10), 85)}%`,
               transform: 'translateX(-50%)',
             }}
           >
-            Iter {points[hoverIdx].iter}: {points[hoverIdx].val.toFixed(5)} {unit || ''}
+            Iter {points[hoverIdx].iter}: {points[hoverIdx].val.toFixed(4)} {unit || ''}
           </div>
         )}
       </div>
@@ -325,32 +325,36 @@ export function MpcConvergenceCharts({
   }, [dtHistory, paramsHistory])
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
-            <Activity className="size-4 text-purple-500" />
-            7-Channel Optimization Convergence Suite
-          </h3>
-          <p className="text-xs text-muted-text">
-            Real-time trajectory of cost objectives, transient dynamics, control horizon, and sample time adaptations
-          </p>
+    <div id="section-convergence" className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <div className="flex size-7 items-center justify-center rounded-lg bg-purple-500/15 text-purple-600 dark:text-purple-300 border border-purple-500/30">
+            <Activity className="size-4" />
+          </div>
+          <div>
+            <h3 className="text-xs font-bold text-foreground">
+              7-Channel Optimization Convergence Suite
+            </h3>
+            <p className="text-[10.5px] text-muted-text">
+              Real-time trajectory of cost objectives, transient dynamics, control horizon, and sample time adaptations
+            </p>
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
           {bestMse !== undefined && bestMse !== null && (
-            <span className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-mono text-emerald-600 dark:text-emerald-400">
+            <span className="rounded-full border border-emerald-500/30 bg-emerald-500/15 px-3 py-1 text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">
               Optimal MSE: {bestMse.toFixed(5)}
             </span>
           )}
-          <span className="rounded-md border border-purple-500/30 bg-purple-500/10 px-2.5 py-1 text-[11px] font-mono text-purple-600 dark:text-purple-300">
-            Active Metric: L2 Quadratic Objective
+          <span className="rounded-full border border-purple-500/30 bg-purple-500/15 px-3 py-1 text-xs font-mono font-medium text-purple-600 dark:text-purple-300">
+            Active: L2 Quadratic Objective
           </span>
         </div>
       </div>
 
-      {/* Grid of 7 Curves */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      {/* Grid of 7 Curves + dt in 4x2 Bento Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {/* 1. MSE */}
         <MiniChart
           title="Tracking Error Cost"

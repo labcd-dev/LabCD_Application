@@ -32,7 +32,8 @@ export function DesignPage() {
     pipeline.setFile(`${safeName}.py`, 'python', activeResult.python_code)
     sessionStorage.setItem('labcd_last_artifact_id', artifactId)
     sessionStorage.setItem('labcd_last_pre_launch', JSON.stringify(preLaunch))
-    navigate(`/case-studies?artifact_id=${encodeURIComponent(artifactId)}`)
+    const convParam = conversationId ? `&new=${conversationId}` : ''
+    navigate(`/case-studies?artifact_id=${encodeURIComponent(artifactId)}${convParam}`)
   }
 
   return (
