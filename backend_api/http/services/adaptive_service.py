@@ -187,12 +187,32 @@ def _merge_system_spec_with_artifact(spec: dict[str, Any] | None) -> dict[str, A
             merged_dyn["solver_step"] = float(sim["solver_step"])
         if sim.get("x0") is not None and isinstance(sim["x0"], list):
             merged_dyn["x0"] = list(sim["x0"])
-        if sim.get("references") is not None:
-            refs = sim["references"]
-            if isinstance(refs, dict):
-                merged_dyn["references"] = [{"signal": str(k), "expression": str(v)} for k, v in refs.items()]
+
+        # Map reference trajectories to all system outputs
+        sys_outputs = list(merged_dyn.get("outputs") or ["x"])
+        refs = sim.get("references")
+        if refs is not None:
+            if isinstance(refs, str) and refs.strip():
+                merged_dyn["references"] = [{"output": out, "expr": refs.strip()} for out in sys_outputs]
+            elif isinstance(refs, dict):
+                first_expr = next((str(v).strip() for v in refs.values() if v), "0")
+                merged_dyn["references"] = [
+                    {"output": out, "expr": str(refs.get(out) or refs.get(out.lower()) or first_expr)}
+                    for out in sys_outputs
+                ]
             elif isinstance(refs, list):
-                merged_dyn["references"] = refs
+                norm_refs = []
+                for idx, out in enumerate(sys_outputs):
+                    item = refs[idx] if idx < len(refs) else (refs[0] if refs else {})
+                    if isinstance(item, dict):
+                        expr = item.get("expr") or item.get("expression") or item.get("value") or "0"
+                    else:
+                        expr = str(item)
+                    norm_refs.append({"output": out, "expr": expr})
+                merged_dyn["references"] = norm_refs
+        elif not merged_dyn.get("references"):
+            # Ensure non-empty references with default zero if none provided
+            merged_dyn["references"] = [{"output": out, "expr": "0"} for out in sys_outputs]
 
         merged["dynamics"] = merged_dyn
         return merged
