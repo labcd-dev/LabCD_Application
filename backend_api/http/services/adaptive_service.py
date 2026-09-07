@@ -161,6 +161,45 @@ def _make_on_event(job_id: str, store: InMemoryAdaptiveJobStore) -> Callable[[di
     return on_event
 
 
+def _merge_system_spec_with_artifact(spec: dict[str, Any] | None) -> dict[str, Any]:
+    """Deeply merge system_spec with compiled artifact from Pre-Launch."""
+    if not spec or not isinstance(spec, dict):
+        return {}
+    artifact_id = spec.get("artifact_id") or (spec.get("dynamics") or {}).get("artifact_id")
+    if not artifact_id:
+        return dict(spec)
+    try:
+        from backend_api.http.services.plant_artifact_service import get_artifact_store
+        art_spec = get_artifact_store().get_adaptive_spec(str(artifact_id))
+        if not art_spec:
+            return dict(spec)
+        merged = {**art_spec, **spec}
+        merged_dyn = dict(art_spec.get("dynamics") or {})
+        for k, v in (spec.get("dynamics") or {}).items():
+            if v is not None:
+                merged_dyn[k] = v
+
+        # Propagate simulation knobs from spec["simulation"] into dynamics
+        sim = spec.get("simulation") or {}
+        if sim.get("sim_time") is not None:
+            merged_dyn["sim_time"] = float(sim["sim_time"])
+        if sim.get("solver_step") is not None:
+            merged_dyn["solver_step"] = float(sim["solver_step"])
+        if sim.get("x0") is not None and isinstance(sim["x0"], list):
+            merged_dyn["x0"] = list(sim["x0"])
+        if sim.get("references") is not None:
+            refs = sim["references"]
+            if isinstance(refs, dict):
+                merged_dyn["references"] = [{"signal": str(k), "expression": str(v)} for k, v in refs.items()]
+            elif isinstance(refs, list):
+                merged_dyn["references"] = refs
+
+        merged["dynamics"] = merged_dyn
+        return merged
+    except Exception:
+        return dict(spec)
+
+
 def _run_pipeline_thread(job_id: str, store: InMemoryAdaptiveJobStore) -> None:
     os.environ.setdefault("LABCD_ADAPTIVE_SHOW_PLOTS", "0")
     os.environ.setdefault("MPLBACKEND", "Agg")
@@ -172,15 +211,7 @@ def _run_pipeline_thread(job_id: str, store: InMemoryAdaptiveJobStore) -> None:
         return
 
     options = record.options or {}
-    spec = record.system_spec
-    if spec and spec.get("artifact_id"):
-        try:
-            from backend_api.http.services.plant_artifact_service import get_artifact_store
-            art_spec = get_artifact_store().get_adaptive_spec(str(spec["artifact_id"]))
-            if art_spec:
-                spec = {**art_spec, **spec}
-        except Exception:
-            pass
+    spec = _merge_system_spec_with_artifact(record.system_spec)
     if spec:
         spec = system_spec_mod.normalize_defaults(spec)
 
@@ -327,8 +358,12 @@ def submit_job(
 ) -> AdaptiveJobCreateResponse:
     job_store = _store(store)
     options = _options_dict(request.options)
+    merged_spec = _merge_system_spec_with_artifact(request.system_spec)
+    if merged_spec:
+        merged_spec = system_spec_mod.normalize_defaults(merged_spec)
+
     record = job_store.create(
-        system_spec=request.system_spec,
+        system_spec=merged_spec,
         options=options,
         user_id=request.user_id,
         project_id=request.project_id,
@@ -336,10 +371,10 @@ def submit_job(
     job_id = record.job_id
 
     # Automatically link or create in Project database so it appears in Projects history
-    sys_name = _system_name(request.system_spec) or "adaptive_system"
+    sys_name = _system_name(merged_spec) or "adaptive_system"
     source_code = ""
-    if isinstance(request.system_spec, dict):
-        dyn = request.system_spec.get("dynamics")
+    if isinstance(merged_spec, dict):
+        dyn = merged_spec.get("dynamics")
         if isinstance(dyn, dict):
             source_code = dyn.get("source") or ""
             if not source_code and dyn.get("artifact_id"):
@@ -350,12 +385,12 @@ def submit_job(
                     source_code = read_plant_artifact_source(int(dyn["artifact_id"]))
                 except Exception:
                     pass
-        if not source_code and request.system_spec.get("artifact_id"):
+        if not source_code and merged_spec.get("artifact_id"):
             try:
                 from backend_api.http.services.plant_artifact_service import (
                     read_plant_artifact_source,
                 )
-                source_code = read_plant_artifact_source(int(request.system_spec["artifact_id"]))
+                source_code = read_plant_artifact_source(int(merged_spec["artifact_id"]))
             except Exception:
                 pass
 
@@ -390,11 +425,7 @@ def submit_job(
             message="Job started (clarify skipped)",
         )
 
-    spec = request.system_spec or {}
-    if spec:
-        spec = system_spec_mod.normalize_defaults(spec)
-        job_store.update(job_id, system_spec=spec)
-
+    spec = merged_spec or {}
     messages = clarifier.start_conversation(spec if spec else {"dynamics": {}})
     job_store.update(
         job_id,
