@@ -948,6 +948,7 @@ def _run_tuning_thread(job_id: str, store: InMemoryJobStore) -> None:
                     job_id=job_id,
                     status="completed",
                     results=_to_results(rec_now).model_dump(),
+                    file_content=dyn_code if dyn_code else None,
                 )
             except Exception:
                 pass
@@ -1011,8 +1012,9 @@ def submit_job(
 
     # Validate dynamics resolution early so the client gets a 4xx-style error
     # path via the service (router maps ValueError if needed).
+    plugin_path = None
     try:
-        _resolve_plugin_path(request.dynamics)
+        plugin_path = _resolve_plugin_path(request.dynamics)
     except ValueError:
         # Still create the job as failed for auditability, or re-raise.
         # Prefer fail-fast on submit.
@@ -1020,6 +1022,12 @@ def submit_job(
 
     system_name = options.get("system_name") or "mpc_system"
     source_code = request.dynamics.source if request.dynamics and request.dynamics.source else ""
+    if not source_code and plugin_path and os.path.exists(plugin_path):
+        try:
+            with open(plugin_path, "r", encoding="utf-8") as f:
+                source_code = f.read()
+        except Exception:
+            pass
     record = job_store.create(
         dynamics_ref=dynamics_ref,
         options=options,

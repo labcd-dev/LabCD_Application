@@ -162,7 +162,10 @@ export function MpcPage() {
   const resolveDynamicsPayload = (): { plugin_id?: string; source?: string } => {
     const artifactId = sessionStorage.getItem('labcd_last_artifact_id')
     if (artifactId) {
-      return { plugin_id: artifactId }
+      return {
+        plugin_id: artifactId,
+        source: pipeline.fileContent || undefined,
+      }
     } else if (pipeline.fileContent) {
       return { source: pipeline.fileContent }
     } else {

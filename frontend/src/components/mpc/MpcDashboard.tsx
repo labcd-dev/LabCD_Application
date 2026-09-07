@@ -379,8 +379,17 @@ print(f"MPC Controller initialized: Np={Np}, Nc={Nc}, dt={dt}")
             {/* Left: Agent Pipeline DAG */}
             <div className="lg:col-span-7">
               <MpcAgentFlowStrip
-                currentStage={job?.stage || (job?.status === 'completed' ? 'done' : undefined)}
-                isCompleted={job?.status === 'completed'}
+                currentStage={
+                  job?.stage ||
+                  results?.stage ||
+                  (job?.status === 'completed' || results?.status === 'completed' ? 'done' : undefined)
+                }
+                isCompleted={Boolean(
+                  job?.status === 'completed' ||
+                  results?.status === 'completed' ||
+                  results?.stage === 'done' ||
+                  (typeof results?.iteration === 'number' && results.iteration > 0)
+                )}
               />
             </div>
 

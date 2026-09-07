@@ -145,13 +145,96 @@ def create_project(
     return project
 
 
+def _try_recover_file_content(project: Project) -> str:
+    """Attempt to recover dynamics source code from disk, artifacts, or job stores."""
+    # 1. From file_url if set
+    if project.file_url:
+        try:
+            rel = project.file_url.removeprefix("/api/dynamics/files/")
+            disk_path = Path(__file__).resolve().parents[3] / "data" / "dynamics" / rel
+            if disk_path.is_file():
+                return disk_path.read_text(encoding="utf-8")
+        except Exception:
+            pass
+
+    # 2. From job_id via MPC or Adaptive in-memory stores
+    if project.job_id:
+        try:
+            from backend_api.http.services.mpc_job_store import get_mpc_store
+            rec = get_mpc_store().get(project.job_id)
+            if rec and rec.dynamics_ref:
+                plugin_id = rec.dynamics_ref.get("plugin_id")
+                if plugin_id:
+                    stem = plugin_id.removesuffix(".py")
+                    from backend_api.http.services.plant_artifact_service import get_artifact_store
+                    art_path = get_artifact_store().load_plugin_path(stem)
+                    if Path(art_path).is_file():
+                        return Path(art_path).read_text(encoding="utf-8")
+        except Exception:
+            pass
+
+        try:
+            from backend_api.http.services.adaptive_job_store import get_adaptive_store
+            rec = get_adaptive_store().get(project.job_id)
+            if rec and isinstance(rec.system_spec, dict):
+                dyn = rec.system_spec.get("dynamics")
+                if isinstance(dyn, dict) and dyn.get("source"):
+                    return str(dyn["source"])
+                art_id = rec.system_spec.get("artifact_id")
+                if art_id:
+                    from backend_api.http.services.plant_artifact_service import get_artifact_store
+                    art = get_artifact_store().load(str(art_id).removesuffix(".py"))
+                    if art and art.get("python_code"):
+                        return str(art["python_code"])
+        except Exception:
+            pass
+
+    # 3. From artifacts matching file_name / title
+    if project.file_name or project.title:
+        candidate_stem = (project.file_name or "").removesuffix(".py").strip()
+        if not candidate_stem and project.title:
+            candidate_stem = project.title.replace("MPC:", "").replace("Adaptive:", "").strip()
+        if candidate_stem:
+            try:
+                from backend_api.http.services.plant_artifact_service import get_artifact_store
+                store = get_artifact_store()
+                for art_summary in store.list_artifacts():
+                    aid = art_summary.artifact_id if hasattr(art_summary, "artifact_id") else art_summary.get("artifact_id", "")
+                    if aid and (candidate_stem.lower() in aid.lower() or aid.lower() in candidate_stem.lower()):
+                        p_path = store.load_plugin_path(aid)
+                        if Path(p_path).is_file():
+                            return Path(p_path).read_text(encoding="utf-8")
+            except Exception:
+                pass
+
+    # 4. From case studies directory
+    if project.file_name:
+        case_py = Path(__file__).resolve().parents[3] / "case_studies" / "py" / project.file_name
+        if case_py.is_file():
+            try:
+                return case_py.read_text(encoding="utf-8")
+            except Exception:
+                pass
+
+    return ""
+
+
 def get_project(db: Session, project_id: int) -> Project | None:
-    return (
+    p = (
         db.query(Project)
         .options(joinedload(Project.owner))
         .filter(Project.id == project_id)
         .first()
     )
+    if p and not (p.file_content or "").strip():
+        content = _try_recover_file_content(p)
+        if content:
+            p.file_content = content
+            _persist_project_file(p)
+            db.add(p)
+            db.commit()
+            db.refresh(p)
+    return p
 
 
 def list_projects_for_user(db: Session, user_id: int) -> list[Project]:
@@ -285,6 +368,7 @@ def sync_project_from_job(
     status: str,
     results: dict[str, Any] | None = None,
     error: str | None = None,
+    file_content: str | None = None,
 ) -> None:
     """Update a project from a background job thread (opens its own DB session)."""
     if project_id is None:
@@ -299,6 +383,8 @@ def sync_project_from_job(
             payload["results"] = results
         elif error:
             payload["results"] = {"error": error}
+        if file_content and not (project.file_content or "").strip():
+            payload["file_content"] = file_content
         update_project(db, project, **payload)
     finally:
         db.close()
@@ -326,6 +412,12 @@ def link_or_create_for_job(
             project = get_project(db, project_id)
             if project is not None and project.user_id != user_id:
                 project = None
+
+        if not file_content.strip():
+            dummy = Project(file_name=file_name, title=title or "", job_id=job_id)
+            recovered = _try_recover_file_content(dummy)
+            if recovered:
+                file_content = recovered
 
         if project is None:
             project = create_project(

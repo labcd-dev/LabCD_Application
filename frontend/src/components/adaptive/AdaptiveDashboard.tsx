@@ -521,8 +521,16 @@ title('LabCD Adaptive Closed-Loop Response'); legend('show', 'Location', 'best')
             {/* Left: Agent Pipeline DAG */}
             <div className="lg:col-span-7">
               <AdaptiveAgentFlowStrip
-                currentStage={job?.stage || (job?.status === 'completed' ? 'done' : undefined)}
-                isCompleted={job?.status === 'completed'}
+                currentStage={
+                  job?.stage ||
+                  results?.stage ||
+                  (job?.status === 'completed' || results?.status === 'completed' ? 'done' : undefined)
+                }
+                isCompleted={Boolean(
+                  job?.status === 'completed' ||
+                  results?.status === 'completed' ||
+                  results?.stage === 'done'
+                )}
               />
             </div>
 

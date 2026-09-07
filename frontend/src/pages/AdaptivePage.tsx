@@ -131,6 +131,7 @@ export function AdaptivePage() {
       spec = {
         artifact_id: artifactId,
         system_name: pipeline.fileName || 'adaptive_plant',
+        dynamics: pipeline.fileContent ? { source: pipeline.fileContent } : undefined,
         simulation: simKnobs,
       }
     } else if (pipeline.fileContent) {

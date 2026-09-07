@@ -260,11 +260,18 @@ def _run_pipeline_thread(job_id: str, store: InMemoryAdaptiveJobStore) -> None:
         if rec_now and rec_now.project_id:
             try:
                 from backend_api.http.services.project_service import sync_project_from_job
+                rec_spec = rec_now.system_spec if isinstance(rec_now.system_spec, dict) else {}
+                dyn_source = (
+                    (rec_spec.get("dynamics") or {}).get("source")
+                    if isinstance(rec_spec.get("dynamics"), dict)
+                    else None
+                )
                 sync_project_from_job(
                     project_id=int(rec_now.project_id),
                     job_id=job_id,
                     status="completed",
                     results=_to_results(rec_now).model_dump(),
+                    file_content=dyn_source if dyn_source else None,
                 )
             except Exception:
                 pass
@@ -317,6 +324,22 @@ def submit_job(
         dyn = request.system_spec.get("dynamics")
         if isinstance(dyn, dict):
             source_code = dyn.get("source") or ""
+            if not source_code and dyn.get("artifact_id"):
+                try:
+                    from backend_api.http.services.plant_artifact_service import (
+                        read_plant_artifact_source,
+                    )
+                    source_code = read_plant_artifact_source(int(dyn["artifact_id"]))
+                except Exception:
+                    pass
+        if not source_code and request.system_spec.get("artifact_id"):
+            try:
+                from backend_api.http.services.plant_artifact_service import (
+                    read_plant_artifact_source,
+                )
+                source_code = read_plant_artifact_source(int(request.system_spec["artifact_id"]))
+            except Exception:
+                pass
 
     try:
         from backend_api.http.services.project_service import link_or_create_for_job
