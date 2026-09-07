@@ -15,9 +15,6 @@ export default defineConfig({
           if (id.includes('plotly.js') || id.includes('react-plotly.js')) {
             return 'vendor-plotly'
           }
-          if (id.includes('prismjs') || id.includes('react-simple-code-editor')) {
-            return 'vendor-prism'
-          }
           if (id.includes('react-markdown') || id.includes('remark-gfm')) {
             return 'vendor-markdown'
           }
