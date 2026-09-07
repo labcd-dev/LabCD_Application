@@ -26,6 +26,7 @@ from backend_api.http.services.adaptive_service import (
     cancel_job,
     clarify_job,
     get_job,
+    get_job_report_pdf,
     get_results,
     list_jobs,
     submit_job,
@@ -124,6 +125,33 @@ def get_adaptive_job_results(
         return get_results(job_id, store=store)
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found") from exc
+
+
+@router.get("/jobs/{job_id}/report.pdf")
+def download_adaptive_report_pdf(
+    job_id: str,
+    user: User = Depends(require_action("module:adaptive")),
+    store: InMemoryAdaptiveJobStore = Depends(get_adaptive_store),
+):
+    """Download engineering PDF report for adaptive controller."""
+    record = store.get(job_id)
+    if record is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+    _assert_job_access(record.user_id, user)
+    try:
+        pdf_bytes = get_job_report_pdf(job_id, store=store)
+        system_name = (record.system_spec or {}).get("system_name") or "adaptive_system"
+        filename = f"{system_name}_report.pdf"
+        return StreamingResponse(
+            iter([pdf_bytes]),
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+            },
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
+
 
 
 @router.get("/jobs/{job_id}/events")

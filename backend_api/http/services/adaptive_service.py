@@ -562,3 +562,29 @@ def list_jobs(
         )
         for r in records
     ]
+
+
+def get_job_report_pdf(job_id: str, *, store: InMemoryAdaptiveJobStore | None = None) -> bytes:
+    """Generate engineering PDF report for an adaptive job."""
+    record = _store(store).get(job_id)
+    if record is None:
+        raise KeyError(job_id)
+
+    from backend_core.AgentAdaptive.tools.report import build_pdf_report
+
+    summary_md = record.report or f"# Adaptive Controller Design Report\n\nMethod: {record.method or 'SMC / Backstepping'}"
+    abstract_md = record.abstract or ""
+    figures: list[Any] = []
+
+    return build_pdf_report(
+        summary_markdown=summary_md,
+        figures=figures,
+        usage=record.usage,
+        log_text="\n".join(ev.get("text", "") for ev in (record.progress or []) if ev.get("text")),
+        tuning_log=list(record.tuning_log or []),
+        tuning_best=record.tuning_best,
+        clarification_record=list(record.clarification_record or []),
+        final_metrics=record.final_metrics,
+        abstract_markdown=abstract_md,
+    )
+
