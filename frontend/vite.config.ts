@@ -7,6 +7,34 @@ export default defineConfig({
   optimizeDeps: {
     needsInterop: ['react-simple-code-editor'],
   },
+  build: {
+    chunkSizeWarningLimit: 1200,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('plotly.js') || id.includes('react-plotly.js')) {
+            return 'vendor-plotly'
+          }
+          if (id.includes('prismjs') || id.includes('react-simple-code-editor')) {
+            return 'vendor-prism'
+          }
+          if (id.includes('react-markdown') || id.includes('remark-gfm')) {
+            return 'vendor-markdown'
+          }
+          if (id.includes('lucide-react')) {
+            return 'vendor-lucide'
+          }
+          if (
+            id.includes('node_modules/react/') ||
+            id.includes('node_modules/react-dom/') ||
+            id.includes('node_modules/react-router-dom/')
+          ) {
+            return 'vendor-react'
+          }
+        },
+      },
+    },
+  },
   server: {
     host: '0.0.0.0',
     port: 5173,

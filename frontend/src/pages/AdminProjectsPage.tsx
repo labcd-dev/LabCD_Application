@@ -183,6 +183,8 @@ export function AdminProjectsPage() {
             <option value="">All</option>
             <option value="siloDesign">Single Loop</option>
             <option value="muloDesign">Multi Loop</option>
+            <option value="adaptiveDesign">Adaptive Control</option>
+            <option value="mpcDesign">Agentic MPC</option>
           </select>
         </label>
       </div>

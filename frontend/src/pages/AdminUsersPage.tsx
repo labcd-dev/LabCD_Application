@@ -113,6 +113,28 @@ export function AdminUsersPage() {
 
   const pagination = useClientPagination(filteredUsers, { resetKey: query })
 
+  const planOptions = useMemo(() => {
+    const options = [...activePlans]
+    if (planId !== '') {
+      const current = plans.find((plan) => plan.id === planId)
+      if (current && !options.some((plan) => plan.id === current.id)) {
+        options.push(current)
+      }
+    }
+    return options.length > 0 ? options : plans
+  }, [plans, activePlans, planId])
+
+  const roleOptions = useMemo(() => {
+    const options = [...activeRoles]
+    if (roleId !== '') {
+      const current = roles.find((role) => role.id === roleId)
+      if (current && !options.some((role) => role.id === current.id)) {
+        options.push(current)
+      }
+    }
+    return options.length > 0 ? options : roles
+  }, [roles, activeRoles, roleId])
+
   if (!canManage) {
     return <Navigate to="/admin" replace />
   }
@@ -227,27 +249,6 @@ export function AdminUsersPage() {
     }
   }
 
-  const planOptions = useMemo(() => {
-    const options = [...activePlans]
-    if (planId !== '') {
-      const current = plans.find((plan) => plan.id === planId)
-      if (current && !options.some((plan) => plan.id === current.id)) {
-        options.push(current)
-      }
-    }
-    return options.length > 0 ? options : plans
-  }, [plans, activePlans, planId])
-
-  const roleOptions = useMemo(() => {
-    const options = [...activeRoles]
-    if (roleId !== '') {
-      const current = roles.find((role) => role.id === roleId)
-      if (current && !options.some((role) => role.id === current.id)) {
-        options.push(current)
-      }
-    }
-    return options.length > 0 ? options : roles
-  }, [roles, activeRoles, roleId])
 
   return (
     <div className="admin-fade-in space-y-6">
