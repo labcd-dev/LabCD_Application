@@ -19,6 +19,7 @@ class ChatMessage(BaseModel):
 class PlantModelResult(BaseModel):
     system_name: str
     python_code: str
+    metadata: Optional[dict[str, Any]] = None
 
 
 class PlantModelSessionState(BaseModel):

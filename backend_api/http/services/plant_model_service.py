@@ -77,9 +77,17 @@ def run_plant_model_chat(request: PlantModelChatRequest) -> PlantModelChatRespon
 
     final_result = None
     if final_payload is not None:
+        meta = final_payload.get("metadata")
+        if not meta:
+            try:
+                from backend_core.plant_compiler import PlantCompiler
+                meta = PlantCompiler().infer_metadata(final_payload)
+            except Exception:
+                meta = None
         final_result = PlantModelResult(
             system_name=final_payload["system_name"],
             python_code=final_payload["python_code"],
+            metadata=meta,
         )
 
     usage_totals = agent.total_usage

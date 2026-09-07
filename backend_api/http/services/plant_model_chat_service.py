@@ -85,9 +85,19 @@ def conversation_to_detail(
 ) -> dict[str, Any]:
     final_result = None
     if conversation.final_system_name and conversation.final_python_code:
+        meta = None
+        try:
+            from backend_core.plant_compiler import PlantCompiler
+            meta = PlantCompiler().infer_metadata({
+                "system_name": conversation.final_system_name,
+                "python_code": conversation.final_python_code,
+            })
+        except Exception:
+            pass
         final_result = PlantModelResult(
             system_name=conversation.final_system_name,
             python_code=conversation.final_python_code,
+            metadata=meta,
         )
     messages: list[ChatMessage] = []
     for msg in conversation.messages:

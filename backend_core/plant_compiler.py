@@ -789,9 +789,23 @@ def validate_pre_launch(pre_launch: dict, metadata: dict) -> ValidationResult:
 
     if n > 0:
         if isinstance(x0, list) and len(x0) != n:
-            errors.append(f"initial_state must be a list of length {n}")
+            if all(v == 0 for v in x0):
+                if len(x0) < n:
+                    x0.extend([0.0] * (n - len(x0)))
+                else:
+                    del x0[n:]
+                pre_launch["initial_state"] = x0
+            else:
+                errors.append(f"initial_state must be a list of length {n}")
         if isinstance(target, list) and len(target) != n:
-            errors.append(f"default_target must be a list of length {n}")
+            if all(v == 0 for v in target):
+                if len(target) < n:
+                    target.extend([0.0] * (n - len(target)))
+                else:
+                    del target[n:]
+                pre_launch["default_target"] = target
+            else:
+                errors.append(f"default_target must be a list of length {n}")
     else:
         if isinstance(x0, list) and isinstance(target, list) and len(x0) != len(target):
             errors.append(
