@@ -1019,29 +1019,31 @@ export const adaptiveApi = {
     onEvent: (event: string, data: any) => void,
     onError?: (err: unknown) => void,
   ) => streamEvents(`/adaptive/jobs/${jobId}/events`, onEvent, onError),
+  /** @deprecated Prefer downloadReportPdf — bare URL loses the JWT on navigation. */
   getReportPdfUrl: (jobId: string) => `${API_BASE}/adaptive/jobs/${jobId}/report.pdf`,
-  /** Authenticated PDF download — browser navigation does not send JWT. */
+  /**
+   * Authenticated PDF download: fetch with Bearer token and trigger a blob save.
+   * A plain window.open / <a href> does not send Authorization and gets 401.
+   */
   downloadReportPdf: async (jobId: string, filename?: string): Promise<void> => {
     const token = getAuthToken()
     const response = await fetch(`${API_BASE}/adaptive/jobs/${jobId}/report.pdf`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     })
     if (!response.ok) {
-      let detail = `Failed to download PDF (${response.status})`
+      let detail = response.statusText
       try {
         const body = await response.json()
-        if (body?.detail) detail = String(body.detail)
+        if (typeof body?.detail === 'string') detail = body.detail
       } catch {
-        /* ignore non-JSON */
+        /* ignore */
       }
-      throw new Error(detail)
+      throw new Error(detail || 'Failed to download PDF report')
     }
     const blob = await response.blob()
     const disposition = response.headers.get('Content-Disposition') || ''
-    const match = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(disposition)
-    const name =
-      filename ||
-      (match ? match[1].replace(/['"]/g, '') : `adaptive_${jobId}_report.pdf`)
+    const match = /filename="?([^"]+)"?/i.exec(disposition)
+    const name = filename || match?.[1] || `adaptive_${jobId}_report.pdf`
     triggerBlobDownload(blob, name)
   },
 }

@@ -217,28 +217,17 @@ export function AdaptiveConvergenceCharts({
   gainsHistory = [],
   bestRms,
 }: AdaptiveConvergenceChartsProps) {
-  // Synthesize normalized points
+  // Only real tuning history — no synthetic demonstration curves.
   const rmsPoints: Point[] = useMemo(() => {
     if (rmsHistory && rmsHistory.length > 0) {
       return rmsHistory
         .map((v, i) => ({ round: i + 1, val: Number(v) }))
         .filter((d) => !isNaN(d.val) && d.val > 0)
     }
-    // Fallback demonstration points if single run completed
-    if (typeof bestRms === 'number') {
-      return [
-        { round: 1, val: bestRms * 2.8 },
-        { round: 2, val: bestRms * 1.9 },
-        { round: 3, val: bestRms * 1.3 },
-        { round: 4, val: bestRms },
-      ]
+    if (typeof bestRms === 'number' && Number.isFinite(bestRms) && bestRms > 0) {
+      return [{ round: 1, val: bestRms }]
     }
-    return [
-      { round: 1, val: 0.084 },
-      { round: 2, val: 0.042 },
-      { round: 3, val: 0.021 },
-      { round: 4, val: 0.0124 },
-    ]
+    return []
   }, [rmsHistory, bestRms])
 
   const effortPoints: Point[] = useMemo(() => {
@@ -247,12 +236,7 @@ export function AdaptiveConvergenceCharts({
         .map((v, i) => ({ round: i + 1, val: Number(v) }))
         .filter((d) => !isNaN(d.val))
     }
-    return [
-      { round: 1, val: 8.4 },
-      { round: 2, val: 6.7 },
-      { round: 3, val: 5.2 },
-      { round: 4, val: 4.85 },
-    ]
+    return []
   }, [effortHistory])
 
   const settlingPoints: Point[] = useMemo(() => {
@@ -261,35 +245,36 @@ export function AdaptiveConvergenceCharts({
         .map((v, i) => ({ round: i + 1, val: Number(v) }))
         .filter((d) => !isNaN(d.val))
     }
-    return [
-      { round: 1, val: 3.2 },
-      { round: 2, val: 2.1 },
-      { round: 3, val: 1.6 },
-      { round: 4, val: 1.42 },
-    ]
+    return []
   }, [settlingHistory])
 
   const gainsPoints: Point[] = useMemo(() => {
     if (gainsHistory && gainsHistory.length > 0) {
       return gainsHistory
         .map((item, i) => {
-          let val = 10.0
+          let val: number | null = null
           if (typeof item === 'number') val = item
           else if (typeof item === 'object' && item !== null) {
             const obj = item as Record<string, unknown>
-            val = Number(obj.gamma ?? obj.learning_rate ?? obj.gain ?? 10.0)
+            const raw =
+              obj.Gamma ??
+              obj.gamma ??
+              obj.learning_rate ??
+              obj.gain ??
+              obj.kappa
+            if (Array.isArray(raw) && raw.length) val = Number(raw[0])
+            else if (raw !== undefined && raw !== null) val = Number(raw)
           }
+          if (val === null || isNaN(val)) return null
           return { round: i + 1, val }
         })
-        .filter((d) => !isNaN(d.val))
+        .filter((d): d is Point => d !== null)
     }
-    return [
-      { round: 1, val: 2.5 },
-      { round: 2, val: 5.0 },
-      { round: 3, val: 8.5 },
-      { round: 4, val: 12.0 },
-    ]
+    return []
   }, [gainsHistory])
+
+  const hasAnyHistory =
+    rmsPoints.length > 0 || effortPoints.length > 0 || settlingPoints.length > 0 || gainsPoints.length > 0
 
   return (
     <div className="space-y-3">
@@ -308,9 +293,15 @@ export function AdaptiveConvergenceCharts({
           </div>
         </div>
 
-        <span className="flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/15 px-2 py-0.5 text-[10.5px] font-semibold text-emerald-600 dark:text-emerald-400">
-          <CheckCircle2 className="size-3" /> Asymptotically Stable
-        </span>
+        {hasAnyHistory ? (
+          <span className="flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/15 px-2 py-0.5 text-[10.5px] font-semibold text-emerald-600 dark:text-emerald-400">
+            <CheckCircle2 className="size-3" /> Tuning history available
+          </span>
+        ) : (
+          <span className="flex items-center gap-1 rounded-full border border-border bg-surface-muted px-2 py-0.5 text-[10.5px] font-semibold text-muted-text">
+            No tuning rounds yet
+          </span>
+        )}
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">

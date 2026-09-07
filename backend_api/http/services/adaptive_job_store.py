@@ -221,6 +221,8 @@ class InMemoryAdaptiveJobStore:
             for key, value in fields.items():
                 if not hasattr(record, key):
                     raise AttributeError(f"JobRecord has no field {key!r}")
+                if key == "project_id" and value is not None:
+                    value = str(value)
                 setattr(record, key, value)
             record.updated_at = _now()
             self._sync_to_db(record)

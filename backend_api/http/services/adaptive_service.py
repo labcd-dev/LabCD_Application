@@ -51,6 +51,129 @@ def _system_name(spec: dict[str, Any] | None) -> str | None:
     return str(name) if name else None
 
 
+def _coerce_project_id(value: Any) -> str | None:
+    if value is None:
+        return None
+    return str(value)
+
+def _first_float(value: Any) -> float | None:
+    if isinstance(value, (int, float)) and value == value and value not in (float("inf"), float("-inf")):
+        return float(value)
+    if isinstance(value, (list, tuple)):
+        for item in value:
+            got = _first_float(item)
+            if got is not None:
+                return got
+    return None
+
+
+def _max_abs_float(value: Any) -> float | None:
+    if isinstance(value, (int, float)) and value == value and value not in (float("inf"), float("-inf")):
+        return abs(float(value))
+    if isinstance(value, (list, tuple)):
+        vals = [_first_float(v) for v in value]
+        vals = [abs(v) for v in vals if v is not None]
+        if vals:
+            return float(max(vals))
+    return None
+
+
+def _enrich_metrics_for_ui(metrics: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Add scalar aliases expected by the Adaptive dashboard."""
+    if not isinstance(metrics, dict):
+        return metrics
+    out = dict(metrics)
+    if out.get("tracking_rms") is None:
+        tracking_mse = out.get("tracking_mse") if isinstance(out.get("tracking_mse"), dict) else {}
+        out["tracking_rms"] = (
+            _first_float(out.get("steady_rms"))
+            or _first_float(tracking_mse.get("steady"))
+            or _first_float(tracking_mse.get("full"))
+            or _first_float(out.get("transient_rms"))
+        )
+    if out.get("rms") is None and out.get("tracking_rms") is not None:
+        out["rms"] = out["tracking_rms"]
+    if out.get("max_u") is None:
+        out["max_u"] = _max_abs_float(out.get("control_max")) or _max_abs_float(out.get("control_rms"))
+    if out.get("control_effort") is None and out.get("max_u") is not None:
+        out["control_effort"] = out["max_u"]
+    # Preserve settling_time even when not reached (null) but surface the flag clearly.
+    if "settling_time_reached" not in out and out.get("settling_time") is not None:
+        out["settling_time_reached"] = True
+    st = _first_float(out.get("settling_time"))
+    if st is not None:
+        out["settling_time"] = st
+    return out
+
+
+def _normalize_usage_for_ui(usage: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Flatten nested usage buckets and attach total_cost when pricing is available."""
+    if not isinstance(usage, dict):
+        return usage
+    out = dict(usage)
+    total = out.get("total") if isinstance(out.get("total"), dict) else {}
+    if out.get("total_tokens") is None:
+        out["total_tokens"] = total.get("total_tokens") or 0
+    if out.get("input_tokens") is None:
+        out["input_tokens"] = total.get("input_tokens") or 0
+    if out.get("output_tokens") is None:
+        out["output_tokens"] = total.get("output_tokens") or 0
+    if out.get("total_cost") is None:
+        try:
+            from backend_core.AgentAdaptive.tools import model_pricing
+
+            _rows, total_cost = model_pricing.run_cost_rows(usage)
+            if total_cost is not None:
+                out["total_cost"] = float(total_cost)
+        except Exception:
+            pass
+    return out
+
+
+def _enrich_tuning_log_for_ui(
+    tuning_log: list[dict[str, Any]] | None,
+    final_metrics: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """Fill rms / max_u on log rows when only nested metrics fields exist."""
+    rows = list(tuning_log or [])
+    enriched: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        item = dict(row)
+        metrics = item.get("metrics") if isinstance(item.get("metrics"), dict) else None
+        if item.get("rms") is None:
+            # Never fall back to tracking_pct_headline — that is a percentage score, not RMS.
+            item["rms"] = (
+                _first_float(item.get("steady_rms"))
+                or (_first_float((metrics or {}).get("steady_rms")) if metrics else None)
+            )
+        if item.get("settling_time") is None and metrics:
+            item["settling_time"] = _first_float(metrics.get("settling_time"))
+        if item.get("max_u") is None:
+            item["max_u"] = (
+                _max_abs_float(item.get("control_max"))
+                or (_max_abs_float((metrics or {}).get("control_max")) if metrics else None)
+            )
+        enriched.append(item)
+    # If tuning was skipped but we have final metrics, expose a single summary row.
+    if not enriched and isinstance(final_metrics, dict):
+        enriched.append(
+            {
+                "round": 0,
+                "reasoning": "(design pass — tuning disabled or not required)",
+                "rms": final_metrics.get("tracking_rms") or _first_float(final_metrics.get("steady_rms")),
+                "max_u": final_metrics.get("max_u") or _max_abs_float(final_metrics.get("control_max")),
+                "met_target": bool(final_metrics.get("success", True)),
+                "success": bool(final_metrics.get("success", True)),
+                "tracking_pct_headline": final_metrics.get("tracking_pct_headline"),
+            }
+        )
+    return enriched
+
+
+
+
 def _to_status_response(record: JobRecord) -> AdaptiveJobStatusResponse:
     progress = []
     for ev in record.progress:
@@ -82,7 +205,7 @@ def _to_status_response(record: JobRecord) -> AdaptiveJobStatusResponse:
         created_at=record.created_at,
         updated_at=record.updated_at,
         user_id=record.user_id,
-        project_id=record.project_id,
+        project_id=_coerce_project_id(record.project_id),
         options=_options_model(record.options),
     )
 
@@ -161,6 +284,35 @@ def _make_on_event(job_id: str, store: InMemoryAdaptiveJobStore) -> Callable[[di
     return on_event
 
 
+def _resolve_system_spec(
+    spec: dict[str, Any] | None,
+    options: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    """Resolve artifact adaptive-spec, deep-merge, fold sim knobs, ensure refs."""
+    if not spec or not isinstance(spec, dict):
+        return None
+
+    resolved: dict[str, Any] = dict(spec)
+    artifact_id = resolved.get("artifact_id")
+    if not artifact_id and isinstance(resolved.get("dynamics"), dict):
+        artifact_id = resolved["dynamics"].get("artifact_id")
+
+    if artifact_id:
+        try:
+            from backend_api.http.services.plant_artifact_service import get_artifact_store
+
+            art_spec = get_artifact_store().get_adaptive_spec(str(artifact_id))
+            if art_spec:
+                # Plant structure wins over incomplete request dynamics.
+                resolved = system_spec_mod.deep_merge_system_spec(art_spec, resolved)
+                resolved["artifact_id"] = str(artifact_id)
+        except Exception:
+            pass
+
+    resolved = system_spec_mod.fold_simulation_into_dynamics(resolved, options)
+    return resolved
+
+
 def _run_pipeline_thread(job_id: str, store: InMemoryAdaptiveJobStore) -> None:
     os.environ.setdefault("LABCD_ADAPTIVE_SHOW_PLOTS", "0")
     os.environ.setdefault("MPLBACKEND", "Agg")
@@ -172,22 +324,42 @@ def _run_pipeline_thread(job_id: str, store: InMemoryAdaptiveJobStore) -> None:
         return
 
     options = record.options or {}
-    spec = record.system_spec
-    if spec and spec.get("artifact_id"):
-        try:
-            from backend_api.http.services.plant_artifact_service import get_artifact_store
-            art_spec = get_artifact_store().get_adaptive_spec(str(spec["artifact_id"]))
-            if art_spec:
-                spec = {**art_spec, **spec}
-        except Exception:
-            pass
-    if spec:
-        spec = system_spec_mod.normalize_defaults(spec)
+    spec = _resolve_system_spec(record.system_spec, options)
 
     on_event = _make_on_event(job_id, store)
 
     def should_stop() -> bool:
         return store.is_cancel_requested(job_id)
+
+    # Fail closed: never call the pipeline with system_spec=None / no states.
+    states = (spec or {}).get("dynamics", {}).get("states") if spec else None
+    if not states:
+        err = (
+            "No plant structure available: dynamics.states is missing. "
+            "Provide a compiled plant artifact or a system_spec with named states."
+        )
+        store.update(
+            job_id,
+            status="failed",
+            stage="error",
+            message="Missing plant structure",
+            error=err,
+            system_spec=spec,
+        )
+        rec_now = store.get(job_id)
+        if rec_now and rec_now.project_id:
+            try:
+                from backend_api.http.services.project_service import sync_project_from_job
+
+                sync_project_from_job(
+                    project_id=int(rec_now.project_id),
+                    job_id=job_id,
+                    status="failed",
+                    error=err,
+                )
+            except Exception:
+                pass
+        return
 
     store.update(
         job_id,
@@ -195,12 +367,27 @@ def _run_pipeline_thread(job_id: str, store: InMemoryAdaptiveJobStore) -> None:
         stage="design",
         message="Starting design pipeline",
         error=None,
+        system_spec=spec,
     )
 
     try:
-        sim_overrides = None
-        if spec and spec.get("dynamics", {}).get("states"):
-            sim_overrides = clarifier.sim_overrides_from_spec(spec)
+        sim_overrides = clarifier.sim_overrides_from_spec(spec) if spec else {}
+        if sim_overrides is None:
+            sim_overrides = {}
+        if options.get("sim_time") is not None and "t_end" not in sim_overrides:
+            sim_overrides["t_end"] = float(options["sim_time"])
+        if options.get("solver_step") is not None and "dt" not in sim_overrides:
+            sim_overrides["dt"] = float(options["solver_step"])
+        if options.get("x0") is not None and "x0" not in sim_overrides:
+            sim_overrides["x0"] = list(options["x0"])
+        if not sim_overrides:
+            sim_overrides = None
+
+        tuning_objs = options.get("tuning_objectives")
+        if isinstance(tuning_objs, dict) and tuning_objs:
+            tuning_objs = {str(k): int(v) for k, v in tuning_objs.items() if v is not None}
+        else:
+            tuning_objs = None
 
         result, usage, tuning_log, tuning_best = run_full_pipeline(
             options.get("description") or "",
@@ -212,7 +399,8 @@ def _run_pipeline_thread(job_id: str, store: InMemoryAdaptiveJobStore) -> None:
             clarification_record=record.clarification_record or None,
             sim_overrides=sim_overrides,
             clarifier_usage=record.clarifier_usage or None,
-            system_spec=spec if spec and (spec.get("dynamics") or {}).get("states") else None,
+            tuning_objectives=tuning_objs,
+            system_spec=spec,
         )
 
         if store.is_cancel_requested(job_id):
@@ -231,7 +419,7 @@ def _run_pipeline_thread(job_id: str, store: InMemoryAdaptiveJobStore) -> None:
                     last.get("content") if isinstance(last, dict) else str(last)
                 )
             abstract = result.get("abstract")
-            final_metrics = result.get("final_metrics")
+            final_metrics = _enrich_metrics_for_ui(result.get("final_metrics"))
             for ev in reversed(store.get(job_id).progress if store.get(job_id) else []):
                 args = ev.get("args") if isinstance(ev, dict) else None
                 if isinstance(args, dict) and args.get("method"):
@@ -239,6 +427,40 @@ def _run_pipeline_thread(job_id: str, store: InMemoryAdaptiveJobStore) -> None:
                     break
 
         series = result.get("series") if isinstance(result, dict) else None
+
+        report_text = str(report or "")
+        if "EXTRACTION FAILED" in report_text:
+            store.update(
+                job_id,
+                status="failed",
+                stage="error",
+                message="Design extraction failed",
+                error=report_text[:2000],
+                report=report,
+                abstract=abstract,
+                method=method,
+                final_metrics=final_metrics,
+                tuning_log=_enrich_tuning_log_for_ui(list(tuning_log or []), final_metrics),
+                tuning_best=tuning_best,
+                usage=_normalize_usage_for_ui(usage),
+                system_spec=spec,
+                series=series if isinstance(series, dict) else None,
+            )
+            rec_now = store.get(job_id)
+            if rec_now and rec_now.project_id:
+                try:
+                    from backend_api.http.services.project_service import sync_project_from_job
+
+                    sync_project_from_job(
+                        project_id=int(rec_now.project_id),
+                        job_id=job_id,
+                        status="failed",
+                        error=report_text[:2000],
+                    )
+                except Exception:
+                    pass
+            return
+
         store.update(
             job_id,
             status="completed",
@@ -248,9 +470,9 @@ def _run_pipeline_thread(job_id: str, store: InMemoryAdaptiveJobStore) -> None:
             abstract=abstract,
             method=method,
             final_metrics=final_metrics,
-            tuning_log=list(tuning_log or []),
+            tuning_log=_enrich_tuning_log_for_ui(list(tuning_log or []), final_metrics),
             tuning_best=tuning_best,
-            usage=usage,
+            usage=_normalize_usage_for_ui(usage),
             system_spec=spec,
             series=series if isinstance(series, dict) else None,
         )
@@ -353,7 +575,7 @@ def submit_job(
             title=f"Adaptive: {sys_name}",
         )
         if linked_project_id is not None:
-            job_store.update(job_id, project_id=linked_project_id)
+            job_store.update(job_id, project_id=_coerce_project_id(linked_project_id))
     except Exception:
         pass
 
@@ -374,7 +596,7 @@ def submit_job(
 
     spec = request.system_spec or {}
     if spec:
-        spec = system_spec_mod.normalize_defaults(spec)
+        spec = _resolve_system_spec(spec, options) or system_spec_mod.normalize_defaults(spec)
         job_store.update(job_id, system_spec=spec)
 
     messages = clarifier.start_conversation(spec if spec else {"dynamics": {}})
@@ -416,7 +638,7 @@ def _run_first_clarify_turn(job_id: str, store: InMemoryAdaptiveJobStore) -> Non
         status=status,
         reply=reply,
         dynamics=dynamics,
-        usage=usage,
+        usage=_normalize_usage_for_ui(usage),
         error=error,
         updated_messages=updated,
         round_num=round_num,
@@ -473,7 +695,8 @@ def _apply_clarify_result(
             if dynamics.get("references") is not None:
                 dyn["references"] = dynamics["references"]
         spec["dynamics"] = dyn
-        spec = system_spec_mod.normalize_defaults(spec)
+        # Re-resolve artifact + fold sim knobs + ensure every output has a ref expr.
+        spec = _resolve_system_spec(spec, record.options) or system_spec_mod.normalize_defaults(spec)
         clarification_record = _clarification_record_from_log(chat_log)
         store.update(
             job_id,
@@ -545,7 +768,7 @@ def clarify_job(
         status=status,
         reply=reply,
         dynamics=dynamics,
-        usage=usage,
+        usage=_normalize_usage_for_ui(usage),
         error=error,
         updated_messages=updated,
         round_num=round_num,
@@ -638,27 +861,126 @@ def list_jobs(
     ]
 
 
+def _figures_from_series(series: dict[str, Any] | None) -> list[tuple[bytes, str]]:
+    """Render PNG figures from exported simulation series for the PDF report."""
+    if not isinstance(series, dict):
+        return []
+    channels = series.get("channels") if isinstance(series.get("channels"), dict) else {}
+    t_data = (channels.get("t") or {}).get("data") or []
+    if not t_data:
+        return []
+    try:
+        import io
+        import numpy as np
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+    except Exception:
+        return []
+
+    def _matrix(ch_key: str):
+        raw = (channels.get(ch_key) or {}).get("data") or []
+        if not raw:
+            return None
+        try:
+            return np.asarray(raw, dtype=float)
+        except Exception:
+            return None
+
+    t = np.asarray(t_data, dtype=float).reshape(-1)
+    figs: list[tuple[bytes, str]] = []
+
+    def _save(fig, title: str) -> None:
+        buf = io.BytesIO()
+        fig.savefig(buf, format="png", dpi=120, bbox_inches="tight")
+        plt.close(fig)
+        figs.append((buf.getvalue(), title))
+
+    y = _matrix("y")
+    ref = _matrix("ref")
+    if y is not None and y.size:
+        fig, ax = plt.subplots(figsize=(7.0, 3.2))
+        # time-major: row=t, col=channel
+        if y.ndim == 1:
+            ax.plot(t[: y.shape[0]], y, label="y")
+        else:
+            for c in range(min(y.shape[1], 4)):
+                ax.plot(t[: y.shape[0]], y[:, c], label=f"y{c}")
+        if ref is not None and ref.size:
+            if ref.ndim == 1:
+                ax.plot(t[: ref.shape[0]], ref, "--", label="ref")
+            else:
+                for c in range(min(ref.shape[1], 4)):
+                    ax.plot(t[: ref.shape[0]], ref[:, c], "--", label=f"ref{c}")
+        ax.set_xlabel("time (s)")
+        ax.set_ylabel("output")
+        ax.set_title("Tracking response")
+        ax.grid(True, alpha=0.3)
+        ax.legend(loc="best", fontsize=8)
+        _save(fig, "Tracking response")
+
+    u = _matrix("u")
+    if u is not None and u.size:
+        fig, ax = plt.subplots(figsize=(7.0, 2.8))
+        if u.ndim == 1:
+            ax.plot(t[: u.shape[0]], u, label="u")
+        else:
+            for c in range(min(u.shape[1], 4)):
+                ax.plot(t[: u.shape[0]], u[:, c], label=f"u{c}")
+        ax.set_xlabel("time (s)")
+        ax.set_ylabel("control")
+        ax.set_title("Control effort")
+        ax.grid(True, alpha=0.3)
+        ax.legend(loc="best", fontsize=8)
+        _save(fig, "Control effort")
+
+    d_hat = _matrix("d_hat")
+    if d_hat is not None and d_hat.size:
+        fig, ax = plt.subplots(figsize=(7.0, 2.8))
+        if d_hat.ndim == 1:
+            ax.plot(t[: d_hat.shape[0]], d_hat, label="d_hat")
+        else:
+            for c in range(min(d_hat.shape[1], 4)):
+                ax.plot(t[: d_hat.shape[0]], d_hat[:, c], label=f"d{c}")
+        ax.set_xlabel("time (s)")
+        ax.set_ylabel("estimate")
+        ax.set_title("Disturbance / uncertainty estimate")
+        ax.grid(True, alpha=0.3)
+        ax.legend(loc="best", fontsize=8)
+        _save(fig, "Disturbance / uncertainty estimate")
+
+    return figs
+
+
 def get_job_report_pdf(job_id: str, *, store: InMemoryAdaptiveJobStore | None = None) -> bytes:
-    """Generate engineering PDF report for an adaptive job."""
+    """Generate engineering PDF report for an adaptive job (XeLaTeX when available)."""
     record = _store(store).get(job_id)
     if record is None:
         raise KeyError(job_id)
 
     from backend_core.AgentAdaptive.tools.report import build_pdf_report
 
-    summary_md = record.report or f"# Adaptive Controller Design Report\n\nMethod: {record.method or 'SMC / Backstepping'}"
+    summary_md = record.report or (
+        f"# Adaptive Controller Design Report\n\nMethod: {record.method or 'SMC / Backstepping'}"
+    )
     abstract_md = record.abstract or ""
-    figures: list[Any] = []
+    try:
+        figures = _figures_from_series(record.series if isinstance(record.series, dict) else None)
+    except Exception:
+        figures = []
 
     return build_pdf_report(
         summary_markdown=summary_md,
         figures=figures,
         usage=record.usage,
-        log_text="\n".join(ev.get("text", "") for ev in (record.progress or []) if ev.get("text")),
+        log_text="\n".join(
+            ev.get("text", "") for ev in (record.progress or []) if ev.get("text")
+        ),
         tuning_log=list(record.tuning_log or []),
         tuning_best=record.tuning_best,
         clarification_record=list(record.clarification_record or []),
         final_metrics=record.final_metrics,
         abstract_markdown=abstract_md,
+        prefer_xelatex=True,
     )
 
