@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
+  Activity,
   Check,
   Cpu,
   FolderOpen,
@@ -10,13 +11,15 @@ import {
   Search,
   Sparkles,
   Trash2,
+  Workflow,
 } from 'lucide-react'
 import { plantArtifactApi, plantModelApi, projectsApi } from '../api/endpoints'
-import type { PlantModelConversationSummary, ProjectSummary } from '../api/types'
+import type { PlantModelConversationSummary, ProjectPipelineType, ProjectSummary } from '../api/types'
 import {
   LaunchModuleModal,
   type LaunchPipeline,
 } from '../components/LaunchModuleModal'
+import { ConfirmModal } from '../components/ConfirmModal'
 import { StatusMessage } from '../components/StatusMessage'
 import { usePipeline } from '../context/PipelineContext'
 import {
@@ -28,12 +31,64 @@ import {
   pageIntro,
   pageSection,
 } from '../lib/classes'
-import { pipelineLabel, statusBadgeClass } from '../lib/projectLabels'
+import { pipelineBadgeClass, pipelineLabel, statusBadgeClass } from '../lib/projectLabels'
 import { canRetryProject, retryProject } from '../lib/retryProject'
 import { formatDateTime, parseApiDate } from '../lib/formatDateTime'
 
 type CaseStatusFilter = 'all' | 'tuned' | 'untuned'
-type ProjPipelineFilter = 'all' | 'siloDesign' | 'muloDesign'
+type ProjPipelineFilter = 'all' | ProjectPipelineType
+
+interface ModuleFilterOption {
+  id: ProjPipelineFilter
+  label: string
+  shortLabel: string
+  icon: typeof Sparkles
+  accentColor: string
+  activeStyle: string
+}
+
+const MODULE_FILTERS: ModuleFilterOption[] = [
+  {
+    id: 'all',
+    label: 'All Runs',
+    shortLabel: 'All',
+    icon: Layers,
+    accentColor: 'text-foreground',
+    activeStyle: 'border-primary bg-[color-mix(in_srgb,var(--app-primary)_15%,transparent)] text-primary shadow-xs font-bold',
+  },
+  {
+    id: 'siloDesign',
+    label: 'Single Loop',
+    shortLabel: 'SISO',
+    icon: Sparkles,
+    accentColor: 'text-blue-500',
+    activeStyle: 'border-blue-500 bg-blue-500/15 text-blue-600 dark:text-blue-400 shadow-xs font-bold',
+  },
+  {
+    id: 'muloDesign',
+    label: 'Multi Loop',
+    shortLabel: 'MIMO',
+    icon: Cpu,
+    accentColor: 'text-indigo-500',
+    activeStyle: 'border-indigo-500 bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 shadow-xs font-bold',
+  },
+  {
+    id: 'adaptiveDesign',
+    label: 'Adaptive Control',
+    shortLabel: 'Adaptive',
+    icon: Activity,
+    accentColor: 'text-cyan-500',
+    activeStyle: 'border-cyan-500 bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 shadow-xs font-bold',
+  },
+  {
+    id: 'mpcDesign',
+    label: 'MPC Control',
+    shortLabel: 'MPC',
+    icon: Workflow,
+    accentColor: 'text-purple-500',
+    activeStyle: 'border-purple-500 bg-purple-500/15 text-purple-600 dark:text-purple-300 shadow-xs font-bold',
+  },
+]
 
 const SPARK_PATHS = [
   'M2,34 C10,34 12,10 22,8 C34,6 40,20 50,20 C62,20 66,12 78,12 L104,12',
@@ -249,21 +304,24 @@ export function ProjectsPage({
     }
   }
 
+  const [deleteTarget, setDeleteTarget] = useState<PlantModelConversationSummary | null>(null)
   const [deletingCaseId, setDeletingCaseId] = useState<number | null>(null)
 
-  const handleDeleteCase = async (row: PlantModelConversationSummary) => {
-    const name = displayName(row)
-    if (!window.confirm(`Are you sure you want to delete case study "${name}"? This action cannot be undone.`)) {
-      return
-    }
-    setDeletingCaseId(row.id)
+  const handleDeleteCase = (row: PlantModelConversationSummary) => {
+    setDeleteTarget(row)
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return
+    setDeletingCaseId(deleteTarget.id)
     setCaseError(null)
     try {
-      await plantModelApi.deleteConversation(row.id)
-      setCaseRows((prev) => prev.filter((c) => c.id !== row.id))
-      if (newId === row.id) {
+      await plantModelApi.deleteConversation(deleteTarget.id)
+      setCaseRows((prev) => prev.filter((c) => c.id !== deleteTarget.id))
+      if (newId === deleteTarget.id) {
         dismissBanner()
       }
+      setDeleteTarget(null)
     } catch (err) {
       setCaseError(err instanceof Error ? err.message : 'Failed to delete case study')
     } finally {
@@ -282,6 +340,23 @@ export function ProjectsPage({
       return name.includes(q) || row.title.toLowerCase().includes(q)
     })
   }, [caseRows, caseQuery, caseFilter])
+
+  // Dynamic counts per module for project filters
+  const moduleCounts = useMemo(() => {
+    const counts: Record<string, number> = {
+      all: projects.length,
+      siloDesign: 0,
+      muloDesign: 0,
+      adaptiveDesign: 0,
+      mpcDesign: 0,
+    }
+    for (const p of projects) {
+      if (p.pipeline_type && counts[p.pipeline_type] !== undefined) {
+        counts[p.pipeline_type] = (counts[p.pipeline_type] || 0) + 1
+      }
+    }
+    return counts
+  }, [projects])
 
   // Filtered projects
   const filteredProjects = useMemo(() => {
@@ -330,7 +405,7 @@ export function ProjectsPage({
             <p className={`${pageIntro} mt-1 mb-0 max-w-2xl`}>
               {activeTab === 'cases'
                 ? 'Benchmark systems and dynamic models identified via AI chat — configure and launch directly into MPC, Adaptive, or Classical control modules.'
-                : 'Review your historical Single Loop and Multi Loop optimization runs, inspect model code, and re-run controllers with new parameters.'}
+                : 'Review your historical Single Loop, Multi Loop, Adaptive, and MPC control optimization runs, inspect model code, and re-run controllers with new parameters.'}
             </p>
           </div>
 
@@ -621,6 +696,20 @@ export function ProjectsPage({
           }}
           onLaunch={handleLaunch}
         />
+
+        <ConfirmModal
+          open={deleteTarget != null}
+          title={`Delete "${deleteTarget ? displayName(deleteTarget) : ''}"?`}
+          description="Are you sure you want to delete this case study benchmark? This action cannot be undone and will permanently remove its physical plant dynamics."
+          confirmText={deletingCaseId != null ? 'Deleting...' : 'Delete Case Study'}
+          cancelText="Cancel"
+          variant="danger"
+          loading={deletingCaseId != null}
+          onClose={() => {
+            if (!deletingCaseId) setDeleteTarget(null)
+          }}
+          onConfirm={handleConfirmDelete}
+        />
       </div>
 
       {/* ========================================================================= */}
@@ -647,27 +736,37 @@ export function ProjectsPage({
               aria-label="Search project runs"
             />
           </div>
-          <div className="flex flex-wrap gap-1">
-            {(
-              [
-                ['all', 'All Runs'],
-                ['siloDesign', 'Single Loop'],
-                ['muloDesign', 'Multi Loop'],
-              ] as const
-            ).map(([val, lbl]) => (
-              <button
-                key={val}
-                type="button"
-                className={`${btnBase} ${btnCompact} ${
-                  projFilter === val
-                    ? 'border-primary bg-[color-mix(in_srgb,var(--app-primary)_12%,transparent)] text-primary'
-                    : ''
-                }`}
-                onClick={() => setProjFilter(val)}
-              >
-                {lbl}
-              </button>
-            ))}
+          <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5 max-w-full">
+            {MODULE_FILTERS.map((mod) => {
+              const Icon = mod.icon
+              const count = moduleCounts[mod.id] || 0
+              const isActive = projFilter === mod.id
+
+              return (
+                <button
+                  key={mod.id}
+                  type="button"
+                  onClick={() => setProjFilter(mod.id)}
+                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all shrink-0 whitespace-nowrap border ${
+                    isActive
+                      ? mod.activeStyle
+                      : 'border-border bg-surface hover:bg-surface-hover text-muted-text hover:text-foreground'
+                  }`}
+                >
+                  <Icon className={`size-3.5 ${isActive ? 'text-current' : mod.accentColor}`} />
+                  <span>{mod.label}</span>
+                  <span
+                    className={`ml-0.5 rounded-full px-1.5 py-0.2 text-[10px] font-mono font-medium ${
+                      isActive
+                        ? 'bg-primary/20 text-current'
+                        : 'bg-surface-muted text-muted-text'
+                    }`}
+                  >
+                    {count}
+                  </span>
+                </button>
+              )
+            })}
           </div>
         </div>
 
@@ -707,7 +806,7 @@ export function ProjectsPage({
                       {project.title}
                     </Link>
                     <span className={statusBadgeClass(project.status)}>{project.status}</span>
-                    <span className="rounded-md bg-surface-muted px-2 py-0.5 text-xs text-muted-text">
+                    <span className={pipelineBadgeClass(project.pipeline_type)}>
                       {pipelineLabel(project.pipeline_type)}
                     </span>
                   </div>

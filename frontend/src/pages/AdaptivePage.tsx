@@ -321,7 +321,7 @@ export function AdaptivePage() {
             <button
               type="button"
               onClick={handleCancel}
-              className={`${btnBase} ${btnCompact} text-rose-300 hover:bg-rose-500/10 border-rose-500/30`}
+              className={`${btnBase} ${btnCompact} text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 border-rose-500/30 font-medium`}
             >
               <StopCircle className="size-3.5" /> Stop
             </button>
@@ -331,9 +331,9 @@ export function AdaptivePage() {
             <button
               type="button"
               onClick={handleReset}
-              className={`${btnBase} ${btnCompact} text-slate-300 hover:text-white`}
+              className={`${btnBase} ${btnCompact} text-foreground hover:bg-surface-hover border border-border font-medium shadow-xs`}
             >
-              <RotateCcw className="size-3.5" /> New Run
+              <RotateCcw className="size-3.5 text-muted-text" /> New Run
             </button>
           )}
         </div>
@@ -585,7 +585,7 @@ export function AdaptivePage() {
               <span className="text-[11px] font-bold uppercase tracking-wider text-muted">
                 Agent Events
               </span>
-              <div className="mt-3 max-h-64 overflow-y-auto space-y-2 pr-1 text-xs">
+              <div className="mt-3 max-h-64 overflow-y-auto space-y-2 pr-1 text-xs scrollbar-thin">
                 {job.progress.map((ev, i) => (
                   <div
                     key={i}
