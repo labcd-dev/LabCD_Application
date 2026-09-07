@@ -3,9 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import {
   AlertCircle,
   ArrowLeft,
-  ChevronDown,
-  ChevronUp,
-  Gauge,
+  CheckCircle2,
   Loader2,
   Play,
   RotateCcw,
@@ -48,7 +46,6 @@ export function AdaptivePage() {
   const [solverStep, setSolverStep] = useState<number>(0.01)
   const [x0Str, setX0Str] = useState<string>('0.0, 0.0')
   const [referenceFn, setReferenceFn] = useState<string>('sin(t)')
-  const [showSimKnobs, setShowSimKnobs] = useState<boolean>(false)
 
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -409,10 +406,10 @@ export function AdaptivePage() {
             </div>
 
             <div className="mt-6 space-y-6">
-              {/* 1. Desired Reference Trajectory & Simulation Setup */}
+              {/* 1. Desired Reference Trajectory */}
               <div>
                 <label className="text-xs font-bold uppercase tracking-wider text-cyan-600 dark:text-cyan-400 block mb-2">
-                  1. Desired Reference Trajectory &amp; Simulation Horizon
+                  1. Desired Reference Trajectory
                 </label>
                 <div className="rounded-xl border border-border bg-surface-muted/30 p-4 space-y-3">
                   <div>
@@ -444,96 +441,17 @@ export function AdaptivePage() {
                     </div>
                   </div>
 
-                  {/* Collapsible Advanced Simulation Setup */}
-                  <div className="pt-2 border-t border-border/60">
-                    <button
-                      type="button"
-                      onClick={() => setShowSimKnobs(!showSimKnobs)}
-                      className="flex items-center gap-1.5 text-xs font-semibold text-cyan-600 dark:text-cyan-400 hover:underline transition-all"
-                    >
-                      <Gauge className="size-3.5" />
-                      <span>{showSimKnobs ? 'Hide Advanced Simulation Parameters' : 'Adjust Simulation Time, Solver Step dt & Initial State x0'}</span>
-                      {showSimKnobs ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
-                    </button>
-
-                    {showSimKnobs && (
-                      <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3 rounded-lg border border-border/80 bg-surface p-3 animate-in fade-in-30">
-                        {/* Sim Time */}
-                        <div>
-                          <label className={fieldLabel}>Total Sim Time (s)</label>
-                          <input
-                            type="number"
-                            min="1"
-                            max="500"
-                            step="1"
-                            value={simTime}
-                            onChange={(e) => setSimTime(parseFloat(e.target.value) || 10)}
-                            className={fieldInput}
-                          />
-                          <div className="mt-1 flex gap-1">
-                            {[5, 10, 30, 100].map((t) => (
-                              <button
-                                key={t}
-                                type="button"
-                                onClick={() => setSimTime(t)}
-                                className={`rounded px-1.5 py-0.5 text-[9.5px] font-mono border transition-all ${
-                                  simTime === t
-                                    ? 'bg-cyan-500 text-white border-cyan-500'
-                                    : 'border-border bg-surface-muted text-muted-text hover:text-foreground'
-                                }`}
-                              >
-                                {t}s
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Solver Step */}
-                        <div>
-                          <label className={fieldLabel}>Solver Step dt (s)</label>
-                          <input
-                            type="number"
-                            min="0.00001"
-                            max="0.1"
-                            step="0.001"
-                            value={solverStep}
-                            onChange={(e) => setSolverStep(parseFloat(e.target.value) || 0.01)}
-                            className={fieldInput}
-                          />
-                          <div className="mt-1 flex gap-1">
-                            {[0.0001, 0.001, 0.01].map((dt) => (
-                              <button
-                                key={dt}
-                                type="button"
-                                onClick={() => setSolverStep(dt)}
-                                className={`rounded px-1.5 py-0.5 text-[9.5px] font-mono border transition-all ${
-                                  solverStep === dt
-                                    ? 'bg-cyan-500 text-white border-cyan-500'
-                                    : 'border-border bg-surface-muted text-muted-text hover:text-foreground'
-                                }`}
-                              >
-                                {dt}s
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Initial Condition x0 */}
-                        <div>
-                          <label className={fieldLabel}>Initial State Vector x0</label>
-                          <input
-                            type="text"
-                            value={x0Str}
-                            onChange={(e) => setX0Str(e.target.value)}
-                            placeholder="0.0, 0.0"
-                            className={fieldInput}
-                          />
-                          <span className="text-[10px] text-muted-text font-mono mt-1 block">
-                            Comma-separated initial state vector
-                          </span>
-                        </div>
-                      </div>
-                    )}
+                  {/* Pre-Launch Simulation Horizon Confirmation */}
+                  <div className="pt-2 border-t border-border/60 flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono text-muted-text">
+                    <span className="flex items-center gap-1.5 text-cyan-600 dark:text-cyan-400 font-semibold">
+                      <CheckCircle2 className="size-3.5 text-cyan-500" />
+                      Pre-Launch Simulation Setup:
+                    </span>
+                    <div className="flex items-center gap-3">
+                      <span>Horizon: <b className="text-foreground">{simTime}s</b></span>
+                      <span>dt: <b className="text-foreground">{solverStep}s</b></span>
+                      <span>x₀: [<b className="text-foreground">{x0Str}</b>]</span>
+                    </div>
                   </div>
                 </div>
               </div>
