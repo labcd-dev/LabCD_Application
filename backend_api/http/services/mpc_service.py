@@ -1088,12 +1088,16 @@ def _run_tuning_thread(job_id: str, store: InMemoryJobStore) -> None:
 
         session_meta = {
             "tokens": {
+                "total": usage_data["total_tokens"],
+                "prompt": usage_data["prompt_tokens"],
+                "completion": usage_data["completion_tokens"],
                 "prompt_tokens": usage_data["prompt_tokens"],
                 "completion_tokens": usage_data["completion_tokens"],
                 "total_tokens": usage_data["total_tokens"],
             },
             "cost_usd": usage_data["total_cost"],
             "error_counts": error_counts,
+            "wall_clock_time_s": wall_clock_time,
             "wall_clock_time_seconds": wall_clock_time,
             "score": score_val,
             "success": success_bool,

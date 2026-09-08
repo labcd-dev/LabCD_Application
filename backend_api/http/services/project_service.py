@@ -72,6 +72,7 @@ def project_to_summary(project: Project, *, include_owner: bool = False) -> dict
         "score": score,
         "success": success,
         "rating": rating,
+        "design_grade": design_grade,
         "session_metadata": session_meta or None,
     }
 

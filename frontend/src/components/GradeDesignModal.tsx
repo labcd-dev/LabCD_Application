@@ -12,6 +12,7 @@ export interface GradeDesignModalProps {
   initialComment?: string | null
   score?: number | null
   success?: boolean | null
+  isReadOnly?: boolean
   onClose: () => void
   onSubmitted?: (rating: number, comment?: string | null) => void
 }
@@ -33,6 +34,7 @@ export function GradeDesignModal({
   initialComment,
   score,
   success,
+  isReadOnly = false,
   onClose,
   onSubmitted,
 }: GradeDesignModalProps) {
@@ -61,17 +63,18 @@ export function GradeDesignModal({
 
   if (!open) return null
 
-  const dynamicSubtitle =
-    moduleType === 'adaptive'
-      ? 'How well did the adaptive law meet your goals?'
-      : moduleType === 'mpc'
-      ? 'How well did the MPC controller meet your goals?'
-      : 'How well did the generated controller meet your goals?'
+  const dynamicSubtitle = isReadOnly
+    ? 'User review feedback and certified performance inspection'
+    : moduleType === 'adaptive'
+    ? 'How well did the adaptive law meet your goals?'
+    : moduleType === 'mpc'
+    ? 'How well did the MPC controller meet your goals?'
+    : 'How well did the generated controller meet your goals?'
 
-  const currentDisplayRating = hoverRating || rating
+  const currentDisplayRating = isReadOnly ? rating : (hoverRating || rating)
 
   const handleSubmit = async () => {
-    if (rating <= 0) return
+    if (isReadOnly || rating <= 0) return
     setSubmitting(true)
     setError(null)
     try {
@@ -114,8 +117,13 @@ export function GradeDesignModal({
                 <Star className="size-4 fill-amber-400 text-amber-400" />
               </span>
               <h2 id="grade-modal-title" className="m-0 text-base font-bold text-foreground">
-                Grade this design
+                {isReadOnly ? 'Design Grade & Review' : 'Grade this design'}
               </h2>
+              {isReadOnly && (
+                <span className="rounded-md border border-border bg-surface-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-text">
+                  Inspection
+                </span>
+              )}
             </div>
             <p className="mt-1 text-xs text-muted-text">{dynamicSubtitle}</p>
           </div>
@@ -151,11 +159,28 @@ export function GradeDesignModal({
           </div>
         )}
 
-        {/* Interactive Star Rating */}
+        {/* Star Rating */}
         <div className="mt-5 text-center">
           <div className="inline-flex items-center gap-2 rounded-2xl bg-surface-muted/60 p-2.5 border border-border">
             {[1, 2, 3, 4, 5].map((starVal) => {
               const active = currentDisplayRating >= starVal
+              if (isReadOnly) {
+                return (
+                  <div
+                    key={starVal}
+                    className="p-1.5 cursor-default select-none"
+                    aria-label={`${starVal} of 5 stars`}
+                  >
+                    <Star
+                      className={`size-7 transition-colors ${
+                        active
+                          ? 'fill-amber-400 text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.4)]'
+                          : 'text-muted/25'
+                      }`}
+                    />
+                  </div>
+                )
+              }
               return (
                 <button
                   key={starVal}
@@ -181,26 +206,40 @@ export function GradeDesignModal({
           <div className="mt-2.5 min-h-[20px] text-xs font-medium text-foreground">
             {currentDisplayRating > 0 ? (
               <span className="text-amber-600 dark:text-amber-400 font-semibold animate-in fade-in-50">
-                {RATING_DESCRIPTIONS[currentDisplayRating]}
+                {RATING_DESCRIPTIONS[currentDisplayRating] || `Rating: ${currentDisplayRating} / 5`}
               </span>
             ) : (
-              <span className="text-muted">Select 1 to 5 stars to submit your score</span>
+              <span className="text-muted">
+                {isReadOnly ? 'No numerical rating submitted by user' : 'Select 1 to 5 stars to submit your score'}
+              </span>
             )}
           </div>
         </div>
 
-        {/* Optional Notes */}
+        {/* Engineering feedback / notes */}
         <div className="mt-4">
           <label className="block text-[11px] font-semibold text-muted-text uppercase tracking-wider mb-1.5">
-            Engineering feedback / notes (optional)
+            Engineering feedback / notes {isReadOnly ? '' : '(optional)'}
           </label>
-          <textarea
-            rows={3}
-            value={comment}
-            onChange={(e) => setComment(e.target.value)}
-            placeholder="e.g. Tracking accuracy was very high, but settling time had a slight delay under pulse disturbance..."
-            className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-xs text-foreground placeholder:text-muted focus:border-primary focus:outline-none transition-colors resize-none"
-          />
+          {isReadOnly ? (
+            comment && comment.trim() ? (
+              <div className="rounded-xl border border-border bg-surface px-3.5 py-2.5 text-xs text-foreground whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto">
+                {comment}
+              </div>
+            ) : (
+              <div className="rounded-xl border border-dashed border-border/70 bg-surface/40 px-3.5 py-3 text-xs text-muted italic">
+                No written feedback or notes provided by the user.
+              </div>
+            )
+          ) : (
+            <textarea
+              rows={3}
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              placeholder="e.g. Tracking accuracy was very high, but settling time had a slight delay under pulse disturbance..."
+              className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-xs text-foreground placeholder:text-muted focus:border-primary focus:outline-none transition-colors resize-none"
+            />
+          )}
         </div>
 
         {error && (
@@ -211,29 +250,41 @@ export function GradeDesignModal({
 
         {/* Footer actions */}
         <div className="mt-6 flex items-center justify-end gap-2.5 border-t border-border pt-4">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={submitting}
-            className={`${btnBase} ${btnCompact} text-muted-text hover:text-foreground hover:bg-surface-hover border border-border font-medium`}
-          >
-            Skip
-          </button>
+          {isReadOnly ? (
+            <button
+              type="button"
+              onClick={onClose}
+              className={`${btnBase} ${btnCompact} ${btnPrimary} font-semibold px-5`}
+            >
+              Close
+            </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={submitting}
+                className={`${btnBase} ${btnCompact} text-muted-text hover:text-foreground hover:bg-surface-hover border border-border font-medium`}
+              >
+                Skip
+              </button>
 
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={rating === 0 || submitting}
-            className={`${btnBase} ${btnCompact} ${btnPrimary} flex items-center gap-1.5 font-semibold px-4`}
-          >
-            {submitting ? (
-              <>
-                <Loader2 className="size-3.5 animate-spin" /> Submitting...
-              </>
-            ) : (
-              'Submit'
-            )}
-          </button>
+              <button
+                type="button"
+                onClick={handleSubmit}
+                disabled={rating === 0 || submitting}
+                className={`${btnBase} ${btnCompact} ${btnPrimary} flex items-center gap-1.5 font-semibold px-4`}
+              >
+                {submitting ? (
+                  <>
+                    <Loader2 className="size-3.5 animate-spin" /> Submitting...
+                  </>
+                ) : (
+                  'Submit'
+                )}
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>

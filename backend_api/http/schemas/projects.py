@@ -59,6 +59,7 @@ class ProjectSummary(BaseModel):
     score: Optional[float] = None
     success: Optional[bool] = None
     rating: Optional[int] = None
+    design_grade: Optional[dict[str, Any]] = None
     session_metadata: Optional[dict[str, Any]] = None
 
 

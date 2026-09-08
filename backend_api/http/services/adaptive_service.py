@@ -523,12 +523,16 @@ def _run_pipeline_thread(job_id: str, store: InMemoryAdaptiveJobStore) -> None:
 
         session_meta = {
             "tokens": {
+                "total": total_tokens,
+                "prompt": prompt_tokens,
+                "completion": completion_tokens,
                 "prompt_tokens": prompt_tokens,
                 "completion_tokens": completion_tokens,
                 "total_tokens": total_tokens,
             },
             "cost_usd": cost_usd,
             "error_counts": error_counts,
+            "wall_clock_time_s": wall_clock_time,
             "wall_clock_time_seconds": wall_clock_time,
             "score": score_val,
             "success": success_bool,

@@ -431,11 +431,13 @@ export interface SessionMetadata {
     prompt?: number
     completion?: number
     total?: number
+    total_tokens?: number
     [key: string]: unknown
   } | null
   cost_usd?: number | null
   error_counts?: number | null
   wall_clock_time_s?: number | null
+  wall_clock_time_seconds?: number | null
   [key: string]: unknown
 }
 
@@ -460,6 +462,7 @@ export interface ProjectSummary {
   score?: number | null
   success?: boolean | null
   rating?: number | null
+  design_grade?: { rating: number; comment?: string | null; created_at?: string | null } | null
   session_metadata?: SessionMetadata | null
   created_at: string
   updated_at: string

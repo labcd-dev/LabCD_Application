@@ -12,6 +12,7 @@ export interface ScoreReportBadgeProps {
   rating?: number | null
   comment?: string | null
   sessionMetadata?: SessionMetadata | null
+  readOnly?: boolean
   onGradeSubmitted?: (rating: number, comment?: string | null) => void
   compact?: boolean
   className?: string
@@ -26,6 +27,7 @@ export function ScoreReportBadge({
   rating: initialRating,
   comment: initialComment,
   sessionMetadata,
+  readOnly = false,
   onGradeSubmitted,
   compact = false,
   className = '',
@@ -35,8 +37,11 @@ export function ScoreReportBadge({
   const [currentComment, setCurrentComment] = useState<string | null | undefined>(initialComment)
 
   // Keep internal state aligned if props update
-  if (initialRating !== undefined && initialRating !== currentRating && currentRating === undefined) {
+  if (initialRating !== undefined && initialRating !== currentRating) {
     setCurrentRating(initialRating)
+  }
+  if (initialComment !== undefined && initialComment !== currentComment) {
+    setCurrentComment(initialComment)
   }
 
   const handleSubmitted = (newRating: number, newComment?: string | null) => {
@@ -51,9 +56,19 @@ export function ScoreReportBadge({
   const isFailed = success === false
 
   const tokens = sessionMetadata?.tokens
-  const totalTokens = tokens && typeof tokens.total === 'number' ? tokens.total : null
+  const totalTokens =
+    typeof tokens?.total === 'number'
+      ? tokens.total
+      : typeof (tokens as any)?.total_tokens === 'number'
+      ? (tokens as any).total_tokens
+      : null
   const costUsd = typeof sessionMetadata?.cost_usd === 'number' ? sessionMetadata.cost_usd : null
-  const wallClockTime = typeof sessionMetadata?.wall_clock_time_s === 'number' ? sessionMetadata.wall_clock_time_s : null
+  const wallClockTime =
+    typeof sessionMetadata?.wall_clock_time_s === 'number'
+      ? sessionMetadata.wall_clock_time_s
+      : typeof (sessionMetadata as any)?.wall_clock_time_seconds === 'number'
+      ? (sessionMetadata as any).wall_clock_time_seconds
+      : null
   const errorCounts = typeof sessionMetadata?.error_counts === 'number' ? sessionMetadata.error_counts : null
 
   return (
@@ -99,12 +114,12 @@ export function ScoreReportBadge({
           </div>
         )}
 
-        {/* Interactive Star Rating Badge */}
+        {/* Star Rating Badge */}
         <button
           type="button"
           onClick={() => setModalOpen(true)}
           className="group inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs transition-all hover:bg-surface-hover focus:outline-none cursor-pointer border-none bg-transparent"
-          title="Click to grade or review this design"
+          title={readOnly ? "Click to inspect user's evaluation and notes" : "Click to grade or review this design"}
         >
           {currentRating && currentRating > 0 ? (
             <div className="flex items-center gap-0.5">
@@ -122,6 +137,11 @@ export function ScoreReportBadge({
                 {currentRating}.0
               </span>
             </div>
+          ) : readOnly ? (
+            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-text group-hover:text-foreground">
+              <Star className="size-3.5 text-muted/40 group-hover:text-amber-400" />
+              Not rated yet
+            </span>
           ) : (
             <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-600 dark:text-amber-400 group-hover:underline">
               <Star className="size-3.5 text-amber-400 group-hover:fill-amber-400" />
@@ -171,6 +191,7 @@ export function ScoreReportBadge({
         initialComment={currentComment}
         score={score}
         success={success}
+        isReadOnly={readOnly}
         onClose={() => setModalOpen(false)}
         onSubmitted={handleSubmitted}
       />

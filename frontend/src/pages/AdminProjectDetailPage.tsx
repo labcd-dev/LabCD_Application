@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Clock, Coins, Download, Flame, Trash2 } from 'lucide-react'
+import { ArrowLeft, Clock, Coins, Download, Flame, MessageSquare, Trash2 } from 'lucide-react'
 import { adminApi } from '../api/endpoints'
 import type { ProjectDetail } from '../api/types'
 import { CodePreview } from '../components/CodePreview'
@@ -68,10 +68,30 @@ export function AdminProjectDetailPage() {
   const downloadName = project.file_name || `project-${project.id}.py`
   const sm = project.session_metadata
   const tokens = sm?.tokens
-  const totalTokens = tokens && typeof tokens.total === 'number' ? tokens.total : null
+  const totalTokens =
+    typeof tokens?.total === 'number'
+      ? tokens.total
+      : typeof (tokens as any)?.total_tokens === 'number'
+      ? (tokens as any).total_tokens
+      : null
   const costUsd = typeof sm?.cost_usd === 'number' ? sm.cost_usd : null
-  const wallClockTime = typeof sm?.wall_clock_time_s === 'number' ? sm.wall_clock_time_s : null
+  const wallClockTime =
+    typeof sm?.wall_clock_time_s === 'number'
+      ? sm.wall_clock_time_s
+      : typeof (sm as any)?.wall_clock_time_seconds === 'number'
+      ? (sm as any).wall_clock_time_seconds
+      : null
   const errorCounts = typeof sm?.error_counts === 'number' ? sm.error_counts : null
+
+  const userComment =
+    project.design_grade?.comment ??
+    (project.results?.design_grade as any)?.comment ??
+    null
+  const userRating =
+    project.rating ??
+    project.design_grade?.rating ??
+    (project.results?.design_grade as any)?.rating ??
+    null
 
   return (
     <div className="admin-fade-in space-y-6">
@@ -91,7 +111,7 @@ export function AdminProjectDetailPage() {
           </p>
           <div className="flex flex-wrap items-center gap-2">
             <span className={statusBadgeClass(project.status)}>{project.status}</span>
-            {(project.score !== undefined || project.rating !== undefined || project.success !== undefined) && (
+            {(project.score !== undefined || userRating !== null || project.success !== undefined) && (
               <ScoreReportBadge
                 moduleType={
                   project.pipeline_type === 'adaptiveDesign'
@@ -104,8 +124,10 @@ export function AdminProjectDetailPage() {
                 jobId={project.job_id}
                 score={project.score}
                 success={project.success}
-                rating={project.rating}
+                rating={userRating}
+                comment={userComment}
                 sessionMetadata={project.session_metadata}
+                readOnly={true}
                 compact
               />
             )}
@@ -122,9 +144,16 @@ export function AdminProjectDetailPage() {
       {/* Greenfield Session Telemetry & Deliverables Card */}
       {sm && (
         <div className={cardPanel}>
-          <h2 className="m-0 text-base font-semibold text-foreground mb-3">
-            Execution Telemetry &amp; Session Metrics
-          </h2>
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <h2 className="m-0 text-base font-semibold text-foreground">
+              Execution Telemetry &amp; Session Metrics
+            </h2>
+            {userRating && (
+              <span className="text-xs text-amber-600 dark:text-amber-400 font-medium">
+                ★ User Rating: {userRating}/5
+              </span>
+            )}
+          </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
             <div className="rounded-xl border border-border bg-surface-muted p-3">
               <span className="text-muted-text flex items-center gap-1 font-medium">
@@ -162,6 +191,30 @@ export function AdminProjectDetailPage() {
               </div>
             </div>
           </div>
+
+          {userComment && (
+            <div className="mt-3.5 rounded-xl border border-amber-500/25 bg-amber-500/5 p-3.5">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 dark:text-amber-300 mb-1">
+                <MessageSquare className="size-3.5 text-amber-500" />
+                Engineering Feedback / User Notes:
+              </div>
+              <p className="m-0 text-xs text-foreground whitespace-pre-wrap leading-relaxed">
+                {userComment}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {!sm && userComment && (
+        <div className={cardPanel}>
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 dark:text-amber-300 mb-1">
+            <MessageSquare className="size-3.5 text-amber-500" />
+            Engineering Feedback / User Notes:
+          </div>
+          <p className="m-0 text-xs text-foreground whitespace-pre-wrap leading-relaxed">
+            {userComment}
+          </p>
         </div>
       )}
 
