@@ -2,9 +2,31 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+ENV DEBIAN_FRONTEND=noninteractive
+
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends graphviz octave && \
-    rm -rf /var/lib/apt/lists/*
+    apt-get install -y --no-install-recommends \
+        -o Acquire::Retries=5 \
+        -o Acquire::http::Timeout=120 \
+        -o Acquire::https::Timeout=120 \
+        graphviz \
+        octave \
+    && rm -rf /var/lib/apt/lists/*
+
+# XeLaTeX for Adaptive PDFs (same set as Dockerfile.api).
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends --fix-missing \
+        -o Acquire::Retries=5 \
+        -o Acquire::http::Timeout=120 \
+        -o Acquire::https::Timeout=120 \
+        texlive-xetex \
+        texlive-latex-recommended \
+        texlive-latex-extra \
+        texlive-fonts-recommended \
+        texlive-science \
+        fonts-lmodern \
+    && rm -rf /var/lib/apt/lists/* \
+    && which xelatex
 
 COPY requirements.txt .
 

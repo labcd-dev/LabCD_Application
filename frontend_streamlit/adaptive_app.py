@@ -55,40 +55,11 @@ def _guarded_plt_close(*args, **kwargs):
 plt.close = _guarded_plt_close
 
 
-def normalize_latex_delimiters(text: str) -> str:
-
-    if not text:
-        return text
-    text = re.sub(r"\\\[(.*?)\\\]", lambda m: "$$" + m.group(1) + "$$", text, flags=re.DOTALL)
-    text = re.sub(r"\\\((.*?)\\\)", lambda m: "$" + m.group(1) + "$", text, flags=re.DOTALL)
-    return text
-
-
-_ALIGN_ENV_RE = re.compile(
-    r"\$?\$?\s*\\begin\{(aligned|align\*?|gather\*?)\}(.*?)\\end\{\1\}\s*\$?\$?",
-    re.DOTALL,
+# Shared with Adaptive API PDF path (backend_core.AgentAdaptive.tools.report)
+from backend_core.AgentAdaptive.tools.report import (
+    normalize_latex_delimiters,
+    sanitize_latex_environments,
 )
-
-
-def sanitize_latex_environments(text: str) -> str:
-    if not text:
-        return text
-
-    def _fix(m):
-        body = m.group(2)
-        lines = re.split(r"\\\\(?:\[\d+pt\])?", body)
-        out = []
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
-            line = line.replace("&", "")
-            for cmd in (r"\quad", r"\qquad", r"\,", r"\!", r"\bigl", r"\bigr", r"\Bigl", r"\Bigr"):
-                line = line.replace(cmd, "")
-            out.append("$$" + line.strip() + "$$")
-        return "\n\n".join(out)
-
-    return _ALIGN_ENV_RE.sub(_fix, text)
 
 
 _STABILITY_HEADING_RE = re.compile(

@@ -905,7 +905,8 @@ def _figures_from_series(series: dict[str, Any] | None) -> list[tuple[bytes, str
 
     def _save(fig, title: str) -> None:
         buf = io.BytesIO()
-        fig.savefig(buf, format="png", dpi=120, bbox_inches="tight")
+        # Match Streamlit capture dpi (~130) for comparable plot quality in the PDF
+        fig.savefig(buf, format="png", dpi=130, bbox_inches="tight")
         plt.close(fig)
         figs.append((buf.getvalue(), title))
 
@@ -966,17 +967,28 @@ def _figures_from_series(series: dict[str, Any] | None) -> list[tuple[bytes, str
 
 
 def get_job_report_pdf(job_id: str, *, store: InMemoryAdaptiveJobStore | None = None) -> bytes:
-    """Generate engineering PDF report for an adaptive job (XeLaTeX when available)."""
+    """Generate engineering PDF report for an adaptive job (XeLaTeX required).
+
+    Parity with Streamlit ``adaptive_app.py`` PDF path:
+    - same LaTeX delimiter / align-env sanitization
+    - figures regenerated from stored simulation series (tracking, control, d_hat)
+    - prefer_xelatex=True → real math typesetting or a clear RuntimeError
+    """
     record = _store(store).get(job_id)
     if record is None:
         raise KeyError(job_id)
 
-    from backend_core.AgentAdaptive.tools.report import build_pdf_report
+    from backend_core.AgentAdaptive.tools.report import (
+        build_pdf_report,
+        prepare_summary_markdown,
+    )
 
-    summary_md = record.report or (
+    raw_summary = record.report or (
         f"# Adaptive Controller Design Report\n\nMethod: {record.method or 'SMC / Backstepping'}"
     )
-    abstract_md = record.abstract or ""
+    # Same preprocessing Streamlit applies before build_pdf_report
+    summary_md = prepare_summary_markdown(raw_summary)
+    abstract_md = prepare_summary_markdown(record.abstract or "") if record.abstract else ""
     try:
         figures = _figures_from_series(record.series if isinstance(record.series, dict) else None)
     except Exception:

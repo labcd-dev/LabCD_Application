@@ -350,3 +350,6 @@ def _validate_method(method, structure):
         raise ValueError(
             "method='backstepping' requires outputs == [states[0]]; got "
             "outputs=%s with states[0]=%r." % (outputs, states[0]))
+
+
+_build_structure_from_spec = _extract_structure
