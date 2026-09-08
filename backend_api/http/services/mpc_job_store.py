@@ -71,8 +71,14 @@ class JobRecord:
     # Dense simulation series, token accounting & diagnostics
     series: dict[str, Any] | None = None
     baseline_series: dict[str, Any] | None = None
+    # Token usage & cost tracking
     usage: dict[str, Any] | None = None
+    # Diagnostics results
     diagnostics: dict[str, Any] | None = None
+    score: float | None = None
+    success: bool | None = None
+    design_grade: dict[str, Any] | None = None
+    session_metadata: dict[str, Any] | None = None
     created_at: datetime = field(default_factory=_now)
     updated_at: datetime = field(default_factory=_now)
 
@@ -109,6 +115,10 @@ class InMemoryMPCJobStore:
                     "baseline_series": record.baseline_series,
                     "usage": record.usage,
                     "diagnostics": record.diagnostics,
+                    "score": record.score,
+                    "success": record.success,
+                    "design_grade": record.design_grade,
+                    "session_metadata": record.session_metadata,
                 }
                 if row is None:
                     row = DBMPCJob(
@@ -185,6 +195,10 @@ class InMemoryMPCJobStore:
                     baseline_series=res.get("baseline_series"),
                     usage=res.get("usage"),
                     diagnostics=res.get("diagnostics"),
+                    score=res.get("score"),
+                    success=res.get("success"),
+                    design_grade=res.get("design_grade"),
+                    session_metadata=res.get("session_metadata"),
                     created_at=row.created_at or _now(),
                     updated_at=row.updated_at or _now(),
                 )

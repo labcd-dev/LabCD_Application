@@ -34,6 +34,13 @@ class ProjectSiloSimulateRequest(BaseModel):
     scenario: Optional[Dict[str, Any]] = None
 
 
+class ProjectGradeRequest(BaseModel):
+    """Client rating submission (1-5 stars) for a project."""
+
+    rating: int = Field(ge=1, le=5)
+    comment: Optional[str] = None
+
+
 class ProjectSummary(BaseModel):
     id: int
     user_id: int
@@ -49,6 +56,10 @@ class ProjectSummary(BaseModel):
     job_id: Optional[str] = None
     created_at: datetime
     updated_at: datetime
+    score: Optional[float] = None
+    success: Optional[bool] = None
+    rating: Optional[int] = None
+    session_metadata: Optional[dict[str, Any]] = None
 
 
 class ProjectDetail(ProjectSummary):

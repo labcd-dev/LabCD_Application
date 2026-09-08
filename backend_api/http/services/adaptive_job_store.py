@@ -71,6 +71,11 @@ class JobRecord:
     tuning_best: dict[str, Any] | None = None
     usage: dict[str, Any] | None = None
     series: dict[str, Any] | None = None
+    score: float | None = None
+    success: bool | None = None
+    design_grade: dict[str, Any] | None = None
+    session_metadata: dict[str, Any] | None = None
+    export_script: str | None = None
     created_at: datetime = field(default_factory=_now)
     updated_at: datetime = field(default_factory=_now)
 
@@ -98,6 +103,11 @@ class InMemoryAdaptiveJobStore:
                     "tuning_best": record.tuning_best,
                     "series": record.series,
                     "usage": record.usage,
+                    "score": record.score,
+                    "success": record.success,
+                    "design_grade": record.design_grade,
+                    "session_metadata": record.session_metadata,
+                    "export_script": record.export_script,
                 }
                 if row is None:
                     row = DBAdaptiveJob(
@@ -165,6 +175,11 @@ class InMemoryAdaptiveJobStore:
                     tuning_best=res.get("tuning_best"),
                     usage=res.get("usage"),
                     series=res.get("series"),
+                    score=res.get("score"),
+                    success=res.get("success"),
+                    design_grade=res.get("design_grade"),
+                    session_metadata=res.get("session_metadata"),
+                    export_script=res.get("export_script"),
                     created_at=row.created_at or _now(),
                     updated_at=row.updated_at or _now(),
                 )

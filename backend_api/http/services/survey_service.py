@@ -141,3 +141,37 @@ def list_feedback_responses(db: Session) -> list[tuple[FeedbackSurveyResponse, U
         .all()
     )
     return list(rows)
+
+
+def record_design_grade_feedback(
+    db: Session,
+    *,
+    user_id: int | None,
+    pipeline_type: str,
+    rating: int,
+    comment: str | None = None,
+) -> FeedbackSurveyResponse | None:
+    """Record 1-5 star design grade into FeedbackSurveyResponse for admin survey aggregation."""
+    if not user_id:
+        return None
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        return None
+    now = datetime.now(timezone.utc)
+    clamped_rating = max(1, min(5, int(rating)))
+    row = FeedbackSurveyResponse(
+        user_id=user.id,
+        pipeline_type=pipeline_type,
+        satisfaction=clamped_rating,
+        ease_of_use=clamped_rating,
+        product_value=clamped_rating,
+        confidence=clamped_rating,
+        reuse_intention=clamped_rating,
+        willingness_to_pay=clamped_rating,
+        main_problems=(comment or "").strip(),
+        created_at=now,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row

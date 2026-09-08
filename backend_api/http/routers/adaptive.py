@@ -17,6 +17,7 @@ from backend_api.http.schemas.adaptive import (
     AdaptiveJobResultsResponse,
     AdaptiveJobStatusResponse,
     AdaptiveJobSummary,
+    GradeDesignRequest,
 )
 from backend_api.http.services.adaptive_job_store import (
     InMemoryAdaptiveJobStore,
@@ -25,10 +26,12 @@ from backend_api.http.services.adaptive_job_store import (
 from backend_api.http.services.adaptive_service import (
     cancel_job,
     clarify_job,
+    get_export_script,
     get_job,
     get_job_report_pdf,
     get_results,
     list_jobs,
+    submit_grade,
     submit_job,
 )
 
@@ -152,6 +155,46 @@ def download_adaptive_report_pdf(
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
 
+
+@router.get("/jobs/{job_id}/export-script")
+def download_adaptive_export_script(
+    job_id: str,
+    user: User = Depends(require_action("module:adaptive")),
+    store: InMemoryAdaptiveJobStore = Depends(get_adaptive_store),
+):
+    """Download standalone reproducible Python script for designed adaptive controller."""
+    record = store.get(job_id)
+    if record is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+    _assert_job_access(record.user_id, user)
+    try:
+        script_code = get_export_script(job_id, store=store)
+        system_name = (record.system_spec or {}).get("system_name") or "adaptive_system"
+        filename = f"{system_name}_export.py"
+        return StreamingResponse(
+            iter([script_code]),
+            media_type="text/x-python",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+            },
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
+
+
+@router.post("/jobs/{job_id}/grade")
+def grade_adaptive_job(
+    job_id: str,
+    request: GradeDesignRequest,
+    user: User = Depends(require_action("module:adaptive")),
+    store: InMemoryAdaptiveJobStore = Depends(get_adaptive_store),
+):
+    """Submit 1-5 star user design grade for an adaptive run."""
+    record = store.get(job_id)
+    if record is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+    _assert_job_access(record.user_id, user)
+    return submit_grade(job_id, rating=request.rating, comment=request.comment, user=user, store=store)
 
 
 @router.get("/jobs/{job_id}/events")

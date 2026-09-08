@@ -48,6 +48,13 @@ PROJECT_CSV_FIELDS = [
     "file_type",
     "has_results",
     "job_id",
+    "score",
+    "success",
+    "design_rating",
+    "wall_clock_time_s",
+    "total_tokens",
+    "cost_usd",
+    "error_counts",
     "created_at",
     "updated_at",
 ]
@@ -193,6 +200,10 @@ def _pipeline_label(pipeline_type: str) -> str:
         return "Single Loop"
     if pipeline_type == "muloDesign":
         return "Multi Loop"
+    if pipeline_type == "adaptiveDesign":
+        return "Adaptive Control"
+    if pipeline_type == "mpcDesign":
+        return "Agentic MPC"
     return pipeline_type or ""
 
 
@@ -227,6 +238,9 @@ def _user_csv_row(user: User) -> dict[str, Any]:
 
 def _project_csv_row(project: Project) -> dict[str, Any]:
     data = project_service.project_to_summary(project, include_owner=True)
+    sm = data.get("session_metadata")
+    sm = sm if isinstance(sm, dict) else {}
+    tokens = sm.get("tokens") if isinstance(sm.get("tokens"), dict) else {}
     return {
         "id": data["id"],
         "user_id": data["user_id"],
@@ -239,6 +253,13 @@ def _project_csv_row(project: Project) -> dict[str, Any]:
         "file_type": data["file_type"],
         "has_results": data["has_results"],
         "job_id": data["job_id"] or "",
+        "score": data.get("score") if data.get("score") is not None else "",
+        "success": data.get("success") if data.get("success") is not None else "",
+        "design_rating": data.get("rating") if data.get("rating") is not None else "",
+        "wall_clock_time_s": sm.get("wall_clock_time_s") if sm.get("wall_clock_time_s") is not None else "",
+        "total_tokens": tokens.get("total", "") if tokens else "",
+        "cost_usd": sm.get("cost_usd") if sm.get("cost_usd") is not None else "",
+        "error_counts": sm.get("error_counts") if sm.get("error_counts") is not None else "",
         "created_at": _iso(data["created_at"]),
         "updated_at": _iso(data["updated_at"]),
     }

@@ -12,6 +12,7 @@ import os
 import tempfile
 import threading
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
@@ -665,6 +666,10 @@ def _to_results(record: JobRecord) -> MPCJobResultsResponse:
             usage=_json_safe(record.usage),
             diagnostics=_json_safe(record.diagnostics),
             error=str(record.error) if record.error else None,
+            score=record.score if record.score is not None else (record.session_metadata or {}).get("score"),
+            success=record.success if record.success is not None else (record.session_metadata or {}).get("success"),
+            design_grade=record.design_grade or (record.session_metadata or {}).get("design_grade"),
+            session_metadata=record.session_metadata,
         )
     except Exception as exc:  # noqa: BLE001
         # Last-resort minimal payload so the HTTP layer never 500s on results.
@@ -1056,6 +1061,44 @@ def _run_tuning_thread(job_id: str, store: InMemoryJobStore) -> None:
             "model": options.get("model") or "gpt-4o-mini",
         }
 
+        rec_initial = store.get(job_id)
+        start_ts = rec_initial.created_at.timestamp() if rec_initial and rec_initial.created_at else time.time()
+        wall_clock_time = round(max(0.1, time.time() - start_ts), 2)
+
+        # Count errors in progress
+        progress_events = rec_initial.progress if rec_initial else []
+        error_counts = sum(1 for ev in progress_events if isinstance(ev, dict) and ev.get("kind") in ("error", "warning"))
+
+        # Score & Success
+        first_mse = None
+        for m in mse_h:
+            if isinstance(m, (int, float)) and m > 0:
+                first_mse = float(m)
+                break
+
+        best_float = float(best_mse) if best_mse is not None else None
+        success_bool = bool(best_float is not None and best_float == best_float)
+        if first_mse is not None and best_float is not None and first_mse > 0:
+            imp = max(0.0, min(1.0, 1.0 - (best_float / first_mse)))
+            score_val = round(max(0.0, min(1.0, 0.5 + 0.5 * imp if imp > 0 else 1.0 / (1.0 + best_float))), 2)
+        elif best_float is not None:
+            score_val = round(max(0.0, min(1.0, 1.0 / (1.0 + best_float))), 2)
+        else:
+            score_val = 0.85 if success_bool else 0.20
+
+        session_meta = {
+            "tokens": {
+                "prompt_tokens": usage_data["prompt_tokens"],
+                "completion_tokens": usage_data["completion_tokens"],
+                "total_tokens": usage_data["total_tokens"],
+            },
+            "cost_usd": usage_data["total_cost"],
+            "error_counts": error_counts,
+            "wall_clock_time_seconds": wall_clock_time,
+            "score": score_val,
+            "success": success_bool,
+        }
+
         # Only pass JobRecord fields that exist (older stores may lack series attrs)
         fields = {
             "status": "completed",
@@ -1075,6 +1118,9 @@ def _run_tuning_thread(job_id: str, store: InMemoryJobStore) -> None:
             "baseline_series": baseline_series_data,
             "export_script": export_script_code,
             "usage": usage_data,
+            "score": score_val,
+            "success": success_bool,
+            "session_metadata": session_meta,
         }
         for key, val in (
             ("overshoot_history", overshoot_h),
@@ -1241,9 +1287,56 @@ def list_jobs(
             created_at=r.created_at,
             updated_at=r.updated_at,
             user_id=r.user_id,
+            score=r.score if r.score is not None else (r.session_metadata or {}).get("score"),
+            success=r.success if r.success is not None else (r.session_metadata or {}).get("success"),
+            rating=(r.design_grade or {}).get("rating") if isinstance(r.design_grade, dict) else None,
         )
         for r in records
     ]
+
+
+def submit_grade(
+    job_id: str,
+    rating: int,
+    comment: str | None = None,
+    user: Any | None = None,
+    *,
+    store: InMemoryJobStore | None = None,
+) -> dict[str, Any]:
+    job_store = _store(store)
+    record = job_store.get(job_id)
+    if record is None:
+        raise KeyError(job_id)
+
+    grade = {
+        "rating": max(1, min(5, int(rating))),
+        "comment": (comment or "").strip(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    job_store.update(job_id, design_grade=grade)
+
+    if record.project_id:
+        try:
+            from backend_api.http.services.project_service import update_project_results_grade
+            update_project_results_grade(int(record.project_id), grade)
+        except Exception:
+            pass
+
+    try:
+        from backend_api.db.session import SessionLocal
+        from backend_api.http.services.survey_service import record_design_grade_feedback
+        with SessionLocal() as db:
+            record_design_grade_feedback(
+                db,
+                user_id=user.id if user else record.user_id,
+                pipeline_type="mpcDesign",
+                rating=grade["rating"],
+                comment=comment,
+            )
+    except Exception:
+        pass
+
+    return grade
 
 
 def cancel_job(job_id: str, *, store: InMemoryJobStore | None = None) -> MPCJobStatusResponse:

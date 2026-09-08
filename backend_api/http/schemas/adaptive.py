@@ -120,6 +120,17 @@ class AdaptiveJobResultsResponse(BaseModel):
     usage: dict[str, Any] | None = None
     series: dict[str, Any] | None = None
     error: str | None = None
+    score: float | None = None
+    success: bool | None = None
+    design_grade: dict[str, Any] | None = None
+    session_metadata: dict[str, Any] | None = None
+
+
+class GradeDesignRequest(BaseModel):
+    """Client rating submission (1-5 stars) for a designed controller."""
+
+    rating: int = Field(ge=1, le=5)
+    comment: str | None = None
 
 
 class AdaptiveJobSummary(BaseModel):
@@ -130,3 +141,6 @@ class AdaptiveJobSummary(BaseModel):
     created_at: datetime
     updated_at: datetime
     user_id: int | None = None
+    score: float | None = None
+    success: bool | None = None
+    rating: int | None = None

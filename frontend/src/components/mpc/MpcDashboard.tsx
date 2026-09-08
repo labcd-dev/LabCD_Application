@@ -21,6 +21,7 @@ import { btnBase, btnCompact, btnPrimary } from '../../lib/classes'
 import { MpcConvergenceCharts } from './MpcConvergenceCharts'
 import { MpcSimulationPlot, type SimSeriesData } from './MpcSimulationPlot'
 import { MpcAgentFlowStrip } from './MpcAgentFlowStrip'
+import { ScoreReportBadge } from '../ScoreReportBadge'
 
 /**
  * Strictly truncates reasoning logs to maximum 7 words followed by '...'
@@ -125,6 +126,42 @@ print(f"MPC Controller initialized: Np={Np}, Nc={Nc}, dt={dt}")
     URL.revokeObjectURL(url)
   }
 
+  const handleExportCsv = () => {
+    const rawSeries = results?.series || job?.series
+    if (!rawSeries || typeof rawSeries !== 'object') return
+    const s = rawSeries as {
+      t?: number[]
+      x?: Record<string, number[]>
+      xd?: Record<string, number[]>
+      u?: Record<string, number[]>
+    }
+    const t = s.t
+    if (!t || !Array.isArray(t) || t.length === 0) return
+
+    const xKeys = s.x ? Object.keys(s.x) : []
+    const xdKeys = s.xd ? Object.keys(s.xd) : []
+    const uKeys = s.u ? Object.keys(s.u) : []
+
+    const header = ['time', ...xKeys, ...xdKeys.map(k => `target_${k}`), ...uKeys]
+    const rows = [header.join(',')]
+
+    for (let i = 0; i < t.length; i++) {
+      const row: Array<string | number> = [t[i]]
+      for (const k of xKeys) row.push(s.x?.[k]?.[i] ?? '')
+      for (const k of xdKeys) row.push(s.xd?.[k]?.[i] ?? '')
+      for (const k of uKeys) row.push(s.u?.[k]?.[i] ?? '')
+      rows.push(row.join(','))
+    }
+
+    const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `mpc_${results?.job_id || job?.job_id || 'simulation'}_timeseries.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   const handleRunSandbox = async () => {
     setSandboxRunning(true)
     setSandboxError(null)
@@ -220,6 +257,30 @@ print(f"MPC Controller initialized: Np={Np}, Nc={Nc}, dt={dt}")
 
   return (
     <div className="space-y-3 text-foreground">
+      {/* Greenfield WS02 Score & Deliverables Header Banner */}
+      {(results?.score !== undefined || results?.success !== undefined || results?.design_grade !== undefined) && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface-elevated/70 px-4 py-2.5 backdrop-blur-xs shadow-xs">
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-bold uppercase tracking-wider text-muted-text">
+              Controller Performance
+            </span>
+            <ScoreReportBadge
+              moduleType="mpc"
+              jobId={results?.job_id || job?.job_id}
+              score={results?.score}
+              success={results?.success}
+              rating={results?.design_grade?.rating}
+              comment={results?.design_grade?.comment}
+              sessionMetadata={results?.session_metadata}
+            />
+          </div>
+          <div className="flex items-center gap-2 text-xs text-muted-text">
+            <span>Deliverables:</span>
+            <span className="font-mono font-semibold text-foreground">.py · .pdf · .csv</span>
+          </div>
+        </div>
+      )}
+
       {/* Header KPI Row: Sleek, compact high-density telemetry */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
         {/* KPI 1: MSE */}
@@ -358,9 +419,19 @@ print(f"MPC Controller initialized: Np={Np}, Nc={Nc}, dt={dt}")
             type="button"
             onClick={handleDownloadScript}
             className={`${btnBase} ${btnCompact} flex items-center gap-1.5 text-xs text-foreground border border-border hover:bg-surface-hover`}
-            title="Download executable Python controller script"
+            title="Download executable Python controller script (.py)"
           >
-            <Download className="size-3.5" /> Download .py
+            <Download className="size-3.5 text-purple-500" /> Download .py
+          </button>
+
+          <button
+            type="button"
+            onClick={handleExportCsv}
+            disabled={!results?.series && !job?.series}
+            className={`${btnBase} ${btnCompact} flex items-center gap-1.5 text-xs text-muted-text hover:text-foreground border border-border hover:bg-surface-hover disabled:opacity-40`}
+            title="Download time series data as CSV (.csv)"
+          >
+            <Download className="size-3.5 text-cyan-500" /> Export CSV
           </button>
 
           {onDownloadReport && (
@@ -368,6 +439,7 @@ print(f"MPC Controller initialized: Np={Np}, Nc={Nc}, dt={dt}")
               type="button"
               onClick={onDownloadReport}
               className={`${btnBase} ${btnCompact} flex items-center gap-1.5 text-xs text-muted-text hover:text-foreground border border-border hover:bg-surface-hover`}
+              title="Download authenticated engineering PDF report (.pdf)"
             >
               <FileText className="size-3.5" /> PDF Report
             </button>

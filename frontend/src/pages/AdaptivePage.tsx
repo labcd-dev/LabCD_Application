@@ -20,6 +20,8 @@ import type {
 import { AdaptiveClarifierChat } from '../components/adaptive/AdaptiveClarifierChat'
 import { AdaptiveDashboard } from '../components/adaptive/AdaptiveDashboard'
 import { AdaptiveTuningPriorities } from '../components/adaptive/AdaptiveTuningPriorities'
+import { DesignCompletedToast } from '../components/DesignCompletedToast'
+import { GradeDesignModal } from '../components/GradeDesignModal'
 import { usePipeline } from '../context/PipelineContext'
 import { btnBase, btnCompact, btnPrimary, fieldInput, fieldLabel } from '../lib/classes'
 
@@ -46,6 +48,10 @@ export function AdaptivePage() {
   const [solverStep, setSolverStep] = useState<number>(0.01)
   const [x0Str, setX0Str] = useState<string>('0.0, 0.0')
   const [referenceFn, setReferenceFn] = useState<string>('sin(t)')
+
+  const [gradeModalOpen, setGradeModalOpen] = useState(false)
+  const [showCompletedToast, setShowCompletedToast] = useState(false)
+  const hasPromptedGradeRef = useRef(false)
 
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -138,6 +144,13 @@ export function AdaptivePage() {
       if (pollTimerRef.current) clearInterval(pollTimerRef.current)
     }
   }, [jobId])
+
+  useEffect(() => {
+    if (results && results.status === 'completed' && !results.design_grade && !hasPromptedGradeRef.current) {
+      hasPromptedGradeRef.current = true
+      setShowCompletedToast(true)
+    }
+  }, [results])
 
   const handleStartJob = async () => {
     setError(null)
@@ -610,6 +623,39 @@ export function AdaptivePage() {
           />
         )}
       </main>
+
+      {showCompletedToast && results && !results.design_grade && (
+        <DesignCompletedToast
+          moduleLabel="Adaptive Law"
+          score={results.score}
+          success={results.success}
+          onGradeClick={() => setGradeModalOpen(true)}
+          onDismiss={() => setShowCompletedToast(false)}
+        />
+      )}
+
+      {jobId && results && (
+        <GradeDesignModal
+          open={gradeModalOpen}
+          moduleType="adaptive"
+          jobId={jobId}
+          score={results.score}
+          success={results.success}
+          initialRating={results.design_grade?.rating}
+          initialComment={results.design_grade?.comment}
+          onClose={() => setGradeModalOpen(false)}
+          onSubmitted={(rating, comment) => {
+            setResults((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    design_grade: { rating, comment, created_at: new Date().toISOString() },
+                  }
+                : prev,
+            )
+          }}
+        />
+      )}
     </div>
   )
 }

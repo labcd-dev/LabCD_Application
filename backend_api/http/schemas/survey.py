@@ -22,7 +22,7 @@ MajorField = Literal[
     "Other",
 ]
 TutorialDismissAction = Literal["remind_later", "dont_show_again"]
-FeedbackPipelineType = Literal["siloDesign", "muloDesign"]
+FeedbackPipelineType = Literal["siloDesign", "muloDesign", "adaptiveDesign", "mpcDesign"]
 
 
 class SurveySettings(BaseModel):

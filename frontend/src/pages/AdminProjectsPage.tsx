@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
-import { FolderKanban, Search, Trash2 } from 'lucide-react'
+import { Activity, FolderKanban, Search, Sparkles, Star, Trash2, TrendingUp } from 'lucide-react'
 import { adminApi } from '../api/endpoints'
 import type { AuthUser, ProjectSummary } from '../api/types'
 import { AdminDownloadCsvButton } from '../components/admin/AdminDownloadCsvButton'
@@ -67,6 +67,44 @@ export function AdminProjectsPage() {
         p.status.toLowerCase().includes(q),
     )
   }, [projects, query])
+
+  const benchmarkStats = useMemo(() => {
+    const evaluated = projects.filter(
+      (p) =>
+        (typeof p.score === 'number' && Number.isFinite(p.score)) ||
+        (typeof p.rating === 'number' && p.rating > 0),
+    )
+    if (evaluated.length === 0) return null
+
+    const scored = evaluated.filter((p) => typeof p.score === 'number' && Number.isFinite(p.score))
+    const rated = evaluated.filter((p) => typeof p.rating === 'number' && p.rating > 0)
+
+    const avgScore =
+      scored.length > 0
+        ? scored.reduce((acc, p) => acc + (p.score as number), 0) / scored.length
+        : null
+
+    const avgRating =
+      rated.length > 0
+        ? rated.reduce((acc, p) => acc + (p.rating as number), 0) / rated.length
+        : null
+
+    let alignmentPct: number | null = null
+    if (avgScore !== null && avgRating !== null) {
+      const diff = Math.abs(avgScore - avgRating / 5)
+      alignmentPct = Math.max(0, Math.min(100, (1 - diff) * 100))
+    }
+
+    const successCount = scored.filter((p) => p.success === true).length
+
+    return {
+      totalEvaluated: evaluated.length,
+      avgScore,
+      avgRating,
+      alignmentPct,
+      successRate: scored.length > 0 ? (successCount / scored.length) * 100 : null,
+    }
+  }, [projects])
 
   const pagination = useClientPagination(filtered, {
     resetKey: `${query}|${userId}|${pipelineFilter}`,
@@ -189,6 +227,61 @@ export function AdminProjectsPage() {
         </label>
       </div>
 
+      {/* AI System Benchmark vs Human Rating Alignment Overview */}
+      {benchmarkStats && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="rounded-2xl border border-border bg-surface-elevated p-4 shadow-xs">
+            <div className="flex items-center justify-between text-xs text-muted-text font-semibold">
+              <span>Evaluated Designs</span>
+              <Activity className="size-4 text-cyan-500" />
+            </div>
+            <div className="mt-1 font-mono text-2xl font-bold text-foreground">
+              {benchmarkStats.totalEvaluated}
+            </div>
+            <p className="mt-0.5 text-[11px] text-muted-text">Completed simulation jobs</p>
+          </div>
+
+          <div className="rounded-2xl border border-border bg-surface-elevated p-4 shadow-xs">
+            <div className="flex items-center justify-between text-xs text-muted-text font-semibold">
+              <span>Avg AI System Score</span>
+              <Sparkles className="size-4 text-purple-500" />
+            </div>
+            <div className="mt-1 flex items-baseline gap-1.5 font-mono text-2xl font-bold text-foreground">
+              {benchmarkStats.avgScore !== null ? `${(benchmarkStats.avgScore * 100).toFixed(1)}%` : '—'}
+              {benchmarkStats.successRate !== null && (
+                <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold font-sans">
+                  ({benchmarkStats.successRate.toFixed(0)}% pass)
+                </span>
+              )}
+            </div>
+            <p className="mt-0.5 text-[11px] text-muted-text">Lyapunov / tracking score</p>
+          </div>
+
+          <div className="rounded-2xl border border-border bg-surface-elevated p-4 shadow-xs">
+            <div className="flex items-center justify-between text-xs text-muted-text font-semibold">
+              <span>Avg Human Rating</span>
+              <Star className="size-4 fill-amber-400 text-amber-400" />
+            </div>
+            <div className="mt-1 flex items-baseline gap-1.5 font-mono text-2xl font-bold text-amber-600 dark:text-amber-400">
+              {benchmarkStats.avgRating !== null ? benchmarkStats.avgRating.toFixed(2) : '—'}
+              <span className="text-xs text-muted font-normal">/ 5.0</span>
+            </div>
+            <p className="mt-0.5 text-[11px] text-muted-text">Engineer satisfaction grades</p>
+          </div>
+
+          <div className="rounded-2xl border border-border bg-surface-elevated p-4 shadow-xs">
+            <div className="flex items-center justify-between text-xs text-muted-text font-semibold">
+              <span>AI vs Human Alignment</span>
+              <TrendingUp className="size-4 text-emerald-500" />
+            </div>
+            <div className="mt-1 flex items-baseline gap-1 font-mono text-2xl font-bold text-emerald-600 dark:text-emerald-400">
+              {benchmarkStats.alignmentPct !== null ? `${benchmarkStats.alignmentPct.toFixed(1)}%` : '—'}
+            </div>
+            <p className="mt-0.5 text-[11px] text-muted-text">Perception correlation index</p>
+          </div>
+        </div>
+      )}
+
       {loading ? (
         <p className="text-muted-text">Loading projects…</p>
       ) : filtered.length === 0 ? (
@@ -209,6 +302,8 @@ export function AdminProjectsPage() {
                   <th className="px-4 py-3 font-semibold">Owner</th>
                   <th className="px-4 py-3 font-semibold">Pipeline</th>
                   <th className="px-4 py-3 font-semibold">Status</th>
+                  <th className="px-4 py-3 font-semibold">Score</th>
+                  <th className="px-4 py-3 font-semibold">Rating</th>
                   <th className="px-4 py-3 font-semibold">Updated</th>
                   <th className="px-4 py-3 font-semibold">Actions</th>
                 </tr>
@@ -224,6 +319,40 @@ export function AdminProjectsPage() {
                     <td className="px-4 py-3">{pipelineLabel(project.pipeline_type)}</td>
                     <td className="px-4 py-3">
                       <span className={statusBadgeClass(project.status)}>{project.status}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {project.score !== undefined && project.score !== null ? (
+                        <div className="flex items-center gap-1.5 font-mono text-xs font-bold">
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[11px] ${
+                              project.score >= 0.8
+                                ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                                : project.score >= 0.5
+                                ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                                : 'bg-rose-500/15 text-rose-600 dark:text-rose-400'
+                            }`}
+                          >
+                            {(project.score * 100).toFixed(0)}%
+                          </span>
+                          {project.success !== undefined && project.success !== null && (
+                            <span className="text-[10px] text-muted-text font-normal">
+                              ({project.success ? 'Success' : 'Failed'})
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-muted text-xs">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {project.rating && project.rating > 0 ? (
+                        <div className="flex items-center gap-1 text-amber-500 font-mono text-xs">
+                          <Star className="size-3.5 fill-amber-400 text-amber-400" />
+                          <span className="font-bold">{project.rating}.0</span>
+                        </div>
+                      ) : (
+                        <span className="text-muted text-xs">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-muted-text">
                       {formatDateTime(project.updated_at)}

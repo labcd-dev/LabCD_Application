@@ -19,6 +19,7 @@ from backend_api.http.schemas.mpc import (
     MPCJobResultsResponse,
     MPCJobStatusResponse,
     MPCJobSummary,
+    GradeDesignRequest,
 )
 from backend_api.http.services.mpc_job_store import (
     InMemoryMPCJobStore,
@@ -32,6 +33,7 @@ from backend_api.http.services.mpc_service import (
     get_results,
     list_jobs,
     simulate_manual,
+    submit_grade,
     submit_job,
     test_dynamics as run_test_dynamics,
 )
@@ -237,4 +239,19 @@ def download_report_pdf(
         )
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
+
+
+@router.post("/jobs/{job_id}/grade")
+def grade_mpc_job(
+    job_id: str,
+    request: GradeDesignRequest,
+    user: User = Depends(require_action("module:mpc")),
+    store: InMemoryMPCJobStore = Depends(get_mpc_store),
+):
+    """Submit 1-5 star user design grade for an MPC run."""
+    record = store.get(job_id)
+    if record is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+    _assert_job_access(record.user_id, user)
+    return submit_grade(job_id, rating=request.rating, comment=request.comment, user=user, store=store)
 

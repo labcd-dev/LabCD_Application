@@ -18,9 +18,11 @@ import type {
   AdaptiveJobResultsResponse,
   AdaptiveJobStatusResponse,
 } from '../../api/types'
+import { adaptiveApi } from '../../api/endpoints'
 import { btnBase, btnCompact } from '../../lib/classes'
 import { AdaptiveAgentFlowStrip } from './AdaptiveAgentFlowStrip'
 import { AdaptiveConvergenceCharts } from './AdaptiveConvergenceCharts'
+import { ScoreReportBadge } from '../ScoreReportBadge'
 
 /**
  * Strictly truncates reasoning logs to maximum 7 words followed by '...'
@@ -418,8 +420,18 @@ export function AdaptiveDashboard({
     )
   }, [reasoningLogs, reasoningFilter])
 
-  const handleDownloadScript = () => {
-    const code = `# LabCD Autonomous Adaptive Controller Deliverable
+  const handleDownloadScript = async () => {
+    let code = results?.export_script
+    const jId = results?.job_id || job?.job_id
+    if (!code && jId) {
+      try {
+        code = await adaptiveApi.getExportScript(jId)
+      } catch {
+        code = null
+      }
+    }
+    if (!code) {
+      code = `# LabCD Autonomous Adaptive Controller Deliverable
 # Method: ${results?.method || 'Sliding Mode Control + RBF Neural Network'}
 # Lyapunov Stability Certified
 import numpy as np
@@ -443,11 +455,12 @@ class AdaptiveController:
 
 print("Adaptive Controller Initialized with Lyapunov certified parameters.")
 `
+    }
     const blob = new Blob([code], { type: 'text/x-python' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = 'adaptive_controller_export.py'
+    a.download = `adaptive_controller_${jId || 'export'}.py`
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -509,6 +522,30 @@ title('LabCD Adaptive Closed-Loop Response'); legend('show', 'Location', 'best')
 
   return (
     <div className="space-y-3 text-foreground">
+      {/* Greenfield WS02 Score & Deliverables Header Banner */}
+      {(results?.score !== undefined || results?.success !== undefined || results?.design_grade !== undefined) && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-surface-elevated/70 px-4 py-2.5 backdrop-blur-xs shadow-xs">
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-bold uppercase tracking-wider text-muted-text">
+              Controller Performance
+            </span>
+            <ScoreReportBadge
+              moduleType="adaptive"
+              jobId={results?.job_id || job?.job_id}
+              score={results?.score}
+              success={results?.success}
+              rating={results?.design_grade?.rating}
+              comment={results?.design_grade?.comment}
+              sessionMetadata={results?.session_metadata}
+            />
+          </div>
+          <div className="flex items-center gap-2 text-xs text-muted-text">
+            <span>Deliverables:</span>
+            <span className="font-mono font-semibold text-foreground">.py · .pdf · .csv</span>
+          </div>
+        </div>
+      )}
+
       {/* Header KPI Row: 5 High-Density Cards Matching MPC Reference */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
         {/* KPI 1: Optimal Tracking Cost */}
@@ -665,9 +702,19 @@ title('LabCD Adaptive Closed-Loop Response'); legend('show', 'Location', 'best')
             type="button"
             onClick={handleDownloadScript}
             className={`${btnBase} ${btnCompact} flex items-center gap-1.5 text-xs text-foreground border border-border hover:bg-surface-hover`}
-            title="Download executable Python adaptive controller"
+            title="Download executable Python adaptive controller (.py)"
           >
             <Download className="size-3.5 text-cyan-500" /> Download .py
+          </button>
+
+          <button
+            type="button"
+            onClick={handleExportCsv}
+            disabled={!plotData}
+            className={`${btnBase} ${btnCompact} flex items-center gap-1.5 text-xs text-muted-text hover:text-foreground border border-border hover:bg-surface-hover disabled:opacity-40`}
+            title="Download time series data as CSV (.csv)"
+          >
+            <Download className="size-3.5 text-teal-500" /> Export CSV
           </button>
 
           {onDownloadReport && (
@@ -675,6 +722,7 @@ title('LabCD Adaptive Closed-Loop Response'); legend('show', 'Location', 'best')
               type="button"
               onClick={onDownloadReport}
               className={`${btnBase} ${btnCompact} flex items-center gap-1.5 text-xs text-muted-text hover:text-foreground border border-border hover:bg-surface-hover`}
+              title="Download authenticated engineering PDF report (.pdf)"
             >
               <FileText className="size-3.5" /> PDF Report
             </button>

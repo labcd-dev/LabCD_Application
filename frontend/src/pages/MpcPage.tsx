@@ -21,6 +21,8 @@ import type {
   MPCJobStatusResponse,
 } from '../api/types'
 import { MpcDashboard } from '../components/mpc/MpcDashboard'
+import { DesignCompletedToast } from '../components/DesignCompletedToast'
+import { GradeDesignModal } from '../components/GradeDesignModal'
 import { usePipeline } from '../context/PipelineContext'
 import { btnBase, btnCompact, btnPrimary } from '../lib/classes'
 
@@ -33,6 +35,10 @@ export function MpcPage() {
   const [results, setResults] = useState<MPCJobResultsResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const [gradeModalOpen, setGradeModalOpen] = useState(false)
+  const [showCompletedToast, setShowCompletedToast] = useState(false)
+  const hasPromptedGradeRef = useRef(false)
 
   // Setup tabs
   const [setupTab, setSetupTab] = useState<'scenario' | 'tuning'>('scenario')
@@ -157,6 +163,13 @@ export function MpcPage() {
       if (pollTimerRef.current) clearInterval(pollTimerRef.current)
     }
   }, [jobId])
+
+  useEffect(() => {
+    if (results && results.status === 'completed' && !results.design_grade && !hasPromptedGradeRef.current) {
+      hasPromptedGradeRef.current = true
+      setShowCompletedToast(true)
+    }
+  }, [results])
 
   // Helper to resolve plant dynamics payload
   const resolveDynamicsPayload = (): { plugin_id?: string; source?: string } => {
@@ -997,6 +1010,39 @@ export function MpcPage() {
           />
         )}
       </main>
+
+      {showCompletedToast && results && !results.design_grade && (
+        <DesignCompletedToast
+          moduleLabel="Agentic MPC"
+          score={results.score}
+          success={results.success}
+          onGradeClick={() => setGradeModalOpen(true)}
+          onDismiss={() => setShowCompletedToast(false)}
+        />
+      )}
+
+      {jobId && results && (
+        <GradeDesignModal
+          open={gradeModalOpen}
+          moduleType="mpc"
+          jobId={jobId}
+          score={results.score}
+          success={results.success}
+          initialRating={results.design_grade?.rating}
+          initialComment={results.design_grade?.comment}
+          onClose={() => setGradeModalOpen(false)}
+          onSubmitted={(rating, comment) => {
+            setResults((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    design_grade: { rating, comment, created_at: new Date().toISOString() },
+                  }
+                : prev,
+            )
+          }}
+        />
+      )}
     </div>
   )
 }

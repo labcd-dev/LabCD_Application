@@ -47,6 +47,13 @@ def _title_from(objective: str | None, file_name: str, pipeline_type: str) -> st
 
 
 def project_to_summary(project: Project, *, include_owner: bool = False) -> dict[str, Any]:
+    res = project.results or {}
+    session_meta = res.get("session_metadata") if isinstance(res.get("session_metadata"), dict) else {}
+    score = res.get("score") if res.get("score") is not None else session_meta.get("score")
+    success = res.get("success") if res.get("success") is not None else session_meta.get("success")
+    design_grade = res.get("design_grade") if isinstance(res.get("design_grade"), dict) else session_meta.get("design_grade")
+    rating = design_grade.get("rating") if isinstance(design_grade, dict) else None
+
     return {
         "id": project.id,
         "user_id": project.user_id,
@@ -62,7 +69,37 @@ def project_to_summary(project: Project, *, include_owner: bool = False) -> dict
         "job_id": project.job_id,
         "created_at": project.created_at,
         "updated_at": project.updated_at,
+        "score": score,
+        "success": success,
+        "rating": rating,
+        "session_metadata": session_meta or None,
     }
+
+
+def update_project_results_grade(
+    project_id: int,
+    grade: dict[str, Any],
+    *,
+    db: Session | None = None,
+) -> None:
+    from backend_api.db.session import SessionLocal
+
+    def _apply(s: Session) -> None:
+        p = s.query(Project).filter(Project.id == project_id).first()
+        if not p:
+            return
+        res = dict(p.results or {})
+        res["design_grade"] = grade
+        if "session_metadata" in res and isinstance(res["session_metadata"], dict):
+            res["session_metadata"]["design_grade"] = grade
+        p.results = res
+        s.commit()
+
+    if db is not None:
+        _apply(db)
+    else:
+        with SessionLocal() as s:
+            _apply(s)
 
 
 def project_to_detail(project: Project, *, include_owner: bool = False) -> dict[str, Any]:

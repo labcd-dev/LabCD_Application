@@ -10,6 +10,7 @@ from backend_api.http.dependencies import assert_model_allowed, get_current_user
 from backend_api.http.schemas.projects import (
     ProjectCreateRequest,
     ProjectDetail,
+    ProjectGradeRequest,
     ProjectSiloSimulateRequest,
     ProjectSummary,
     ProjectUpdateRequest,
@@ -163,3 +164,41 @@ def download_my_project_artifact(
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return FileResponse(path=file_path, filename=file_path.name)
+
+
+@router.post("/{project_id}/grade")
+def grade_my_project(
+    project_id: int,
+    request: ProjectGradeRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Submit 1-5 star user design grade for a project."""
+    project = project_service.get_project(db, project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    try:
+        project_service.assert_project_access(project, user)
+    except ProjectAccessDenied as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+
+    grade_payload = {
+        "rating": max(1, min(5, int(request.rating))),
+        "comment": (request.comment or "").strip(),
+    }
+    project_service.update_project_results_grade(project.id, grade_payload, db=db)
+
+    # Also record into survey feedback
+    try:
+        from backend_api.http.services.survey_service import record_design_grade_feedback
+        record_design_grade_feedback(
+            db,
+            user_id=user.id,
+            pipeline_type=project.pipeline_type,
+            rating=grade_payload["rating"],
+            comment=grade_payload["comment"],
+        )
+    except Exception:
+        pass
+
+    return grade_payload

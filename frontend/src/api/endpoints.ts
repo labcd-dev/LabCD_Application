@@ -635,6 +635,11 @@ export const projectsApi = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+  submitGrade: (projectId: number, body: { rating: number; comment?: string | null }) =>
+    apiFetch<{ status: string; rating: number }>(`/projects/${projectId}/grade`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
 }
 
 export const healthApi = {
@@ -1019,6 +1024,14 @@ export const adaptiveApi = {
     onEvent: (event: string, data: any) => void,
     onError?: (err: unknown) => void,
   ) => streamEvents(`/adaptive/jobs/${jobId}/events`, onEvent, onError),
+  getExportScriptUrl: (jobId: string) => `${API_BASE}/adaptive/jobs/${jobId}/export-script`,
+  getExportScript: (jobId: string) =>
+    apiFetch<string>(`/adaptive/jobs/${jobId}/export-script`),
+  submitGrade: (jobId: string, body: { rating: number; comment?: string | null }) =>
+    apiFetch<{ status: string; rating: number }>(`/adaptive/jobs/${jobId}/grade`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
   getReportPdfUrl: (jobId: string) => {
     const token = getAuthToken()
     return `${API_BASE}/adaptive/jobs/${jobId}/report.pdf${token ? `?access_token=${encodeURIComponent(token)}` : ''}`
@@ -1066,6 +1079,11 @@ export const mpcApi = {
     onEvent: (event: string, data: any) => void,
     onError?: (err: unknown) => void,
   ) => streamEvents(`/mpc/jobs/${jobId}/events`, onEvent, onError),
+  submitGrade: (jobId: string, body: { rating: number; comment?: string | null }) =>
+    apiFetch<{ status: string; rating: number }>(`/mpc/jobs/${jobId}/grade`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
   testDynamics: (body: MPCDiagnosticsRequest) =>
     apiFetch<MPCDiagnosticsResponse>('/mpc/test-dynamics', {
       method: 'POST',
