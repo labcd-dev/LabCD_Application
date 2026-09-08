@@ -499,7 +499,7 @@ def _to_status_response(record: JobRecord) -> MPCJobStatusResponse:
         created_at=record.created_at,
         updated_at=record.updated_at,
         user_id=record.user_id,
-        project_id=record.project_id,
+        project_id=str(record.project_id) if record.project_id is not None else None,
         options=_options_model(record.options),
         system_name=record.system_name,
         series=_json_safe(record.series),
@@ -1198,7 +1198,7 @@ def submit_job(
             title=f"MPC: {system_name}",
         )
         if linked_project_id is not None:
-            job_store.update(job_id, project_id=linked_project_id)
+            job_store.update(job_id, project_id=str(linked_project_id))
     except Exception:
         pass
 

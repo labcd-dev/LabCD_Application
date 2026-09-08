@@ -53,7 +53,7 @@ class AdaptiveJobCreateRequest(BaseModel):
     system_spec: dict[str, Any] | None = None
     options: AdaptiveJobOptions = Field(default_factory=AdaptiveJobOptions)
     user_id: int | None = None
-    project_id: str | None = None
+    project_id: str | int | None = None
 
 
 class AdaptiveJobCreateResponse(BaseModel):
@@ -101,7 +101,7 @@ class AdaptiveJobStatusResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     user_id: int | None = None
-    project_id: str | None = None
+    project_id: str | int | None = None
     options: AdaptiveJobOptions | None = None
 
 

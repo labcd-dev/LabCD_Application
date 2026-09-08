@@ -120,7 +120,7 @@ class MPCJobCreateRequest(BaseModel):
     dynamics: MPCDynamicsInput | None = None
     options: MPCJobOptions = Field(default_factory=MPCJobOptions)
     user_id: int | None = None
-    project_id: str | None = None
+    project_id: str | int | None = None
 
 
 class MPCJobCreateResponse(BaseModel):
@@ -151,7 +151,7 @@ class MPCJobStatusResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     user_id: int | None = None
-    project_id: str | None = None
+    project_id: str | int | None = None
     options: MPCJobOptions | None = None
     system_name: str | None = None
     # Live telemetry fields for real-time streaming
