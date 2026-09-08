@@ -304,13 +304,13 @@ export function PlantModelChat({
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {/* Landing */}
         {!inChat && (
-          <div className="relative flex flex-1 flex-col items-center justify-center overflow-y-auto px-6 py-10">
+          <div className="relative flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-4 py-8 sm:px-6 sm:py-12">
             {/* Subtle ambient background glow */}
             <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
               <div className="absolute left-1/2 -top-24 -translate-x-1/2 h-72 w-[560px] rounded-full bg-gradient-to-b from-primary/15 via-purple-500/5 to-transparent blur-3xl" />
             </div>
 
-            <div className="relative z-10 w-full max-w-[760px] flex flex-col items-center text-center">
+            <div className="relative z-10 my-auto flex w-full max-w-[760px] flex-col items-center text-center">
               {/* Badge */}
               <div className="mb-3.5 inline-flex items-center gap-2 rounded-full border border-primary/25 bg-primary/10 px-3 py-0.5 text-xs font-medium text-primary backdrop-blur-md">
                 <Sparkles className="size-3 text-primary" />
