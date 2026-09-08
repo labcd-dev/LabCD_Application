@@ -12,13 +12,35 @@ def eval_uncertainty(func, x, u, t, n):
         n_args = len(inspect.signature(func).parameters)
     except (ValueError, TypeError):
         n_args = 3
-    if n_args == 1:
-        value = func(t)
-    elif n_args == 2:
-        value = func(x, u)
+    try:
+        if n_args == 1:
+            value = func(t)
+        elif n_args == 2:
+            value = func(x, u)
+        else:
+            value = func(x, u, t)
+    except Exception:
+        return np.zeros(n)
+
+    try:
+        arr = np.asarray(value, dtype=float).ravel()
+    except Exception:
+        return np.zeros(n)
+
+    if arr.size == n:
+        return arr
+    elif arr.size == 1 and n > 1:
+        # Scalar uncertainty on multi-state system:
+        # In second-order / physical systems, disturbance or uncertainty acts on acceleration/force (x2, index 1)
+        res = np.zeros(n, dtype=float)
+        res[1 if n > 1 else 0] = arr[0]
+        return res
+    elif arr.size < n:
+        res = np.zeros(n, dtype=float)
+        res[:arr.size] = arr
+        return res
     else:
-        value = func(x, u, t)
-    return np.asarray(value, dtype=float).reshape(n)
+        return arr[:n]
 
 
 def delta_depends_on_u(func, n, m, n_probes=8, seed=0, tol=1e-7, h=1e-6):

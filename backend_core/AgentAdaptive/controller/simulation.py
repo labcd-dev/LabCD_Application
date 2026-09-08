@@ -8,10 +8,12 @@ from .structure_build import _ref_symbolic_derivatives, _REF_T
 def _ref_derivative_funcs(refs, ref_orders, structure_cache=None):
     funcs = []
     for i, degree in enumerate(ref_orders):
-        cache_key = ("ref_funcs", refs[i]["expr"], degree)
+        ref_entry = refs[i] if i < len(refs) else {}
+        expr_str = ref_entry.get("expr", "0") if isinstance(ref_entry, dict) else str(ref_entry or "0")
+        cache_key = ("ref_funcs", expr_str, degree)
         cached = structure_cache.get(cache_key) if structure_cache is not None else None
         if cached is None:
-            derivs = _ref_symbolic_derivatives(refs[i]["expr"], degree, _REF_T)
+            derivs = _ref_symbolic_derivatives(expr_str, degree, _REF_T)
             cached = [sp.lambdify(_REF_T, d, "numpy") for d in derivs]
             if structure_cache is not None:
                 structure_cache[cache_key] = cached

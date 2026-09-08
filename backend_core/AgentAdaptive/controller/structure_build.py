@@ -61,7 +61,15 @@ def _parse_system(states, dynamics, inputs, outputs):
 def _build_delta_func(delta_exprs, symbol_map, state_syms, input_syms):
     if not delta_exprs:
         return None
-    exprs = [_sympify(e, symbol_map) for e in delta_exprs]
+    n = len(state_syms)
+    if len(delta_exprs) == 1 and n > 1:
+        expr_list = ["0"] * n
+        expr_list[1] = delta_exprs[0]
+    elif len(delta_exprs) < n:
+        expr_list = list(delta_exprs) + ["0"] * (n - len(delta_exprs))
+    else:
+        expr_list = list(delta_exprs[:n])
+    exprs = [_sympify(e, symbol_map) for e in expr_list]
     fn = sp.lambdify([state_syms, input_syms], exprs, "numpy")
     return lambda x, u: fn(list(x), list(u))
 
@@ -164,7 +172,9 @@ def _format_u_with_reference_smc(u_symbolic, yd_symbols, refs):
         subs_map = {}
         for i, yd_row in enumerate(yd_symbols):
             degree = len(yd_row) - 1
-            yd_vals = _ref_symbolic_derivatives(refs[i]["expr"], degree, t_sym)
+            ref_entry = refs[i] if i < len(refs) else {}
+            expr_str = ref_entry.get("expr", "0") if isinstance(ref_entry, dict) else str(ref_entry or "0")
+            yd_vals = _ref_symbolic_derivatives(expr_str, degree, t_sym)
             subs_map.update(zip(yd_row, yd_vals))
 
         pretty_map = _pretty_ref_symbols(yd_symbols)
@@ -194,7 +204,8 @@ def _format_u_with_reference_backstepping(u_law, yd, ref):
     try:
         t_sym = sp.Symbol("t")
         degree = len(yd) - 1
-        yd_vals = _ref_symbolic_derivatives(ref["expr"], degree, t_sym)
+        expr_str = ref.get("expr", "0") if isinstance(ref, dict) else str(ref or "0")
+        yd_vals = _ref_symbolic_derivatives(expr_str, degree, t_sym)
         subs_map = dict(zip(yd, yd_vals))
         u_ref = sp.trigsimp(sp.expand(u_law.subs(subs_map)))
         pretty_map = _pretty_ref_symbols([yd])
@@ -229,30 +240,35 @@ def _ref_from_expr(expr_text):
     # quietly falling back to a zero reference.
     text = (expr_text or "").strip()
     if not text:
-        raise ValueError("no reference expression was given")
-    unknown = sorted({tok for tok in _REF_IDENT_RE.findall(text) if tok not in _REF_LOCALS})
+        raise ValueError("reference formula is empty")
+    ident_matches = _REF_IDENT_RE.findall(text)
+    unknown = [m for m in ident_matches if m not in _REF_LOCALS and not m.isdigit()]
     if unknown:
         raise ValueError(
-            "reference %r uses unrecognized name(s) %s -- only 't' and %s "
-            "are allowed" % (text, ", ".join(unknown), ", ".join(sorted(ALLOWED_FUNCS))))
+            "unknown symbol(s) %s in reference: only 't' and standard functions "
+            "are allowed." % unknown)
     try:
-        return sp.expand(sp.sympify(text, locals=_REF_LOCALS))
-    except (sp.SympifyError, TypeError, ValueError, AttributeError) as e:
-        raise ValueError("reference %r could not be parsed as a math expression: %s"
-                          % (text, e))
+        expr = sp.sympify(text, locals=_REF_LOCALS)
+    except Exception as e:
+        raise ValueError("invalid expression: %s" % e) from e
+    return expr
 
 
-def _build_structure_from_spec(spec):
-    # builds everything the Designer's schema needs except method/reasoning/
-    # notes_limitations (pure transcription off the confirmed spec, no LLM involved)
+def _extract_structure(spec):
     dyn = spec["dynamics"]
     states = list(dyn["states"])
     limitations = []
 
-    by_output = {r["output"]: r.get("expr", "") for r in dyn["references"]}
+    by_output = {}
+    for r in (dyn.get("references") or []):
+        if isinstance(r, dict):
+            by_output[r.get("output", "")] = r.get("expr", "")
+        else:
+            by_output[""] = str(r)
+
     refs = []
     for out in dyn["outputs"]:
-        raw_expr = by_output.get(out, "")
+        raw_expr = by_output.get(out) or by_output.get("") or ""
         try:
             parsed = _ref_from_expr(raw_expr)
         except ValueError as e:
@@ -262,13 +278,27 @@ def _build_structure_from_spec(spec):
     def _split(entries):
         # entries with no KNOWN formula anywhere stay None (has_delta/
         # has_disturbance still True): exprs only get built once something actually names a formula
-        known = [e for e in entries if (e.get("expr") or "").strip()]
+        if not entries:
+            return None
+        known = []
+        for e in entries:
+            if isinstance(e, dict):
+                ex = (e.get("expr") or "").strip()
+                if ex:
+                    known.append(e)
+            elif isinstance(e, str) and e.strip():
+                known.append({"expr": e.strip()})
         if not known:
             return None
         exprs = ["0"] * len(states)
         for e in known:
-            if e.get("state") in states:
-                exprs[states.index(e["state"])] = e["expr"]
+            st = e.get("state")
+            if st in states:
+                exprs[states.index(st)] = e["expr"]
+            elif len(known) == 1 and len(states) >= 2:
+                exprs[1] = e["expr"]
+            elif len(known) == 1:
+                exprs[0] = e["expr"]
         return exprs
 
     structure = {

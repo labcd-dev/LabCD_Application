@@ -428,12 +428,26 @@ def _run_pipeline_thread(job_id: str, store: InMemoryAdaptiveJobStore) -> None:
         series = result.get("series") if isinstance(result, dict) else None
 
         report_text = str(report or "")
+        is_failed = False
+        fail_msg = "Design execution failed"
         if "EXTRACTION FAILED" in report_text:
+            is_failed = True
+            fail_msg = "Design extraction failed"
+        elif "failed during the final build/simulation" in report_text:
+            is_failed = True
+            fail_msg = "Final simulation failed"
+        elif (series is None and final_metrics is None) and (
+            "failed" in report_text.lower() or "error" in report_text.lower()
+        ):
+            is_failed = True
+            fail_msg = "Simulation execution failed"
+
+        if is_failed:
             store.update(
                 job_id,
                 status="failed",
                 stage="error",
-                message="Design extraction failed",
+                message=fail_msg,
                 error=report_text[:2000],
                 report=report,
                 abstract=abstract,
