@@ -61,6 +61,7 @@ class MPCDynamicsInput(BaseModel):
     plugin_path: str | None = None
     plugin_id: str | None = None
     source: str | None = None
+    artifact_id: str | int | None = None
 
 
 class MPCDiagnosticsRequest(BaseModel):

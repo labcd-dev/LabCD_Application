@@ -80,7 +80,18 @@ class MPCConfig:
             return arr
         if arr.shape == (dim,):
             return np.diag(arr)
-        raise ValueError(f"Weight array must have shape ({dim},) or ({dim},{dim}), got {arr.shape}")
+        if arr.ndim == 1:
+            padded = np.full(dim, default, dtype=float)
+            n_copy = min(len(arr), dim)
+            padded[:n_copy] = arr[:n_copy]
+            return np.diag(padded)
+        if arr.ndim == 2:
+            mat = np.diag(np.full(dim, default, dtype=float))
+            r_copy = min(arr.shape[0], dim)
+            c_copy = min(arr.shape[1], dim)
+            mat[:r_copy, :c_copy] = arr[:r_copy, :c_copy]
+            return mat
+        return np.diag(np.full(dim, default))
 
     def set_from_dict(self, params: Dict[str, Any]) -> None:
         """Apply a parameter dict as proposed by the Actor agent."""

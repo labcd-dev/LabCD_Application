@@ -312,6 +312,16 @@ def _resolve_plugin_path(dynamics: MPCDynamicsInput | dict[str, Any] | None) -> 
             return str(p.resolve())
         return str(p.resolve())
 
+    art_id = getattr(dynamics, "artifact_id", None)
+    if art_id:
+        try:
+            from backend_api.http.services.plant_artifact_service import get_artifact_store
+            art_path = get_artifact_store().load_plugin_path(str(art_id))
+            if Path(art_path).is_file():
+                return str(Path(art_path).resolve())
+        except Exception:
+            pass
+
     if dynamics.plugin_id:
         stem = dynamics.plugin_id.removesuffix(".py")
         path = _PLUGINS_DIR / f"{stem}.py"
@@ -511,6 +521,15 @@ def _finite_float(value: Any) -> float | None:
     if x != x or x in (float("inf"), float("-inf")):  # NaN / inf
         return None
     return x
+
+
+def _coerce_project_id(val: Any) -> int | None:
+    if val is None:
+        return None
+    try:
+        return int(val)
+    except (TypeError, ValueError):
+        return None
 
 
 
@@ -765,18 +784,34 @@ def _run_tuning_thread(job_id: str, store: InMemoryJobStore) -> None:
         )
         store.update(job_id, system_name=str(system_name))
 
+        max_iters = int(options.get("max_iterations") or 15)
         seed = options.get("seed_params")
+        if seed and isinstance(seed, dict):
+            seed = dict(seed)
+            if "Q" in seed and isinstance(seed["Q"], list):
+                q = seed["Q"]
+                if len(q) < dynamics.n_states:
+                    seed["Q"] = q + [1.0] * (dynamics.n_states - len(q))
+                elif len(q) > dynamics.n_states:
+                    seed["Q"] = q[: dynamics.n_states]
+            if "R" in seed and isinstance(seed["R"], list):
+                r = seed["R"]
+                if len(r) < dynamics.n_inputs:
+                    seed["R"] = r + [0.1] * (dynamics.n_inputs - len(r))
+                elif len(r) > dynamics.n_inputs:
+                    seed["R"] = r[: dynamics.n_inputs]
+
         use_ui = bool(options.get("use_ui_graph", True))
         if use_ui:
             entry = "evaluator" if seed else "actor"
-            graph = build_ui_tuning_graph(dynamics, cfg, entry_node=entry)
+            graph = build_ui_tuning_graph(dynamics, cfg, entry_node=entry, max_iterations=max_iters)
         else:
-            graph = build_mpc_tuning_graph(dynamics, cfg)
+            graph = build_mpc_tuning_graph(dynamics, cfg, max_iterations=max_iters)
 
         state = initial_state(
             dynamics,
             system_name=str(system_name),
-            max_iterations=int(options.get("max_iterations") or 15),
+            max_iterations=max_iters,
             ui_scenario_level=int(options.get("ui_scenario_level") or 1),
             seed_params=seed,
             user_guidance=str(options.get("user_guidance") or ""),
@@ -958,12 +993,34 @@ def _run_tuning_thread(job_id: str, store: InMemoryJobStore) -> None:
                 pass
 
         try:
+            raw_q = options.get("q_weights")
+            if raw_q and isinstance(raw_q, list):
+                if len(raw_q) < dynamics.n_states:
+                    q_w = raw_q + [1.0] * (dynamics.n_states - len(raw_q))
+                elif len(raw_q) > dynamics.n_states:
+                    q_w = raw_q[: dynamics.n_states]
+                else:
+                    q_w = raw_q
+            else:
+                q_w = [1.0] * dynamics.n_states
+
+            raw_r = options.get("r_weights")
+            if raw_r and isinstance(raw_r, list):
+                if len(raw_r) < dynamics.n_inputs:
+                    r_w = raw_r + [0.1] * (dynamics.n_inputs - len(raw_r))
+                elif len(raw_r) > dynamics.n_inputs:
+                    r_w = raw_r[: dynamics.n_inputs]
+                else:
+                    r_w = raw_r
+            else:
+                r_w = [0.1] * dynamics.n_inputs
+
             baseline_p = seed or {
                 "Np": int(options.get("prediction_horizon") or 12),
                 "Nc": int(options.get("control_horizon") or 4),
-                "Q": options.get("q_weights") or [1.0] * dynamics.n_states,
-                "R": options.get("r_weights") or [0.1] * dynamics.n_inputs,
-                "P": options.get("p_weights") or [1.0] * dynamics.n_states,
+                "Q": q_w,
+                "R": r_w,
+                "P": q_w,
                 "dt": float(options.get("dt_mpc") or 0.02),
             }
             base_sim = run_closed_loop(dynamics, cfg, baseline_p)
@@ -1128,13 +1185,12 @@ def submit_job(
         system_name=str(system_name),
     )
     job_id = record.job_id
-
     # Automatically link or create in Project database so it appears in Projects history
     try:
         from backend_api.http.services.project_service import link_or_create_for_job
         linked_project_id = link_or_create_for_job(
             user_id=request.user_id,
-            project_id=request.project_id,
+            project_id=_coerce_project_id(request.project_id),
             pipeline_type="mpcDesign",
             job_id=job_id,
             file_name=f"{system_name}.py",
@@ -1457,6 +1513,76 @@ def get_export_script(job_id: str, *, store: InMemoryJobStore | None = None) -> 
     )
 
 
+def _figures_for_mpc_report(record: JobRecord) -> tuple[Any, Any]:
+    """Render matplotlib Figures for the PDF report (light background for print)."""
+    import numpy as np
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    conv_fig = None
+    sim_fig = None
+
+    mse_h = [x for x in (record.mse_history or []) if x is not None and isinstance(x, (int, float))]
+    if len(mse_h) > 0:
+        try:
+            fig, ax = plt.subplots(figsize=(6.5, 2.8))
+            iters = list(range(1, len(mse_h) + 1))
+            ax.plot(iters, mse_h, marker="o", color="#0284c7", linewidth=2.0, markersize=4, label="Iteration MSE")
+            best_so_far = []
+            cur_best = float("inf")
+            for v in mse_h:
+                cur_best = min(cur_best, v)
+                best_so_far.append(cur_best)
+            ax.plot(iters, best_so_far, linestyle="--", color="#16a34a", linewidth=1.5, label="Best so far")
+            ax.set_xlabel("Iteration", fontsize=9)
+            ax.set_ylabel("MSE", fontsize=9)
+            ax.set_title("Convergence History", fontsize=10, fontweight="bold")
+            ax.grid(True, linestyle=":", alpha=0.6)
+            ax.legend(loc="best", fontsize=8)
+            conv_fig = fig
+        except Exception:
+            conv_fig = None
+
+    series = record.series if isinstance(record.series, dict) else None
+    if series and series.get("t") and series.get("x"):
+        try:
+            t = np.asarray(series["t"], dtype=float)
+            x_dict = series.get("x", {})
+            xd_dict = series.get("xd", {})
+            u_dict = series.get("u", {})
+            state_names = list(x_dict.keys())[:4]
+
+            fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(6.5, 4.2), sharex=True)
+            colors = ["#0284c7", "#7c3aed", "#16a34a", "#ea580c"]
+            for idx, name in enumerate(state_names):
+                x_vals = np.asarray(x_dict[name], dtype=float)
+                c = colors[idx % len(colors)]
+                ax1.plot(t[: len(x_vals)], x_vals, label=name, color=c, linewidth=1.5)
+                if name in xd_dict:
+                    xd_vals = np.asarray(xd_dict[name], dtype=float)
+                    ax1.plot(t[: len(xd_vals)], xd_vals, linestyle="--", color=c, alpha=0.6, label=f"{name} (ref)")
+            ax1.set_ylabel("States", fontsize=9)
+            ax1.set_title("Optimal Closed-Loop Response", fontsize=10, fontweight="bold")
+            ax1.grid(True, linestyle=":", alpha=0.6)
+            ax1.legend(loc="best", fontsize=7, ncol=2)
+
+            for idx, (u_name, u_vals) in enumerate(list(u_dict.items())[:2]):
+                u_arr = np.asarray(u_vals, dtype=float)
+                ax2.plot(t[: len(u_arr)], u_arr, label=u_name, color=colors[(idx + 2) % len(colors)], linewidth=1.5)
+            ax2.set_xlabel("Time (s)", fontsize=9)
+            ax2.set_ylabel("Control (u)", fontsize=9)
+            ax2.grid(True, linestyle=":", alpha=0.6)
+            ax2.legend(loc="best", fontsize=8)
+
+            plt.tight_layout()
+            sim_fig = fig
+        except Exception:
+            sim_fig = None
+
+    return conv_fig, sim_fig
+
+
 def get_job_report_pdf(job_id: str, *, store: InMemoryJobStore | None = None) -> bytes:
     """Generate engineering PDF report."""
     record = _store(store).get(job_id)
@@ -1466,6 +1592,7 @@ def get_job_report_pdf(job_id: str, *, store: InMemoryJobStore | None = None) ->
     from backend_core.AgentMPC.agents.report_pdf import build_pdf_report
     from backend_core.AgentMPC.agents.report_agent import generate_report_analysis, _fallback_analysis
     from backend_core.AgentMPC.dynamics.loader import DynamicLoader
+    from labcd_pdfmaker import Backend
 
     dyn_ref = record.dynamics_ref or {}
     plugin_path = _resolve_plugin_path(MPCDynamicsInput(**dyn_ref) if dyn_ref else None)
@@ -1522,6 +1649,8 @@ def get_job_report_pdf(job_id: str, *, store: InMemoryJobStore | None = None) ->
         }
         analysis = _fallback_analysis(context)
 
+    conv_fig, sim_fig = _figures_for_mpc_report(record)
+
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tf:
         pdf_path = tf.name
 
@@ -1533,10 +1662,18 @@ def get_job_report_pdf(job_id: str, *, store: InMemoryJobStore | None = None) ->
             results_data=results_data if results_data else [{"iteration": 1, "mse": record.best_mse or 0.01, "ok": True}],
             best_row=best_row,
             analysis=analysis,
+            convergence_fig=conv_fig,
+            simulation_fig=sim_fig,
+            backend=Backend.AUTO,
         )
         with open(pdf_path, "rb") as pf:
             return pf.read()
     finally:
+        import matplotlib.pyplot as plt
+        if conv_fig is not None:
+            plt.close(conv_fig)
+        if sim_fig is not None:
+            plt.close(sim_fig)
         if os.path.exists(pdf_path):
             try:
                 os.unlink(pdf_path)

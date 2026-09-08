@@ -371,7 +371,9 @@ export function ProjectResultsView({
           results={results as unknown as MPCJobResultsResponse}
           onDownloadReport={() => {
             if (jobId) {
-              window.open(mpcApi.getReportPdfUrl(jobId), '_blank')
+              void mpcApi.downloadReportPdf(jobId).catch((err) => {
+                console.error('Failed to download MPC PDF report:', err)
+              })
             }
           }}
         />

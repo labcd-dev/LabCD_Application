@@ -237,8 +237,8 @@ export function MpcPage() {
       trajectory_pulse_start: trajectoryPulseStart,
       trajectory_pulse_end: trajectoryPulseEnd,
       noise_std: noiseStd,
-      q_weights: parsedQ.length ? parsedQ : [10.0, 1.0],
-      r_weights: parsedR.length ? parsedR : [0.1],
+      q_weights: parsedQ.length ? parsedQ : undefined,
+      r_weights: parsedR.length ? parsedR : undefined,
       model: pipeline.model,
       system_name: pipeline.fileName?.replace('.py', '') || 'Inverted Pendulum Cart-Pole',
     }
@@ -989,7 +989,9 @@ export function MpcPage() {
             results={results}
             onDownloadReport={() => {
               if (jobId) {
-                window.open(mpcApi.getReportPdfUrl(jobId), '_blank')
+                void mpcApi.downloadReportPdf(jobId).catch((err) => {
+                  console.error('Failed to download MPC PDF report:', err)
+                })
               }
             }}
           />
