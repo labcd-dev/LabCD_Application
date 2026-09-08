@@ -130,7 +130,7 @@ export function MpcPage() {
       (event, data) => {
         if (!isSubscribed) return
         if (event === 'progress') {
-          setJob((prev) => (prev ? { ...prev, progress: [...prev.progress, data] } : prev))
+          setJob((prev) => (prev ? { ...prev, progress: [...(prev.progress || []), data] } : prev))
         } else if (event === 'status') {
           setJob((prev) => (prev ? { ...prev, ...data } : prev))
           if (data.status === 'completed') {

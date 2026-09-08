@@ -492,6 +492,12 @@ def _to_status_response(record: JobRecord) -> MPCJobStatusResponse:
         project_id=record.project_id,
         options=_options_model(record.options),
         system_name=record.system_name,
+        series=_json_safe(record.series),
+        baseline_series=_json_safe(record.baseline_series),
+        best_params=_json_safe(record.best_params),
+        best_mse=_finite_float(record.best_mse),
+        mse_history=_metric_series(record.mse_history),
+        params_history=_json_safe(list(record.params_history or [])),
     )
 
 
@@ -783,12 +789,98 @@ def _run_tuning_thread(job_id: str, store: InMemoryJobStore) -> None:
             store.update(job_id, status="cancelled", stage="error", message="Cancelled")
             return
 
-        # Full invoke; cancel is cooperative via is_cancel_requested checks around the run.
-        final_state = graph.invoke(state)
+        current_state = dict(state)
+        # Stream each agent step in real-time so UI receives live telemetry and real waveforms
+        for output in graph.stream(state):
+            if store.is_cancel_requested(job_id):
+                store.update(job_id, status="cancelled", stage="error", message="Cancelled")
+                return
 
-        if store.is_cancel_requested(job_id):
-            store.update(job_id, status="cancelled", stage="error", message="Cancelled")
-            return
+            for node_name, node_update in output.items():
+                if not isinstance(node_update, dict):
+                    continue
+                current_state.update(node_update)
+
+                curr_iter = int(current_state.get("iteration") or 0)
+                stage_name = str(node_name).lower()
+                hist = _normalize_history(current_state.get("history") or [])
+
+                latest_text = ""
+                if hist:
+                    latest_text = str(hist[-1])
+
+                stage_map = {
+                    "scenarist": "scenarist",
+                    "actor": "actor",
+                    "evaluator": "evaluator",
+                    "terminator": "terminator",
+                    "critic": "critic",
+                    "juror": "juror",
+                }
+                mapped_stage = stage_map.get(stage_name, stage_name)
+
+                live_updates: dict[str, Any] = {
+                    "stage": mapped_stage,
+                    "iteration": curr_iter,
+                    "history": hist,
+                }
+
+                if "current_mse" in current_state:
+                    b_mse = current_state.get("best_mse")
+                    if b_mse is not None and b_mse != float("inf"):
+                        live_updates["best_mse"] = _finite_float(b_mse)
+                if "mse_history" in current_state:
+                    live_updates["mse_history"] = _metric_series(current_state.get("mse_history"))
+                if "params_history" in current_state:
+                    live_updates["params_history"] = _json_safe(list(current_state.get("params_history") or []))
+                if "best_params" in current_state or "current_params" in current_state:
+                    live_updates["best_params"] = _json_safe(current_state.get("best_params") or current_state.get("current_params"))
+
+                # Live simulation data formatting when evaluator finishes a run
+                sim_data = node_update.get("simulation_data")
+                if isinstance(sim_data, dict) and "states" in sim_data:
+                    try:
+                        live_sim_res = {
+                            "states": sim_data.get("states"),
+                            "inputs": sim_data.get("inputs"),
+                            "times": sim_data.get("times"),
+                            "reference": sim_data.get("refs"),
+                        }
+                        live_series = _format_sim_series(live_sim_res, dynamics, cfg)
+                        if live_series:
+                            live_updates["series"] = live_series
+                            rec_cur = store.get(job_id)
+                            if rec_cur and rec_cur.baseline_series is None and curr_iter <= 1:
+                                live_updates["baseline_series"] = live_series
+                    except Exception:
+                        pass
+
+                # Synthesize informative agent progress log for SSE stream
+                msg_text = latest_text
+                if not msg_text:
+                    if stage_name == "actor":
+                        msg_text = f"[Actor] Proposing parameter candidate for iteration {curr_iter + 1}..."
+                    elif stage_name == "evaluator":
+                        cur_mse = current_state.get("current_mse")
+                        msg_text = f"[Evaluator] Iteration {curr_iter} simulated: MSE={cur_mse:.6f}" if cur_mse is not None else f"[Evaluator] Iteration {curr_iter} evaluated"
+                    elif stage_name == "critic":
+                        msg_text = f"[Critic] Analyzing performance and stability of iteration {curr_iter}..."
+                    elif stage_name == "juror":
+                        msg_text = "[Juror] Formulating final engineering verdict and acceptance criteria..."
+                    else:
+                        msg_text = f"[{stage_name.capitalize()}] step in progress..."
+
+                on_event({
+                    "kind": "stage_start" if stage_name in ("actor", "critic", "juror") else "note",
+                    "stage": mapped_stage,
+                    "text": msg_text,
+                    "round": curr_iter,
+                    "ts": time.time(),
+                })
+
+                store.update(job_id, **live_updates)
+
+        final_state = current_state
 
         best_mse = final_state.get("best_mse")
         if best_mse is not None and best_mse == float("inf"):

@@ -146,6 +146,12 @@ async def stream_mpc_job_events(
                 "message": cur.message,
                 "iteration": cur.iteration,
                 "max_iterations": cur.max_iterations,
+                "best_mse": cur.best_mse,
+                "best_params": cur.best_params,
+                "mse_history": cur.mse_history,
+                "params_history": cur.params_history,
+                "series": cur.series,
+                "baseline_series": cur.baseline_series,
             }
             yield f"event: status\ndata: {json.dumps(status_payload, default=str)}\n\n"
 

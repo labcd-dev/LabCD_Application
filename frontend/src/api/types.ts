@@ -1004,6 +1004,12 @@ export interface MPCJobStatusResponse {
   project_id?: string | null
   options?: MPCJobOptions | null
   system_name?: string | null
+  series?: Record<string, unknown> | null
+  baseline_series?: Record<string, unknown> | null
+  best_params?: Record<string, unknown> | null
+  best_mse?: number | null
+  mse_history?: Array<number | null>
+  params_history?: Array<Record<string, unknown>>
 }
 
 export interface MPCJobResultsResponse {

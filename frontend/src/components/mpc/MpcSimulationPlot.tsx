@@ -3,6 +3,7 @@ import {
   Download,
   CheckCircle2,
   ArrowRightLeft,
+  Activity,
 } from 'lucide-react'
 import { btnBase, btnCompact } from '../../lib/classes'
 
@@ -56,57 +57,87 @@ export function MpcSimulationPlot({
   const [showBaseline, setShowBaseline] = useState<boolean>(true)
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
 
-  // Normalize data or generate high-fidelity simulated response if null
+  const hasRealData = Boolean(
+    series &&
+    Array.isArray(series.t) &&
+    series.t.length > 0 &&
+    Array.isArray(series.names) &&
+    series.names.length > 0 &&
+    series.x &&
+    Object.keys(series.x).length > 0
+  )
+
   const sim = useMemo<SimSeriesData>(() => {
-    if (series && series.t && series.t.length > 0 && series.names && series.names.length > 0) {
+    if (hasRealData && series) {
       return series
     }
-
-    // Realistic fallback for demonstration
-    const N = 120
-    const t = Array.from({ length: N }, (_, i) => +(i * 0.025).toFixed(3))
-    const names = ['cart_position', 'pole_angle', 'cart_velocity', 'pole_angular_velocity']
-    const input_names = ['control_force']
-
-    const damp = 0.8 + Math.min(currentIteration * 0.15, 2.5)
-    const x: Record<string, number[]> = {
-      cart_position: t.map((val) => +(Math.cos(val * 3.5) * Math.exp(-val * damp) * 0.8).toFixed(4)),
-      pole_angle: t.map((val) => +(Math.sin(val * 4.2) * Math.exp(-val * (damp + 0.3)) * 0.45).toFixed(4)),
-      cart_velocity: t.map((val) => +(-Math.sin(val * 3.5) * Math.exp(-val * damp) * 1.6).toFixed(4)),
-      pole_angular_velocity: t.map((val) => +(Math.cos(val * 4.2) * Math.exp(-val * (damp + 0.3)) * 1.2).toFixed(4)),
-    }
-    const xd: Record<string, number[]> = {
-      cart_position: t.map(() => 0),
-      pole_angle: t.map(() => 0),
-      cart_velocity: t.map(() => 0),
-      pole_angular_velocity: t.map(() => 0),
-    }
-    const u: Record<string, number[]> = {
-      control_force: t.map((val) => +(Math.sin(val * 5) * Math.exp(-val * damp) * 4.5).toFixed(4)),
-    }
-
     return {
-      t,
-      x,
-      xd,
-      u,
-      names,
-      input_names,
-      bounds: {
-        x_lo: [-2.4, -0.4, -5.0, -10.0],
-        x_hi: [2.4, 0.4, 5.0, 10.0],
-        u_lo: [-15.0],
-        u_hi: [15.0],
-      },
-      per_state_metrics: names.map((name, i) => ({
-        name,
-        mse: +(0.05 / (i + 1 + currentIteration * 0.2)).toFixed(5),
-        overshoot: +(12.5 / (i + 1 + currentIteration * 0.3)).toFixed(2),
-        iae: +(0.15 / (i + 1)).toFixed(4),
-        ise: +(0.08 / (i + 1)).toFixed(4),
-      })),
+      t: [],
+      x: {},
+      xd: {},
+      u: {},
+      names: [],
+      input_names: [],
     }
-  }, [series, currentIteration])
+  }, [series, hasRealData])
+
+  if (!hasRealData) {
+    return (
+      <div className="space-y-4 rounded-2xl border border-border bg-surface-elevated p-5 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className={`flex size-2 rounded-full ${currentIteration > 0 ? 'bg-cyan-500 shadow-[0_0_8px_#06b6d4] animate-pulse' : 'bg-muted shadow-none'}`} />
+              <h3 className="text-sm font-bold text-foreground tracking-wide">
+                Time-Domain Closed-Loop Oscilloscope
+              </h3>
+              <span className={`rounded-md border px-2 py-0.5 text-[10.5px] font-mono ${
+                currentIteration > 0
+                  ? 'border-cyan-500/30 bg-cyan-500/10 text-cyan-600 dark:text-cyan-300'
+                  : 'border-border bg-surface-muted text-muted-text'
+              }`}>
+                {currentIteration > 0 ? `Simulating Iteration ${currentIteration}...` : 'Live Telemetry Standby'}
+              </span>
+            </div>
+            <p className="mt-1 text-xs text-muted-text">
+              Real nonlinear state trajectories integrated via RK4 against optimal OSQP receding-horizon controls
+            </p>
+          </div>
+        </div>
+
+        <div className="relative flex flex-col items-center justify-center min-h-[300px] rounded-xl border border-dashed border-border/70 bg-surface/40 p-8 text-center overflow-hidden">
+          {/* Ambient oscilloscope grid */}
+          <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:36px_36px] pointer-events-none" />
+          
+          <div className="relative z-10 flex flex-col items-center max-w-md">
+            <div className={`flex size-12 items-center justify-center rounded-2xl border shadow-lg mb-3.5 transition-all ${
+              currentIteration > 0
+                ? 'bg-purple-500/15 text-purple-400 border-purple-500/30 shadow-purple-500/10 animate-pulse'
+                : 'bg-surface-muted text-muted-text border-border'
+            }`}>
+              <Activity className={`size-6 ${currentIteration > 0 ? 'animate-spin' : ''}`} />
+            </div>
+
+            <h4 className="text-sm font-bold text-foreground mb-1">
+              {currentIteration > 0 ? 'Simulating Dynamic Response...' : 'Awaiting Live MPC Simulation'}
+            </h4>
+            <p className="text-xs text-muted-text leading-relaxed mb-3">
+              {currentIteration > 0
+                ? `The Evaluator agent is running the closed-loop simulation on the plant dynamics for iteration ${currentIteration}. Real state waveforms will stream here directly upon step resolution.`
+                : 'Launch autonomous tuning or test dynamics to populate real-time time-domain trajectories. No mock data is presented.'}
+            </p>
+
+            {currentIteration > 0 && (
+              <div className="flex items-center gap-2 px-3 py-1 rounded-full border border-purple-500/30 bg-purple-500/10 text-[11px] font-mono text-purple-400">
+                <span className="size-1.5 rounded-full bg-purple-400 animate-ping" />
+                Live solver telemetry active
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   const t = sim.t
   const tMin = t[0] ?? 0

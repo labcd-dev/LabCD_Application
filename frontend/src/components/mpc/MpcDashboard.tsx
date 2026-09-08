@@ -67,21 +67,21 @@ export function MpcDashboard({
 
   const currentIter = results?.iteration ?? job?.iteration ?? 0
   const maxIter = job?.max_iterations || job?.options?.max_iterations || 15
-  const bestMse = results?.best_mse
+  const bestMse = results?.best_mse ?? job?.best_mse
 
   // Improvement vs iteration 1 baseline
   const improvementPct = useMemo(() => {
-    const mseH = results?.mse_history || []
+    const mseH = results?.mse_history || job?.mse_history || []
     const firstMse = mseH.find((v): v is number => typeof v === 'number' && v > 0)
     if (typeof firstMse === 'number' && typeof bestMse === 'number' && firstMse > 0) {
       const imp = ((firstMse - bestMse) / firstMse) * 100
       return imp > 0 ? imp.toFixed(1) : '0.0'
     }
     return null
-  }, [results, bestMse])
+  }, [results, job, bestMse])
 
   const candidateParams = useMemo(() => {
-    const p = (results?.best_params || job?.options?.seed_params) as Record<string, unknown> | undefined
+    const p = (results?.best_params || job?.best_params || job?.options?.seed_params) as Record<string, unknown> | undefined
     return {
       np: Number(p?.Np ?? p?.np ?? p?.prediction_horizon ?? job?.options?.prediction_horizon ?? 12),
       nc: Number(p?.Nc ?? p?.nc ?? p?.control_horizon ?? job?.options?.control_horizon ?? 4),
@@ -230,12 +230,12 @@ print(f"MPC Controller initialized: Np={Np}, Nc={Nc}, dt={dt}")
             <TrendingDown className="size-3.5 text-purple-500" />
           </div>
           <div className="mt-1 flex items-baseline gap-1 font-mono text-xl font-bold text-foreground">
-            {typeof bestMse === 'number' ? bestMse.toFixed(5) : '0.0142'}
+            {typeof bestMse === 'number' ? bestMse.toFixed(5) : (job?.status === 'running' ? 'Solving...' : '—')}
             <span className="text-[10px] text-muted font-normal">MSE</span>
           </div>
           <div className="mt-0.5 flex items-center justify-between text-[10.5px]">
             <span className="text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
-              <CheckCircle2 className="size-3" /> Minimum found
+              <CheckCircle2 className="size-3" /> {typeof bestMse === 'number' ? 'Minimum found' : (job?.status === 'running' ? 'Optimizing...' : 'Pending')}
             </span>
             {improvementPct && (
               <span className="rounded bg-emerald-500/15 px-1 py-0.2 font-mono text-[10px] text-emerald-600 dark:text-emerald-300">
@@ -257,7 +257,7 @@ print(f"MPC Controller initialized: Np={Np}, Nc={Nc}, dt={dt}")
             <span className="text-[10px] text-muted font-normal">/ {maxIter} rounds</span>
           </div>
           <p className="mt-0.5 text-[10.5px] text-purple-600 dark:text-purple-300 font-medium truncate">
-            {results?.termination_reason || 'Actor-Critic-Juror loop'}
+            {results?.termination_reason || (job?.stage ? `Stage: ${job.stage}` : 'Actor-Critic-Juror loop')}
           </p>
         </div>
 
@@ -271,7 +271,7 @@ print(f"MPC Controller initialized: Np={Np}, Nc={Nc}, dt={dt}")
           <div className="mt-1 flex items-baseline gap-1 font-mono text-xl font-bold text-foreground">
             {typeof results?.metrics?.avg_solve_time === 'number'
               ? (results.metrics.avg_solve_time * 1000).toFixed(2)
-              : '1.45'}{' '}
+              : (job?.status === 'running' ? 'Computing...' : '—')}{' '}
             <span className="text-[10px] text-muted font-normal">ms/step</span>
           </div>
           <p className="mt-0.5 text-[10.5px] text-cyan-600 dark:text-cyan-300 font-medium">OSQP sparse QP solver</p>
@@ -300,10 +300,14 @@ print(f"MPC Controller initialized: Np={Np}, Nc={Nc}, dt={dt}")
             <Coins className="size-3.5 text-amber-500" />
           </div>
           <div className="mt-1 flex items-baseline gap-1 font-mono text-xl font-bold text-amber-600 dark:text-amber-300">
-            ${results?.usage?.total_cost !== undefined ? Number(results.usage.total_cost).toFixed(4) : '0.0042'}
+            {results?.usage?.total_cost !== undefined
+              ? `$${Number(results.usage.total_cost).toFixed(4)}`
+              : (currentIter > 0 ? `$${(currentIter * 0.0006).toFixed(4)}` : '—')}
           </div>
           <p className="mt-0.5 text-[10.5px] text-muted-text font-mono truncate">
-            {results?.usage?.total_tokens ? `${Number(results.usage.total_tokens).toLocaleString()} tokens` : `${currentIter * 1250} tokens`}
+            {results?.usage?.total_tokens
+              ? `${Number(results.usage.total_tokens).toLocaleString()} tokens`
+              : (currentIter > 0 ? `${(currentIter * 980).toLocaleString()} tokens est.` : 'Awaiting start')}
           </p>
         </div>
       </div>
@@ -474,8 +478,8 @@ print(f"MPC Controller initialized: Np={Np}, Nc={Nc}, dt={dt}")
             {/* 3 Columns (lg:col-span-8 xl:col-span-9): Closed-Loop Time-Domain Oscilloscope */}
             <div className="lg:col-span-8 xl:col-span-9">
               <MpcSimulationPlot
-                series={results?.series as SimSeriesData | null}
-                baselineSeries={results?.baseline_series as SimSeriesData | null}
+                series={(results?.series || job?.series) as SimSeriesData | null}
+                baselineSeries={(results?.baseline_series || job?.baseline_series) as SimSeriesData | null}
                 currentIteration={currentIter}
                 bestMse={bestMse}
               />
@@ -567,11 +571,11 @@ print(f"MPC Controller initialized: Np={Np}, Nc={Nc}, dt={dt}")
           {/* Row 3: Full-Width 7-Convergence Curves in 4x2 Grid */}
           <div className="rounded-2xl border border-border bg-surface-elevated p-4 shadow-sm">
             <MpcConvergenceCharts
-              mseHistory={results?.mse_history}
+              mseHistory={results?.mse_history || job?.mse_history}
               overshootHistory={results?.overshoot_history}
               settlingHistory={results?.settling_history}
               effortHistory={results?.effort_history}
-              paramsHistory={results?.params_history}
+              paramsHistory={results?.params_history || job?.params_history}
               dtHistory={results?.metrics?.dt_history as number[] | undefined}
               bestMse={bestMse}
             />

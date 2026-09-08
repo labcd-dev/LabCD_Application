@@ -153,6 +153,13 @@ class MPCJobStatusResponse(BaseModel):
     project_id: str | None = None
     options: MPCJobOptions | None = None
     system_name: str | None = None
+    # Live telemetry fields for real-time streaming
+    series: dict[str, Any] | None = None
+    baseline_series: dict[str, Any] | None = None
+    best_params: Any = None
+    best_mse: float | None = None
+    mse_history: list[Any] = Field(default_factory=list)
+    params_history: list[Any] = Field(default_factory=list)
 
 
 class MPCJobResultsResponse(BaseModel):
