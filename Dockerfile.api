@@ -2,9 +2,38 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+ENV DEBIAN_FRONTEND=noninteractive
+
+# graphviz / octave: plant & diagram tooling (own layer so TeX rebuilds
+# do not re-download these when only the TeX step is invalidated).
+# Acquire::Retries helps with flaky deb.debian.org mirrors.
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends graphviz octave && \
-    rm -rf /var/lib/apt/lists/*
+    apt-get install -y --no-install-recommends \
+        -o Acquire::Retries=5 \
+        -o Acquire::http::Timeout=120 \
+        -o Acquire::https::Timeout=120 \
+        graphviz \
+        octave \
+    && rm -rf /var/lib/apt/lists/*
+
+# XeLaTeX for Adaptive engineering PDFs (math, tables, plots).
+# Matches labcd_pdfmaker xelatex_backend preamble (amsmath, booktabs, graphicx,
+# breqn, hyperref, geometry, xcolor, fancyvrb, parskip).
+# --fix-missing recovers partial downloads after mirror blips.
+# ~350 MB download / ~1 GB installed — expect several minutes on slow links.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends --fix-missing \
+        -o Acquire::Retries=5 \
+        -o Acquire::http::Timeout=120 \
+        -o Acquire::https::Timeout=120 \
+        texlive-xetex \
+        texlive-latex-recommended \
+        texlive-latex-extra \
+        texlive-fonts-recommended \
+        texlive-science \
+        fonts-lmodern \
+    && rm -rf /var/lib/apt/lists/* \
+    && which xelatex
 
 COPY requirements.txt .
 COPY packages/labcd_agents ./packages/labcd_agents

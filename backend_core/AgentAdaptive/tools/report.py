@@ -1,8 +1,60 @@
 import datetime
+import re
 
 from labcd_pdfmaker import Backend, ReportBuilder
 
 from . import model_pricing
+
+
+def normalize_latex_delimiters(text: str) -> str:
+    """Convert \\[...\\] / \\(...\\) to $$...$$ / $...$ for markdown/XeLaTeX path.
+
+    Shared by Streamlit and the Adaptive API so both PDF paths typeset the same.
+    """
+    if not text:
+        return text
+    text = re.sub(r"\\\[(.*?)\\\]", lambda m: "$$" + m.group(1) + "$$", text, flags=re.DOTALL)
+    text = re.sub(r"\\\((.*?)\\\)", lambda m: "$" + m.group(1) + "$", text, flags=re.DOTALL)
+    return text
+
+
+_ALIGN_ENV_RE = re.compile(
+    r"\$?\$?\s*\\begin\{(aligned|align\*?|gather\*?)\}(.*?)\\end\{\1\}\s*\$?\$?",
+    re.DOTALL,
+)
+
+
+def sanitize_latex_environments(text: str) -> str:
+    """Flatten align/aligned/gather environments into display math lines.
+
+    ReportLab and some markdown→TeX paths mishandle nested align inside $...$;
+    Streamlit and the API both apply this before build_pdf_report.
+    """
+    if not text:
+        return text
+
+    def _fix(m):
+        body = m.group(2)
+        lines = re.split(r"\\\\(?:\[\d+pt\])?", body)
+        out = []
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            line = line.replace("&", "")
+            for cmd in (r"\quad", r"\qquad", r"\,", r"\!", r"\bigl", r"\bigr", r"\Bigl", r"\Bigr"):
+                line = line.replace(cmd, "")
+            out.append("$$" + line.strip() + "$$")
+        return "\n\n".join(out)
+
+    return _ALIGN_ENV_RE.sub(_fix, text)
+
+
+def prepare_summary_markdown(text: str) -> str:
+    """Apply the same LaTeX delimiter + environment sanitization Streamlit uses."""
+    if not text:
+        return text or ""
+    return normalize_latex_delimiters(sanitize_latex_environments(text))
 
 
 def _pct_cell(value) -> str:
@@ -252,13 +304,22 @@ def build_pdf_report(summary_markdown: str, figures,
                       final_metrics=None, abstract_markdown=None,
                       prefer_xelatex: bool = True) -> bytes:
     # Prefer XeLaTeX for real math typesetting (same path as Streamlit).
-    # Fall back to AUTO/reportlab only when xelatex is not installed.
+    # When prefer_xelatex is True, do NOT silently fall back to ReportLab
+    # (literal $...$); raise a clear error so API/UI can surface it.
     try:
         from labcd_pdfmaker import xelatex_available
         has_xelatex = bool(xelatex_available())
     except Exception:
         has_xelatex = False
-    if prefer_xelatex and has_xelatex:
+    if prefer_xelatex:
+        if not has_xelatex:
+            raise RuntimeError(
+                "XeLaTeX is required for Adaptive engineering reports (formulas, "
+                "tables, and plots) but was not found on PATH. Install a LaTeX "
+                "distribution that includes XeLaTeX (e.g. the 'texlive-xetex' "
+                "package on Debian/Ubuntu, or MiKTeX/TeX Live on Windows/macOS), "
+                "then retry the PDF download."
+            )
         backend = Backend.XELATEX
     else:
         backend = Backend.AUTO
