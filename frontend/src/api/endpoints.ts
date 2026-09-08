@@ -1019,7 +1019,10 @@ export const adaptiveApi = {
     onEvent: (event: string, data: any) => void,
     onError?: (err: unknown) => void,
   ) => streamEvents(`/adaptive/jobs/${jobId}/events`, onEvent, onError),
-  getReportPdfUrl: (jobId: string) => `${API_BASE}/adaptive/jobs/${jobId}/report.pdf`,
+  getReportPdfUrl: (jobId: string) => {
+    const token = getAuthToken()
+    return `${API_BASE}/adaptive/jobs/${jobId}/report.pdf${token ? `?access_token=${encodeURIComponent(token)}` : ''}`
+  },
   /** Authenticated PDF download — browser navigation does not send JWT. */
   downloadReportPdf: async (jobId: string, filename?: string): Promise<void> => {
     const token = getAuthToken()
@@ -1074,7 +1077,10 @@ export const mpcApi = {
       body: JSON.stringify(body),
     }),
   getExportScriptUrl: (jobId: string) => `${API_BASE}/mpc/jobs/${jobId}/export-script`,
-  getReportPdfUrl: (jobId: string) => `${API_BASE}/mpc/jobs/${jobId}/report.pdf`,
+  getReportPdfUrl: (jobId: string) => {
+    const token = getAuthToken()
+    return `${API_BASE}/mpc/jobs/${jobId}/report.pdf${token ? `?access_token=${encodeURIComponent(token)}` : ''}`
+  },
   getExportScript: (jobId: string) =>
     apiFetch<string>(`/mpc/jobs/${jobId}/export-script`),
   /** Authenticated PDF download — browser navigation does not send JWT. */

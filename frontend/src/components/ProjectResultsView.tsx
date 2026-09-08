@@ -389,7 +389,9 @@ export function ProjectResultsView({
           results={results as unknown as AdaptiveJobResultsResponse}
           onDownloadReport={() => {
             if (jobId) {
-              window.open(adaptiveApi.getReportPdfUrl(jobId), '_blank')
+              void adaptiveApi.downloadReportPdf(jobId).catch((err) => {
+                console.error('Failed to download Adaptive PDF report:', err)
+              })
             }
           }}
         />
