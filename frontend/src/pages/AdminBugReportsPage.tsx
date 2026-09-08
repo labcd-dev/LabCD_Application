@@ -1,10 +1,11 @@
 import { Navigate } from 'react-router-dom'
 import { useCallback, useEffect, useState } from 'react'
-import { RefreshCw } from 'lucide-react'
+import { RefreshCw, ZoomIn } from 'lucide-react'
 import { bugReportsApi } from '../api/endpoints'
 import type { BugReport, BugReportSettings } from '../api/types'
 import { AdminDownloadCsvButton } from '../components/admin/AdminDownloadCsvButton'
 import { AdminPagination } from '../components/admin/AdminPagination'
+import { ImageModal } from '../components/ImageModal'
 import { StatusMessage } from '../components/StatusMessage'
 import { useAuth } from '../context/AuthContext'
 import { useClientPagination } from '../hooks/useClientPagination'
@@ -47,6 +48,11 @@ export function AdminBugReportsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [updatingId, setUpdatingId] = useState<number | null>(null)
+  const [modalImage, setModalImage] = useState<{
+    url: string
+    title: string
+    subtitle?: string
+  } | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -249,11 +255,30 @@ export function AdminBugReportsPage() {
                       <td className="px-2 py-2 capitalize text-foreground">{report.status}</td>
                       <td className="px-2 py-2">
                         {report.image_url ? (
-                          <img
-                            src={report.image_url}
-                            alt=""
-                            className="size-12 rounded-md border border-border object-cover"
-                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setModalImage({
+                                url: report.image_url!,
+                                title: `Bug Report #${report.id}`,
+                                subtitle: [report.user_email, formatDateTime(report.created_at)]
+                                  .filter(Boolean)
+                                  .join(' • '),
+                              })
+                            }
+                            className="group relative block overflow-hidden rounded-md border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all hover:border-primary/60 hover:shadow-md cursor-pointer"
+                            title="Click to view full screenshot"
+                            aria-label={`View screenshot for report #${report.id}`}
+                          >
+                            <img
+                              src={report.image_url}
+                              alt=""
+                              className="size-12 object-cover transition-transform duration-200 group-hover:scale-110"
+                            />
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+                              <ZoomIn className="size-4 text-white drop-shadow" aria-hidden />
+                            </div>
+                          </button>
                         ) : (
                           <span className="text-muted-text">—</span>
                         )}
@@ -340,17 +365,43 @@ export function AdminBugReportsPage() {
           </dl>
           {selected.image_url && (
             <div className="mt-4 overflow-hidden rounded-xl border border-border">
-              <a href={selected.image_url} target="_blank" rel="noreferrer">
+              <button
+                type="button"
+                onClick={() =>
+                  setModalImage({
+                    url: selected.image_url!,
+                    title: `Bug Report #${selected.id}`,
+                    subtitle: [selected.user_email, formatDateTime(selected.created_at)]
+                      .filter(Boolean)
+                      .join(' • '),
+                  })
+                }
+                className="group relative block w-full text-left focus:outline-none cursor-pointer"
+                title="Click to view full screenshot in modal"
+                aria-label="Expand bug screenshot"
+              >
                 <img
                   src={selected.image_url}
                   alt="Bug screenshot"
-                  className="max-h-[420px] w-full object-contain bg-surface-muted"
+                  className="max-h-[420px] w-full object-contain bg-surface-muted transition-opacity group-hover:opacity-90"
                 />
-              </a>
+                <div className="absolute top-3 right-3 flex items-center gap-1.5 rounded-lg bg-black/70 px-2.5 py-1.5 text-xs font-medium text-white backdrop-blur-sm opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                  <ZoomIn className="size-3.5" aria-hidden />
+                  <span>Click to expand</span>
+                </div>
+              </button>
             </div>
           )}
         </section>
       )}
+
+      <ImageModal
+        open={Boolean(modalImage)}
+        imageUrl={modalImage?.url ?? null}
+        title={modalImage?.title}
+        subtitle={modalImage?.subtitle}
+        onClose={() => setModalImage(null)}
+      />
     </div>
   )
 }
