@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom'
 import { Stethoscope, X } from 'lucide-react'
 import type { AdaptiveDiagnosis, DiagnosisApplyPatch } from '../../api/types'
 import { btnBase, btnCompact, btnPrimary } from '../../lib/classes'
@@ -31,9 +32,9 @@ export function AdaptiveDiagnosisModal({
 }: AdaptiveDiagnosisModalProps) {
   if (!open || !diagnosis?.report) return null
 
-  return (
+  const modalNode = (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-[1px]"
+      className="fixed inset-0 z-[9998] flex items-center justify-center p-4 bg-black/60 backdrop-blur-[2px] animate-in fade-in-50 duration-150"
       role="dialog"
       aria-modal="true"
       aria-labelledby="adaptive-diagnosis-modal-title"
@@ -104,4 +105,6 @@ export function AdaptiveDiagnosisModal({
       </div>
     </div>
   )
+
+  return typeof document !== 'undefined' ? createPortal(modalNode, document.body) : null
 }

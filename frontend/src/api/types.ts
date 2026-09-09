@@ -426,6 +426,26 @@ export interface TokenResponse {
 export type ProjectPipelineType = 'siloDesign' | 'muloDesign' | 'adaptiveDesign' | 'mpcDesign'
 export type ProjectStatus = 'draft' | 'running' | 'completed' | 'failed' | 'cancelled'
 
+export interface SessionMetadata {
+  tokens?: {
+    prompt?: number
+    completion?: number
+    total?: number
+    total_tokens?: number
+    [key: string]: unknown
+  } | null
+  cost_usd?: number | null
+  error_counts?: number | null
+  wall_clock_time_s?: number | null
+  wall_clock_time_seconds?: number | null
+  [key: string]: unknown
+}
+
+export interface DesignGradePayload {
+  rating: number
+  comment?: string | null
+}
+
 export interface ProjectSummary {
   id: number
   user_id: number
@@ -439,6 +459,11 @@ export interface ProjectSummary {
   llm_model: string
   has_results: boolean
   job_id?: string | null
+  score?: number | null
+  success?: boolean | null
+  rating?: number | null
+  design_grade?: { rating: number; comment?: string | null; created_at?: string | null } | null
+  session_metadata?: SessionMetadata | null
   created_at: string
   updated_at: string
 }
@@ -790,21 +815,6 @@ export interface AdaptiveJobStatusResponse {
   options?: AdaptiveJobOptions | null
 }
 
-export interface SessionMetadata {
-  tokens?: {
-    prompt?: number
-    completion?: number
-    total?: number
-    total_tokens?: number
-    [key: string]: unknown
-  } | null
-  cost_usd?: number | null
-  error_counts?: number | null
-  wall_clock_time_s?: number | null
-  wall_clock_time_seconds?: number | null
-  [key: string]: unknown
-}
-
 export interface AdaptiveDiagnosisOption {
   label?: string
   value?: string | number
@@ -902,6 +912,9 @@ export interface AdaptiveJobSummary {
   status: AdaptiveJobStatus
   stage: AdaptiveJobStage
   system_name?: string | null
+  score?: number | null
+  success?: boolean | null
+  rating?: number | null
   created_at: string
   updated_at: string
   user_id?: number | null
@@ -1098,6 +1111,14 @@ export interface MPCJobResultsResponse {
   job_id: string
   status: MPCJobStatus
   stage: MPCJobStage
+  score?: number | null
+  success?: boolean | null
+  design_grade?: {
+    rating: number
+    comment?: string | null
+    created_at?: string | null
+  } | null
+  session_metadata?: SessionMetadata | null
   best_params?: Record<string, unknown> | null
   best_mse?: number | null
   iteration: number
@@ -1172,6 +1193,9 @@ export interface MPCJobSummary {
   status: MPCJobStatus
   stage: MPCJobStage
   system_name?: string | null
+  score?: number | null
+  success?: boolean | null
+  rating?: number | null
   created_at: string
   updated_at: string
   user_id?: number | null
