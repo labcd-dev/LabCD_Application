@@ -12,6 +12,8 @@ from backend_api.http.dependencies import require_action
 from backend_api.http.schemas.adaptive import (
     AdaptiveClarifyRequest,
     AdaptiveClarifyResponse,
+    AdaptiveDiagnosisChatRequest,
+    AdaptiveDiagnosisChatResponse,
     AdaptiveJobCreateRequest,
     AdaptiveJobCreateResponse,
     AdaptiveJobResultsResponse,
@@ -26,6 +28,7 @@ from backend_api.http.services.adaptive_job_store import (
 from backend_api.http.services.adaptive_service import (
     cancel_job,
     clarify_job,
+    diagnosis_chat,
     get_export_script,
     get_job,
     get_job_report_pdf,
@@ -129,6 +132,32 @@ def get_adaptive_job_results(
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found") from exc
 
+
+
+
+@router.post("/jobs/{job_id}/diagnosis/chat", response_model=AdaptiveDiagnosisChatResponse)
+def adaptive_diagnosis_chat(
+    job_id: str,
+    request: AdaptiveDiagnosisChatRequest,
+    user: User = Depends(require_action("module:adaptive")),
+    store: InMemoryAdaptiveJobStore = Depends(get_adaptive_store),
+) -> AdaptiveDiagnosisChatResponse:
+    try:
+        record = store.get(job_id)
+        if record is None:
+            raise KeyError(job_id)
+        _assert_job_access(record.user_id, user)
+        out = diagnosis_chat(
+            job_id,
+            request.message,
+            history=request.history,
+            store=store,
+        )
+        return AdaptiveDiagnosisChatResponse(reply=out["reply"], usage=out.get("usage"))
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 @router.get("/jobs/{job_id}/report.pdf")
 def download_adaptive_report_pdf(

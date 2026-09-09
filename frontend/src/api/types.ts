@@ -426,26 +426,6 @@ export interface TokenResponse {
 export type ProjectPipelineType = 'siloDesign' | 'muloDesign' | 'adaptiveDesign' | 'mpcDesign'
 export type ProjectStatus = 'draft' | 'running' | 'completed' | 'failed' | 'cancelled'
 
-export interface SessionMetadata {
-  tokens?: {
-    prompt?: number
-    completion?: number
-    total?: number
-    total_tokens?: number
-    [key: string]: unknown
-  } | null
-  cost_usd?: number | null
-  error_counts?: number | null
-  wall_clock_time_s?: number | null
-  wall_clock_time_seconds?: number | null
-  [key: string]: unknown
-}
-
-export interface DesignGradePayload {
-  rating: number
-  comment?: string | null
-}
-
 export interface ProjectSummary {
   id: number
   user_id: number
@@ -459,11 +439,6 @@ export interface ProjectSummary {
   llm_model: string
   has_results: boolean
   job_id?: string | null
-  score?: number | null
-  success?: boolean | null
-  rating?: number | null
-  design_grade?: { rating: number; comment?: string | null; created_at?: string | null } | null
-  session_metadata?: SessionMetadata | null
   created_at: string
   updated_at: string
 }
@@ -815,6 +790,78 @@ export interface AdaptiveJobStatusResponse {
   options?: AdaptiveJobOptions | null
 }
 
+export interface SessionMetadata {
+  tokens?: {
+    prompt?: number
+    completion?: number
+    total?: number
+    total_tokens?: number
+    [key: string]: unknown
+  } | null
+  cost_usd?: number | null
+  error_counts?: number | null
+  wall_clock_time_s?: number | null
+  wall_clock_time_seconds?: number | null
+  [key: string]: unknown
+}
+
+export interface AdaptiveDiagnosisOption {
+  label?: string
+  value?: string | number
+  [key: string]: unknown
+}
+
+export interface AdaptiveDiagnosisSuggestion {
+  title?: string
+  field?: string
+  lever?: string | null
+  target?: string | null
+  detail?: string
+  rationale?: string
+  text?: string
+  options?: AdaptiveDiagnosisOption[] | unknown
+  values?: unknown
+  apply_values?: unknown
+  [key: string]: unknown
+}
+
+export interface AdaptiveDiagnosisReport {
+  headline?: string
+  explanation?: string | string[]
+  cause?: string
+  summary?: string
+  diagnosis?: string
+  suggestions?: AdaptiveDiagnosisSuggestion[]
+  chart_series?: string[]
+  error?: string
+  [key: string]: unknown
+}
+
+export interface AdaptiveDiagnosis {
+  report?: AdaptiveDiagnosisReport | null
+  evidence?: Record<string, unknown> | null
+  chart_data?: Record<string, unknown> | null
+  [key: string]: unknown
+}
+
+/** Patch applied when user picks a concrete diagnoser suggestion option. */
+export interface DiagnosisApplyPatch {
+  field?: string
+  lever?: string
+  value?: unknown
+  label?: string
+}
+
+export interface AdaptiveDiagnosisChatRequest {
+  message: string
+  history?: Array<{ role: string; text?: string; content?: string }>
+}
+
+export interface AdaptiveDiagnosisChatResponse {
+  reply: string
+  usage?: Record<string, unknown> | null
+}
+
 export interface AdaptiveJobResultsResponse {
   job_id: string
   status: AdaptiveJobStatus
@@ -846,6 +893,7 @@ export interface AdaptiveJobResultsResponse {
     names?: string[]
     [key: string]: unknown
   } | null
+  diagnosis?: AdaptiveDiagnosis | null
   error?: string | null
 }
 
@@ -854,9 +902,6 @@ export interface AdaptiveJobSummary {
   status: AdaptiveJobStatus
   stage: AdaptiveJobStage
   system_name?: string | null
-  score?: number | null
-  success?: boolean | null
-  rating?: number | null
   created_at: string
   updated_at: string
   user_id?: number | null
@@ -1053,14 +1098,6 @@ export interface MPCJobResultsResponse {
   job_id: string
   status: MPCJobStatus
   stage: MPCJobStage
-  score?: number | null
-  success?: boolean | null
-  design_grade?: {
-    rating: number
-    comment?: string | null
-    created_at?: string | null
-  } | null
-  session_metadata?: SessionMetadata | null
   best_params?: Record<string, unknown> | null
   best_mse?: number | null
   iteration: number
@@ -1135,9 +1172,6 @@ export interface MPCJobSummary {
   status: MPCJobStatus
   stage: MPCJobStage
   system_name?: string | null
-  score?: number | null
-  success?: boolean | null
-  rating?: number | null
   created_at: string
   updated_at: string
   user_id?: number | null

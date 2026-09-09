@@ -119,11 +119,22 @@ class AdaptiveJobResultsResponse(BaseModel):
     clarification_record: list[dict[str, Any]] = Field(default_factory=list)
     usage: dict[str, Any] | None = None
     series: dict[str, Any] | None = None
+    diagnosis: dict[str, Any] | None = None
     error: str | None = None
     score: float | None = None
     success: bool | None = None
     design_grade: dict[str, Any] | None = None
     session_metadata: dict[str, Any] | None = None
+
+
+class AdaptiveDiagnosisChatRequest(BaseModel):
+    message: str
+    history: list[dict[str, Any]] | None = None
+
+
+class AdaptiveDiagnosisChatResponse(BaseModel):
+    reply: str
+    usage: dict[str, Any] | None = None
 
 
 class GradeDesignRequest(BaseModel):

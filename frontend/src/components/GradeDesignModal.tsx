@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { createPortal } from 'react-dom'
 import { Loader2, Star, X } from 'lucide-react'
 import { adaptiveApi, mpcApi, projectsApi } from '../api/endpoints'
 import { btnBase, btnCompact, btnPrimary } from '../lib/classes'
@@ -96,9 +95,9 @@ export function GradeDesignModal({
     }
   }
 
-  const modalNode = (
+  return (
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center bg-[rgba(6,8,11,0.75)] p-4 backdrop-blur-[6px] animate-in fade-in-50 duration-150"
+      className="fixed inset-0 z-[500] flex items-center justify-center bg-[rgba(6,8,11,0.75)] p-4 backdrop-blur-[4px] animate-in fade-in-50 duration-150"
       role="presentation"
       onClick={(e) => {
         if (e.target === e.currentTarget && !submitting) onClose()
@@ -290,6 +289,4 @@ export function GradeDesignModal({
       </div>
     </div>
   )
-
-  return typeof document !== 'undefined' ? createPortal(modalNode, document.body) : null
 }

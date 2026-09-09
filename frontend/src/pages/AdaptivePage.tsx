@@ -16,6 +16,7 @@ import type {
   AdaptiveJobOptions,
   AdaptiveJobResultsResponse,
   AdaptiveJobStatusResponse,
+  DiagnosisApplyPatch,
 } from '../api/types'
 import { AdaptiveClarifierChat } from '../components/adaptive/AdaptiveClarifierChat'
 import { AdaptiveDashboard } from '../components/adaptive/AdaptiveDashboard'
@@ -52,6 +53,7 @@ export function AdaptivePage() {
   const [gradeModalOpen, setGradeModalOpen] = useState(false)
   const [showCompletedToast, setShowCompletedToast] = useState(false)
   const hasPromptedGradeRef = useRef(false)
+  const [diagnosisApplyUsed, setDiagnosisApplyUsed] = useState(false)
 
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -105,6 +107,7 @@ export function AdaptivePage() {
           void fetchFinalResults()
           if (pollTimerRef.current) clearInterval(pollTimerRef.current)
         } else if (currentJob.status === 'failed' || currentJob.status === 'cancelled') {
+          void fetchFinalResults()
           if (pollTimerRef.current) clearInterval(pollTimerRef.current)
         }
       } catch (err) {
@@ -120,7 +123,7 @@ export function AdaptivePage() {
           setJob((prev) => (prev ? { ...prev, progress: [...prev.progress, data] } : prev))
         } else if (event === 'status') {
           setJob((prev) => (prev ? { ...prev, ...data } : prev))
-          if (data.status === 'completed') {
+          if (data.status === 'completed' || data.status === 'failed') {
             void fetchFinalResults()
           }
         } else if (event === 'done') {
@@ -145,29 +148,61 @@ export function AdaptivePage() {
     }
   }, [jobId])
 
-  // Reset prompted state on jobId change
   useEffect(() => {
-    hasPromptedGradeRef.current = false
-    setShowCompletedToast(false)
-    setGradeModalOpen(false)
-  }, [jobId])
-
-  useEffect(() => {
-    const isFinished =
-      results &&
-      (results.status === 'completed' ||
-        job?.status === 'completed' ||
-        results.score !== undefined ||
-        results.final_metrics !== undefined)
-    if (isFinished && !results?.design_grade && !hasPromptedGradeRef.current) {
+    if (results && results.status === 'completed' && !results.design_grade && !hasPromptedGradeRef.current) {
       hasPromptedGradeRef.current = true
       setShowCompletedToast(true)
     }
-  }, [results, job?.status])
+  }, [results])
+
+  const applyDiagnosisSuggestion = (patch: DiagnosisApplyPatch) => {
+    // Write suggestion into form knobs only (does not start a job). Max 1 Apply enforced in dashboard.
+    const field = (patch.lever || patch.field || '').toLowerCase()
+    const value = patch.value
+    if (value == null) return
+    if (field.includes('reference') || field === 'reference') {
+      setReferenceFn(String(value))
+    } else if (field.includes('initial') || field === 'x0' || field.includes('x0')) {
+      if (Array.isArray(value)) {
+        setX0Str(value.map(String).join(', '))
+      } else {
+        // options sometimes encode vectors as "0,0,0,0" or "0.1,0,0,0"
+        setX0Str(String(value))
+      }
+    } else if (field.includes('step') || field.includes('solver') || field === 'step_time') {
+      const n = typeof value === 'number' ? value : parseFloat(String(value))
+      if (!Number.isNaN(n) && n > 0) setSolverStep(n)
+    } else if (field.includes('sim') && field.includes('time')) {
+      const n = typeof value === 'number' ? value : parseFloat(String(value))
+      if (!Number.isNaN(n) && n > 0) setSimTime(n)
+    }
+    setDiagnosisApplyUsed(true)
+  }
+
+  const handleRetryFromDiagnosis = () => {
+    // Do not start a new design in this session — return to the launch form.
+    // Form knobs (including any Applied suggestion) are preserved.
+    if (pollTimerRef.current) clearInterval(pollTimerRef.current)
+    setJobId(null)
+    setJob(null)
+    setResults(null)
+    setError(null)
+    setShowCompletedToast(false)
+    // Keep diagnosisApplyUsed so Apply stays consumed until the next successful Launch
+    requestAnimationFrame(() => {
+      const el = document.getElementById('adaptive-launch-section')
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      } else {
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+      }
+    })
+  }
 
   const handleStartJob = async () => {
     setError(null)
     setLoading(true)
+    setDiagnosisApplyUsed(false)
 
     const artifactId = sessionStorage.getItem('labcd_last_artifact_id')
     const x0 = x0Str.split(',').map((v) => parseFloat(v.trim()) || 0.0)
@@ -416,7 +451,10 @@ export function AdaptivePage() {
 
         {/* Setup Screen when no job running */}
         {!job && (
-          <div className="relative overflow-hidden rounded-2xl border border-border bg-surface-elevated p-6 sm:p-7 shadow-sm">
+          <div
+            id="adaptive-launch-section"
+            className="relative overflow-hidden rounded-2xl border border-border bg-surface-elevated p-6 sm:p-7 shadow-sm"
+          >
             {/* Top gradient highlight beam */}
             <div className="pointer-events-none absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-cyan-500/70 to-transparent" />
 
@@ -622,6 +660,15 @@ export function AdaptivePage() {
           <AdaptiveDashboard
             job={job}
             results={results}
+            onRetryFromDiagnosis={handleRetryFromDiagnosis}
+            onApplyDiagnosisSuggestion={applyDiagnosisSuggestion}
+            diagnosisApplyUsed={diagnosisApplyUsed}
+            currentDiagnosisInputs={{
+              reference: referenceFn,
+              x0: x0Str,
+              solverStep,
+              simTime,
+            }}
             onDownloadReport={async () => {
               if (jobId) {
                 try {

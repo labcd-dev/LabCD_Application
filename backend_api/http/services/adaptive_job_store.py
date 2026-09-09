@@ -76,6 +76,7 @@ class JobRecord:
     design_grade: dict[str, Any] | None = None
     session_metadata: dict[str, Any] | None = None
     export_script: str | None = None
+    diagnosis: dict[str, Any] | None = None
     created_at: datetime = field(default_factory=_now)
     updated_at: datetime = field(default_factory=_now)
 
@@ -108,6 +109,7 @@ class InMemoryAdaptiveJobStore:
                     "design_grade": record.design_grade,
                     "session_metadata": record.session_metadata,
                     "export_script": record.export_script,
+                    "diagnosis": record.diagnosis,
                 }
                 if row is None:
                     row = DBAdaptiveJob(
@@ -180,6 +182,7 @@ class InMemoryAdaptiveJobStore:
                     design_grade=res.get("design_grade"),
                     session_metadata=res.get("session_metadata"),
                     export_script=res.get("export_script"),
+                    diagnosis=res.get("diagnosis"),
                     created_at=row.created_at or _now(),
                     updated_at=row.updated_at or _now(),
                 )

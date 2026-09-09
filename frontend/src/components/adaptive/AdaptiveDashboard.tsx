@@ -8,6 +8,7 @@ import {
   Gauge,
   Search,
   ShieldCheck,
+  Stethoscope,
   Sliders,
   Sparkles,
   TrendingDown,
@@ -17,11 +18,15 @@ import {
 import type {
   AdaptiveJobResultsResponse,
   AdaptiveJobStatusResponse,
+  DiagnosisApplyPatch,
 } from '../../api/types'
 import { adaptiveApi } from '../../api/endpoints'
 import { btnBase, btnCompact } from '../../lib/classes'
 import { AdaptiveAgentFlowStrip } from './AdaptiveAgentFlowStrip'
 import { AdaptiveConvergenceCharts } from './AdaptiveConvergenceCharts'
+import { AdaptiveDiagnosisChat } from './AdaptiveDiagnosisChat'
+import { AdaptiveDiagnosisModal } from './AdaptiveDiagnosisModal'
+import { AdaptiveDiagnosisView } from './AdaptiveDiagnosisView'
 import { ScoreReportBadge } from '../ScoreReportBadge'
 
 /**
@@ -44,6 +49,17 @@ interface AdaptiveDashboardProps {
   job?: AdaptiveJobStatusResponse | null
   results?: AdaptiveJobResultsResponse | null
   onDownloadReport?: () => void
+  /** Re-run design with current form inputs. */
+  onRetryFromDiagnosis?: () => void
+  /** Write a suggestion into form inputs (max 1 apply enforced here). */
+  onApplyDiagnosisSuggestion?: (patch: DiagnosisApplyPatch) => void
+  diagnosisApplyUsed?: boolean
+  currentDiagnosisInputs?: {
+    reference?: string
+    x0?: string
+    solverStep?: number
+    simTime?: number
+  } | null
 }
 
 interface NormalizedSeries {
@@ -59,12 +75,43 @@ export function AdaptiveDashboard({
   job,
   results,
   onDownloadReport,
+  onRetryFromDiagnosis,
+  onApplyDiagnosisSuggestion,
+  diagnosisApplyUsed = false,
+  currentDiagnosisInputs = null,
 }: AdaptiveDashboardProps) {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'logs' | 'proof'>('dashboard')
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'logs' | 'proof' | 'diagnosis'>('dashboard')
   const [selectedSignal, setSelectedSignal] = useState<'states' | 'control' | 'disturbance' | 'error'>('states')
   const [reasoningFilter, setReasoningFilter] = useState('')
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
+  const [diagnosisModalOpen, setDiagnosisModalOpen] = useState(false)
+  const [localApplyUsed, setLocalApplyUsed] = useState(false)
+  const diagnosisModalShownForJob = useRef<string | null>(null)
   const logScrollRef = useRef<HTMLDivElement>(null)
+
+  const hasDiagnosis = Boolean(results?.diagnosis?.report)
+  const suggestionCount = Array.isArray(results?.diagnosis?.report?.suggestions)
+    ? results!.diagnosis!.report!.suggestions!.length
+    : 0
+  const applyUsed = diagnosisApplyUsed || localApplyUsed
+
+  useEffect(() => {
+    // New job → allow one Apply again
+    setLocalApplyUsed(false)
+  }, [results?.job_id])
+
+  useEffect(() => {
+    if (!hasDiagnosis || !results?.job_id) return
+    if (diagnosisModalShownForJob.current === results.job_id) return
+    diagnosisModalShownForJob.current = results.job_id
+    setDiagnosisModalOpen(true)
+  }, [hasDiagnosis, results?.job_id])
+
+  const handleApplyOption = (patch: DiagnosisApplyPatch) => {
+    if (applyUsed) return
+    setLocalApplyUsed(true)
+    onApplyDiagnosisSuggestion?.(patch)
+  }
 
   const tuningLogLen = Array.isArray(results?.tuning_log) ? results.tuning_log.length : 0
   const logRounds = (results?.tuning_log || [])
@@ -694,6 +741,25 @@ title('LabCD Adaptive Closed-Loop Response'); legend('show', 'Location', 'best')
           >
             <ShieldCheck className="size-3.5" /> Stability Proof &amp; Specs
           </button>
+
+          {hasDiagnosis && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('diagnosis')}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 transition-all shrink-0 whitespace-nowrap ${
+                activeTab === 'diagnosis'
+                  ? 'bg-amber-600 text-white shadow-sm'
+                  : 'text-amber-800 dark:text-amber-200 hover:text-amber-950 dark:hover:text-amber-50'
+              }`}
+            >
+              <Stethoscope className="size-3.5" /> Diagnoser
+              {suggestionCount > 0 && (
+                <span className="rounded-full bg-black/20 px-1.5 text-[10px] font-bold">
+                  {suggestionCount}
+                </span>
+              )}
+            </button>
+          )}
         </div>
 
         {/* Action shortcut buttons */}
@@ -1342,6 +1408,52 @@ title('LabCD Adaptive Closed-Loop Response'); legend('show', 'Location', 'best')
           )}
         </div>
       )}
+
+      {/* TAB: DIAGNOSER */}
+      {activeTab === 'diagnosis' && hasDiagnosis && (
+        <div className="space-y-4 animate-in fade-in-50 duration-150">
+          <AdaptiveDiagnosisView
+            diagnosis={results?.diagnosis}
+            onApplyOption={onApplyDiagnosisSuggestion ? handleApplyOption : undefined}
+            applyDisabled={applyUsed}
+            currentInputs={currentDiagnosisInputs}
+          />
+          {results?.job_id && <AdaptiveDiagnosisChat jobId={results.job_id} />}
+          {onRetryFromDiagnosis && (
+            <div className="flex flex-wrap gap-2 items-center">
+              <button
+                type="button"
+                className={`${btnBase} ${btnCompact} text-xs border border-amber-500/40 text-amber-900 dark:text-amber-100 hover:bg-amber-500/15`}
+                onClick={() => onRetryFromDiagnosis()}
+              >
+                Back to launch
+              </button>
+              {applyUsed && (
+                <span className="text-[11px] text-muted-text">
+                  Suggestion Apply already used (max 1). Launch form holds the applied value.
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      <AdaptiveDiagnosisModal
+        open={diagnosisModalOpen && hasDiagnosis}
+        diagnosis={results?.diagnosis}
+        onDismiss={() => setDiagnosisModalOpen(false)}
+        onViewDetails={() => {
+          setDiagnosisModalOpen(false)
+          setActiveTab('diagnosis')
+        }}
+        onRetry={() => {
+          setDiagnosisModalOpen(false)
+          onRetryFromDiagnosis?.()
+        }}
+        onApplyOption={onApplyDiagnosisSuggestion ? handleApplyOption : undefined}
+        applyDisabled={applyUsed}
+        currentInputs={currentDiagnosisInputs}
+      />
     </div>
   )
 }

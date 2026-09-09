@@ -145,6 +145,7 @@ def _pipeline_worker(description, opts, box):
                     summary = result["messages"][-1].content
                     abstract = result.get("abstract")
                     final_metrics = _final_metrics_from_pipeline(result, tuning_best)
+                    diagnosis = result.get("diagnosis")
             except Exception as e:
                 error = "%s: %s" % (type(e).__name__, e)
 
@@ -174,6 +175,7 @@ def _pipeline_worker(description, opts, box):
                           tuning_log=tuning_log, tuning_best=tuning_best,
                           cancelled=box["stop_event"].is_set(),
                           final_metrics=final_metrics,
+                          diagnosis=locals().get("diagnosis"),
                           clarification_record=opts.get("clarification_record"),
                           system_spec=opts.get("system_spec"),
                           tuning_objectives=opts.get("tuning_objectives"),
@@ -1222,6 +1224,29 @@ elif res:
 
         if render_run_scores(res.get("final_metrics"), spec=res.get("system_spec")):
             st.divider()
+
+        diagnosis = res.get("diagnosis")
+        if isinstance(diagnosis, dict) and diagnosis.get("report"):
+            report = diagnosis.get("report") or {}
+            with st.expander("Diagnoser report (failed / missed-target run)", expanded=True):
+                cause = report.get("cause") or report.get("summary") or report.get("diagnosis")
+                if cause:
+                    st.markdown("**Cause:** %s" % cause)
+                suggestions = report.get("suggestions") or []
+                if suggestions:
+                    st.markdown("**Suggestions:**")
+                    for i, s in enumerate(suggestions):
+                        if isinstance(s, dict):
+                            title = s.get("title") or s.get("field") or ("Suggestion %d" % (i + 1))
+                            detail = s.get("detail") or s.get("rationale") or s.get("text") or ""
+                            options = s.get("options") or s.get("values") or s.get("apply_values")
+                            st.markdown("- **%s** — %s" % (title, detail))
+                            if options:
+                                st.caption("Concrete values: %s" % options)
+                        else:
+                            st.markdown("- %s" % s)
+                else:
+                    st.json(report)
 
         finished_spec = res.get("system_spec") or st.session_state.get("system_spec")
         if finished_spec:

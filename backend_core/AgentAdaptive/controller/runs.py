@@ -37,6 +37,29 @@ def _d_hat_from_alog(alog):
     return None
 
 
+DIAGNOSTICS_CONTEXT_KEY = "_diagnostics_context"
+
+
+def _attach_diagnostics_context(components, method, system_section, u_report,
+                                states, inputs, outputs, refs, x0_vals, tuning,
+                                dt, t_end, t, y, ref, u, x_states, alog, for_tuning):
+    # just stashing raw stuff here, not building evidence yet -- that only
+    # happens if the run actually fails. skip during tuning rounds, same as attach_series
+    if for_tuning:
+        return components
+    n = min(len(outputs), len(refs))
+    paired_refs = [{"output": outputs[i], "expr": (refs[i].get("expr") or "")} for i in range(n)]
+    components[DIAGNOSTICS_CONTEXT_KEY] = {
+        "method": method,
+        "system_text": system_section,
+        "control_law_text": u_report,
+        "states": list(states), "inputs": list(inputs), "outputs": list(outputs),
+        "refs": paired_refs, "x0": list(x0_vals), "tuning": dict(tuning),
+        "dt": dt, "t_end": t_end,
+        "t": t, "y": y, "ref": ref, "u": u, "x": x_states, "alog": alog,
+    }
+    return components
+
 
 def _run_smc(states, dynamics, inputs, outputs, x0, refs,
              has_delta, has_disturbance, delta_exprs, dist_exprs,
@@ -92,6 +115,10 @@ def _run_smc(states, dynamics, inputs, outputs, x0, refs,
     controller, ref_orders, adaptive, u_symbolic, yd_symbols = build()
     u_report = _format_u_with_reference_smc(u_symbolic, yd_symbols, refs)
     stability_proof = _smc_stability_proof(has_delta, has_disturbance)
+    tuning_snapshot = dict(
+        surface_lambda=surface_lambda, K=K, Lam=Lam, phi_layer=phi_layer,
+        Gamma=Gamma, kappa=kappa, kappa_s=kappa_s, k2=k2, k3=k3, k4=k4,
+        sigma_W=sigma_W, N=N, width=width, rbf_spread=rbf_spread, rbf_normalize=rbf_normalize)
 
     if skip_simulation:
         components = {"intro": "(structure validated, numeric simulation deferred)",
@@ -118,6 +145,9 @@ def _run_smc(states, dynamics, inputs, outputs, x0, refs,
         attach_series(components, t, y, ref, u, x_states, dt=dt, t_end=t_end,
                       outputs=outputs, inputs=inputs, states=states,
                       include=not for_tuning)
+        _attach_diagnostics_context(components, "smc", system_section, u_report,
+                                    states, inputs, outputs, refs, x0_vals, tuning_snapshot,
+                                    dt, t_end, t, y, ref, u, x_states, None, for_tuning)
         return components, metrics
 
     if not explicit_uncertainty:
@@ -148,6 +178,9 @@ def _run_smc(states, dynamics, inputs, outputs, x0, refs,
         attach_series(components, t, y_on, ref, u_on, x_on, dt=dt, t_end=t_end,
                       outputs=outputs, inputs=inputs, states=states,
                       d_hat=_d_hat_from_alog(alog), include=not for_tuning)
+        _attach_diagnostics_context(components, "smc", system_section, u_report,
+                                    states, inputs, outputs, refs, x0_vals, tuning_snapshot,
+                                    dt, t_end, t, y_on, ref, u_on, x_on, alog, for_tuning)
         return components, metrics
 
     # the "off" run and disturbance-observer comparison only feed comparison
@@ -194,6 +227,9 @@ def _run_smc(states, dynamics, inputs, outputs, x0, refs,
     attach_series(components, t, y_on, ref, u_on, x_on, dt=dt, t_end=t_end,
                   outputs=outputs, inputs=inputs, states=states,
                   d_hat=_d_hat_from_alog(alog), include=not for_tuning)
+    _attach_diagnostics_context(components, "smc", system_section, u_report,
+                                states, inputs, outputs, refs, x0_vals, tuning_snapshot,
+                                dt, t_end, t, y_on, ref, u_on, x_on, alog, for_tuning)
     return components, metrics
 
 
@@ -246,6 +282,10 @@ def _run_backstepping(states, dynamics, inputs, outputs, x0, refs,
     controller, ref_orders, adaptive, u_law, yd = build(use_filtered_error)
     u_report = _format_u_with_reference_backstepping(u_law, yd, refs[0])
     stability_proof = _backstepping_stability_proof(has_delta, has_disturbance)
+    tuning_snapshot = dict(
+        c_gains=c_gains, Gamma=Gamma, kappa=kappa, k2=k2, k3=k3, k4=k4, sigma_W=sigma_W,
+        tau=tau, N=N, width=width, rbf_spread=rbf_spread, rbf_normalize=rbf_normalize,
+        use_filtered_error=use_filtered_error, lambda_I=lambda_I)
 
     if skip_simulation:
         components = {"intro": "(structure validated, numeric simulation deferred)",
@@ -272,6 +312,9 @@ def _run_backstepping(states, dynamics, inputs, outputs, x0, refs,
         attach_series(components, t, y, ref, u, x_states, dt=dt, t_end=t_end,
                       outputs=outputs, inputs=inputs, states=states,
                       include=not for_tuning)
+        _attach_diagnostics_context(components, "backstepping", system_section, u_report,
+                                    states, inputs, outputs, refs, x0_vals, tuning_snapshot,
+                                    dt, t_end, t, y, ref, u, x_states, None, for_tuning)
         return components, metrics
 
     if not explicit_uncertainty:
@@ -301,6 +344,9 @@ def _run_backstepping(states, dynamics, inputs, outputs, x0, refs,
         attach_series(components, t, y_on, ref, u_on, x_on, dt=dt, t_end=t_end,
                       outputs=outputs, inputs=inputs, states=states,
                       d_hat=_d_hat_from_alog(alog), include=not for_tuning)
+        _attach_diagnostics_context(components, "backstepping", system_section, u_report,
+                                    states, inputs, outputs, refs, x0_vals, tuning_snapshot,
+                                    dt, t_end, t, y_on, ref, u_on, x_on, alog, for_tuning)
         return components, metrics
 
     if not for_tuning and should_create_plots():
@@ -347,4 +393,7 @@ def _run_backstepping(states, dynamics, inputs, outputs, x0, refs,
     attach_series(components, t, y_on, ref, u_on, x_on, dt=dt, t_end=t_end,
                   outputs=outputs, inputs=inputs, states=states,
                   d_hat=_d_hat_from_alog(alog), include=not for_tuning)
+    _attach_diagnostics_context(components, "backstepping", system_section, u_report,
+                                states, inputs, outputs, refs, x0_vals, tuning_snapshot,
+                                dt, t_end, t, y_on, ref, u_on, x_on, alog, for_tuning)
     return components, metrics

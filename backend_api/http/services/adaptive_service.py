@@ -231,6 +231,7 @@ def _to_results(record: JobRecord) -> AdaptiveJobResultsResponse:
         clarification_record=list(record.clarification_record or []),
         usage=record.usage,
         series=record.series,
+        diagnosis=getattr(record, "diagnosis", None),
         error=record.error,
         score=score,
         success=success,
@@ -437,6 +438,7 @@ def _run_pipeline_thread(job_id: str, store: InMemoryAdaptiveJobStore) -> None:
                     break
 
         series = result.get("series") if isinstance(result, dict) else None
+        diagnosis = result.get("diagnosis") if isinstance(result, dict) else None
 
         report_text = str(report or "")
         is_failed = False
@@ -469,6 +471,7 @@ def _run_pipeline_thread(job_id: str, store: InMemoryAdaptiveJobStore) -> None:
                 usage=_normalize_usage_for_ui(usage),
                 system_spec=spec,
                 series=series if isinstance(series, dict) else None,
+                diagnosis=diagnosis if isinstance(diagnosis, dict) else None,
             )
             rec_now = store.get(job_id)
             if rec_now and rec_now.project_id:
@@ -552,6 +555,7 @@ def _run_pipeline_thread(job_id: str, store: InMemoryAdaptiveJobStore) -> None:
             usage=norm_usage,
             system_spec=spec,
             series=series if isinstance(series, dict) else None,
+                diagnosis=diagnosis if isinstance(diagnosis, dict) else None,
             score=score_val,
             success=success_bool,
             session_metadata=session_meta,
@@ -1284,3 +1288,39 @@ def submit_grade(
 
     return grade
 
+def diagnosis_chat(
+    job_id: str,
+    message: str,
+    history: list[dict] | None = None,
+    *,
+    store: InMemoryAdaptiveJobStore | None = None,
+) -> dict:
+    """Answer a follow-up question about a stored Adaptive diagnosis."""
+    store = _store(store)
+    record = store.get(job_id)
+    if record is None:
+        raise KeyError(job_id)
+    diagnosis = record.diagnosis if isinstance(record.diagnosis, dict) else None
+    if not diagnosis or not isinstance(diagnosis.get("report"), dict):
+        raise ValueError("No diagnosis available for this job")
+    text = (message or "").strip()
+    if not text:
+        raise ValueError("message is required")
+
+    from backend_core.AgentAdaptive.agents import diagnoser_agent
+
+    evidence = diagnosis.get("evidence") if isinstance(diagnosis.get("evidence"), dict) else {}
+    report = diagnosis.get("report") or {}
+    hist = history if isinstance(history, list) else None
+    # Normalize history roles for diagnoser_agent.answer_followup
+    norm = []
+    for h in hist or []:
+        if not isinstance(h, dict):
+            continue
+        role = str(h.get("role") or "user")
+        body = h.get("text") if h.get("text") is not None else h.get("content")
+        if body is None:
+            continue
+        norm.append({"role": role, "text": str(body)})
+    reply, usage = diagnoser_agent.answer_followup(evidence, report, text, history=norm)
+    return {"reply": reply, "usage": usage}

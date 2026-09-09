@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { createPortal } from 'react-dom'
 import { CheckCircle2, Sparkles, Star, X } from 'lucide-react'
 import { btnBase, btnCompact, btnPrimary } from '../lib/classes'
 
@@ -30,7 +29,7 @@ export function DesignCompletedToast({
   const hasScore = typeof score === 'number' && Number.isFinite(score)
   const isSuccess = success === true
 
-  const toastNode = (
+  return (
     <div
       className="fixed bottom-6 right-6 z-[400] max-w-md w-[calc(100vw-3rem)] rounded-2xl border border-border bg-surface-elevated/95 p-4 shadow-[0_20px_50px_rgba(0,0,0,0.35)] backdrop-blur-md animate-in slide-in-from-bottom-5 fade-in-50 duration-200"
       role="alert"
@@ -109,6 +108,4 @@ export function DesignCompletedToast({
       </div>
     </div>
   )
-
-  return typeof document !== 'undefined' ? createPortal(toastNode, document.body) : null
 }

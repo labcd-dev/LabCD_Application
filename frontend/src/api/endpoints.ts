@@ -70,6 +70,8 @@ import type {
   AdaptiveJobResultsResponse,
   AdaptiveJobStatusResponse,
   AdaptiveJobSummary,
+  AdaptiveDiagnosisChatRequest,
+  AdaptiveDiagnosisChatResponse,
   MPCDiagnosticsRequest,
   MPCDiagnosticsResponse,
   MPCSimulateRequest,
@@ -1019,6 +1021,11 @@ export const adaptiveApi = {
     apiFetch<AdaptiveJobStatusResponse>(`/adaptive/jobs/${jobId}/cancel`, { method: 'POST' }),
   getResults: (jobId: string) =>
     apiFetch<AdaptiveJobResultsResponse>(`/adaptive/jobs/${jobId}/results`),
+  diagnosisChat: (jobId: string, body: AdaptiveDiagnosisChatRequest) =>
+    apiFetch<AdaptiveDiagnosisChatResponse>(`/adaptive/jobs/${jobId}/diagnosis/chat`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
   streamEvents: (
     jobId: string,
     onEvent: (event: string, data: any) => void,

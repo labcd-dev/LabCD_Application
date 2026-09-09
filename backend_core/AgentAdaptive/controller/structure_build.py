@@ -61,15 +61,7 @@ def _parse_system(states, dynamics, inputs, outputs):
 def _build_delta_func(delta_exprs, symbol_map, state_syms, input_syms):
     if not delta_exprs:
         return None
-    n = len(state_syms)
-    if len(delta_exprs) == 1 and n > 1:
-        expr_list = ["0"] * n
-        expr_list[1] = delta_exprs[0]
-    elif len(delta_exprs) < n:
-        expr_list = list(delta_exprs) + ["0"] * (n - len(delta_exprs))
-    else:
-        expr_list = list(delta_exprs[:n])
-    exprs = [_sympify(e, symbol_map) for e in expr_list]
+    exprs = [_sympify(e, symbol_map) for e in delta_exprs]
     fn = sp.lambdify([state_syms, input_syms], exprs, "numpy")
     return lambda x, u: fn(list(x), list(u))
 
@@ -86,8 +78,9 @@ def _build_dist_func(dist_exprs):
 def _latex_dot(state_name):
     m = re.match(r"^([A-Za-z]+)(\d+)$", state_name)
     if m:
-        return r"\dot{%s}_{%s}" % (m.group(1), m.group(2))
-    return r"\dot{%s}" % state_name
+        base, idx = m.group(1), m.group(2)
+        return r"\dot{%s}_{%s}" % (sp.latex(sp.Symbol(base)), idx)
+    return r"\dot{%s}" % sp.latex(sp.Symbol(state_name))
 
 
 def _print_system_echo(states, dynamics, inputs, outputs, system_type,
@@ -168,23 +161,28 @@ def _format_u_with_reference_smc(u_symbolic, yd_symbols, refs):
     # the agent's summary only sees this string, not the console prints.
     # so any failure here should fall back to a short note, never a crash
     try:
+        p = len(u_symbolic)
+        # only number them u_1, u_2, ... when there's more than one to tell
+        # apart -- a single-input system just gets plain "u", like backstepping does
+        u_label = (lambda i: "u") if p == 1 else (lambda i: "u_{%d}" % (i + 1))
+
         t_sym = sp.Symbol("t")
         subs_map = {}
         for i, yd_row in enumerate(yd_symbols):
             degree = len(yd_row) - 1
-            ref_entry = refs[i] if i < len(refs) else {}
-            expr_str = ref_entry.get("expr", "0") if isinstance(ref_entry, dict) else str(ref_entry or "0")
-            yd_vals = _ref_symbolic_derivatives(expr_str, degree, t_sym)
+            yd_vals = _ref_symbolic_derivatives(refs[i]["expr"], degree, t_sym)
             subs_map.update(zip(yd_row, yd_vals))
 
         pretty_map = _pretty_ref_symbols(yd_symbols)
-        symbolic_lines = [_control_law_display("u_{%d}" % (i + 1),
-                                                 u_symbolic[i].subs(pretty_map))
-                           for i in range(len(u_symbolic))]
+        # expand before display, same as the reference-substituted version below --
+        # otherwise this stays one giant frac dmath* can't break, and it runs off the page
+        symbolic_lines = [_control_law_display(u_label(i),
+                                                 sp.expand(u_symbolic[i].subs(pretty_map)))
+                           for i in range(p)]
         ref_lines = []
-        for i in range(len(u_symbolic)):
+        for i in range(p):
             u_ref = sp.trigsimp(sp.expand(u_symbolic[i].subs(subs_map)))
-            ref_lines.append(_control_law_display("u_{%d}(x,t)" % (i + 1), u_ref))
+            ref_lines.append(_control_law_display("%s(x,t)" % u_label(i), u_ref))
 
         report = (
             _ref_symbol_legend(len(yd_symbols) > 1) + "\n\n  "
@@ -204,14 +202,14 @@ def _format_u_with_reference_backstepping(u_law, yd, ref):
     try:
         t_sym = sp.Symbol("t")
         degree = len(yd) - 1
-        expr_str = ref.get("expr", "0") if isinstance(ref, dict) else str(ref or "0")
-        yd_vals = _ref_symbolic_derivatives(expr_str, degree, t_sym)
+        yd_vals = _ref_symbolic_derivatives(ref["expr"], degree, t_sym)
         subs_map = dict(zip(yd, yd_vals))
         u_ref = sp.trigsimp(sp.expand(u_law.subs(subs_map)))
         pretty_map = _pretty_ref_symbols([yd])
         report = (
             _ref_symbol_legend(False) + "\n  "
-            + _control_law_display("u", u_law.subs(pretty_map))
+            # same expand-before-display as above, same overflow reason
+            + _control_law_display("u", sp.expand(u_law.subs(pretty_map)))
             + "\n\nSame control law with THIS system's actual reference substituted in "
               "(reference derivatives expanded):\n  "
             + _control_law_display("u(x,t)", u_ref)
@@ -240,35 +238,30 @@ def _ref_from_expr(expr_text):
     # quietly falling back to a zero reference.
     text = (expr_text or "").strip()
     if not text:
-        raise ValueError("reference formula is empty")
-    ident_matches = _REF_IDENT_RE.findall(text)
-    unknown = [m for m in ident_matches if m not in _REF_LOCALS and not m.isdigit()]
+        raise ValueError("no reference expression was given")
+    unknown = sorted({tok for tok in _REF_IDENT_RE.findall(text) if tok not in _REF_LOCALS})
     if unknown:
         raise ValueError(
-            "unknown symbol(s) %s in reference: only 't' and standard functions "
-            "are allowed." % unknown)
+            "reference %r uses unrecognized name(s) %s -- only 't' and %s "
+            "are allowed" % (text, ", ".join(unknown), ", ".join(sorted(ALLOWED_FUNCS))))
     try:
-        expr = sp.sympify(text, locals=_REF_LOCALS)
-    except Exception as e:
-        raise ValueError("invalid expression: %s" % e) from e
-    return expr
+        return sp.expand(sp.sympify(text, locals=_REF_LOCALS))
+    except (sp.SympifyError, TypeError, ValueError, AttributeError) as e:
+        raise ValueError("reference %r could not be parsed as a math expression: %s"
+                          % (text, e))
 
 
-def _extract_structure(spec):
+def _build_structure_from_spec(spec):
+    # builds everything the Designer's schema needs except method/reasoning/
+    # notes_limitations (pure transcription off the confirmed spec, no LLM involved)
     dyn = spec["dynamics"]
     states = list(dyn["states"])
     limitations = []
 
-    by_output = {}
-    for r in (dyn.get("references") or []):
-        if isinstance(r, dict):
-            by_output[r.get("output", "")] = r.get("expr", "")
-        else:
-            by_output[""] = str(r)
-
+    by_output = {r["output"]: r.get("expr", "") for r in dyn["references"]}
     refs = []
     for out in dyn["outputs"]:
-        raw_expr = by_output.get(out) or by_output.get("") or ""
+        raw_expr = by_output.get(out, "")
         try:
             parsed = _ref_from_expr(raw_expr)
         except ValueError as e:
@@ -278,27 +271,13 @@ def _extract_structure(spec):
     def _split(entries):
         # entries with no KNOWN formula anywhere stay None (has_delta/
         # has_disturbance still True): exprs only get built once something actually names a formula
-        if not entries:
-            return None
-        known = []
-        for e in entries:
-            if isinstance(e, dict):
-                ex = (e.get("expr") or "").strip()
-                if ex:
-                    known.append(e)
-            elif isinstance(e, str) and e.strip():
-                known.append({"expr": e.strip()})
+        known = [e for e in entries if (e.get("expr") or "").strip()]
         if not known:
             return None
         exprs = ["0"] * len(states)
         for e in known:
-            st = e.get("state")
-            if st in states:
-                exprs[states.index(st)] = e["expr"]
-            elif len(known) == 1 and len(states) >= 2:
-                exprs[1] = e["expr"]
-            elif len(known) == 1:
-                exprs[0] = e["expr"]
+            if e.get("state") in states:
+                exprs[states.index(e["state"])] = e["expr"]
         return exprs
 
     structure = {
@@ -350,6 +329,3 @@ def _validate_method(method, structure):
         raise ValueError(
             "method='backstepping' requires outputs == [states[0]]; got "
             "outputs=%s with states[0]=%r." % (outputs, states[0]))
-
-
-_build_structure_from_spec = _extract_structure
