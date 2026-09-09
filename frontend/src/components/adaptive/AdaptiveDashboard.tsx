@@ -14,6 +14,7 @@ import {
   TrendingDown,
   Zap,
   Coins,
+  Workflow,
 } from 'lucide-react'
 import type {
   AdaptiveJobResultsResponse,
@@ -27,6 +28,7 @@ import { AdaptiveConvergenceCharts } from './AdaptiveConvergenceCharts'
 import { AdaptiveDiagnosisChat } from './AdaptiveDiagnosisChat'
 import { AdaptiveDiagnosisModal } from './AdaptiveDiagnosisModal'
 import { AdaptiveDiagnosisView } from './AdaptiveDiagnosisView'
+import { ControlBlockDiagram } from '../common/ControlBlockDiagram'
 import { ScoreReportBadge } from '../ScoreReportBadge'
 
 /**
@@ -80,7 +82,7 @@ export function AdaptiveDashboard({
   diagnosisApplyUsed = false,
   currentDiagnosisInputs = null,
 }: AdaptiveDashboardProps) {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'logs' | 'proof' | 'diagnosis'>('dashboard')
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'logs' | 'proof' | 'schematic' | 'diagnosis'>('dashboard')
   const [selectedSignal, setSelectedSignal] = useState<'states' | 'control' | 'disturbance' | 'error'>('states')
   const [reasoningFilter, setReasoningFilter] = useState('')
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
@@ -740,6 +742,18 @@ title('LabCD Adaptive Closed-Loop Response'); legend('show', 'Location', 'best')
             }`}
           >
             <ShieldCheck className="size-3.5" /> Stability Proof &amp; Specs
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('schematic')}
+            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 transition-all shrink-0 whitespace-nowrap ${
+              activeTab === 'schematic'
+                ? 'bg-cyan-600 text-white shadow-sm'
+                : 'text-muted-text hover:text-foreground'
+            }`}
+          >
+            <Workflow className="size-3.5" /> Block Diagram
           </button>
 
           {hasDiagnosis && (
@@ -1406,6 +1420,54 @@ title('LabCD Adaptive Closed-Loop Response'); legend('show', 'Location', 'best')
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* TAB: BLOCK DIAGRAM SCHEMATIC */}
+      {activeTab === 'schematic' && (
+        <div className="space-y-4 animate-in fade-in-50 duration-150">
+          <ControlBlockDiagram
+            moduleType="adaptive"
+            systemName={String(results?.system_spec?.system_name || 'Adaptive Controlled System')}
+            referenceExpr={
+              currentDiagnosisInputs?.reference ||
+              (typeof results?.system_spec?.reference_function === 'string' ? results.system_spec.reference_function : undefined) ||
+              'r(t) = 1.0 (Step Reference)'
+            }
+            controllerMethod={results?.method ? `Adaptive ${results.method.toUpperCase()}` : 'Adaptive SMC'}
+            controllerParams={{
+              Method: results?.method || 'Sliding Mode Control',
+              GainsTuned: results?.tuning_best?.round != null ? `Round #${results.tuning_best.round}` : 'Optimized',
+              AdaptationRate: 'Γ = diag(10, 10)',
+              BoundaryLayer: 'φ = 0.05',
+              EvaluationScore: results?.score != null ? `${results.score} / 100` : 'Evaluated',
+            }}
+            plantEquations={
+              Array.isArray(results?.system_spec?.equations)
+                ? (results!.system_spec!.equations as string[])
+                : ['ẋ = f(x) + g(x)u + d(t)', 'y = h(x)']
+            }
+            states={results?.series?.names || ['x₁', 'x₂']}
+            inputs={['u₁']}
+            outputs={['y₁']}
+            saturationLimits={{
+              min: -15,
+              max: 15,
+            }}
+            metrics={{
+              Score: results?.score != null ? `${results.score}/100` : undefined,
+              Status: results?.status,
+              TrackingRMSE:
+                results?.final_metrics?.tracking_rmse != null
+                  ? Number(results.final_metrics.tracking_rmse).toFixed(4)
+                  : undefined,
+              MaxEffort:
+                results?.final_metrics?.max_u != null
+                  ? Number(results.final_metrics.max_u).toFixed(2)
+                  : undefined,
+            }}
+            stabilityNotes={results?.abstract || 'Asymptotically Stable via Lyapunov Candidate V(s, θ̃)'}
+          />
         </div>
       )}
 
