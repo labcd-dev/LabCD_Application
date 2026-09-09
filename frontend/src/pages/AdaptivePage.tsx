@@ -145,12 +145,25 @@ export function AdaptivePage() {
     }
   }, [jobId])
 
+  // Reset prompted state on jobId change
   useEffect(() => {
-    if (results && results.status === 'completed' && !results.design_grade && !hasPromptedGradeRef.current) {
+    hasPromptedGradeRef.current = false
+    setShowCompletedToast(false)
+    setGradeModalOpen(false)
+  }, [jobId])
+
+  useEffect(() => {
+    const isFinished =
+      results &&
+      (results.status === 'completed' ||
+        job?.status === 'completed' ||
+        results.score !== undefined ||
+        results.final_metrics !== undefined)
+    if (isFinished && !results?.design_grade && !hasPromptedGradeRef.current) {
       hasPromptedGradeRef.current = true
       setShowCompletedToast(true)
     }
-  }, [results])
+  }, [results, job?.status])
 
   const handleStartJob = async () => {
     setError(null)

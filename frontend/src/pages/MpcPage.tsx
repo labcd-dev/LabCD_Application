@@ -164,12 +164,25 @@ export function MpcPage() {
     }
   }, [jobId])
 
+  // Reset prompted state on jobId change
   useEffect(() => {
-    if (results && results.status === 'completed' && !results.design_grade && !hasPromptedGradeRef.current) {
+    hasPromptedGradeRef.current = false
+    setShowCompletedToast(false)
+    setGradeModalOpen(false)
+  }, [jobId])
+
+  useEffect(() => {
+    const isFinished =
+      results &&
+      (results.status === 'completed' ||
+        job?.status === 'completed' ||
+        results.score !== undefined ||
+        results.success !== undefined)
+    if (isFinished && !results?.design_grade && !hasPromptedGradeRef.current) {
       hasPromptedGradeRef.current = true
       setShowCompletedToast(true)
     }
-  }, [results])
+  }, [results, job?.status])
 
   // Helper to resolve plant dynamics payload
   const resolveDynamicsPayload = (): { plugin_id?: string; source?: string } => {
