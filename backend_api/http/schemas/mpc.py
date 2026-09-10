@@ -193,8 +193,10 @@ class MPCJobResultsResponse(BaseModel):
     baseline_series: dict[str, Any] | None = None
     # Token usage & cost tracking
     usage: dict[str, Any] | None = None
-    # Diagnostics results
+    # Diagnostics results (AgentMPC diagnostics_agent payload)
     diagnostics: dict[str, Any] | None = None
+    # Alias for shared Diagnosis UI (same object as diagnostics when structured)
+    diagnosis: dict[str, Any] | None = None
     error: str | None = None
     score: float | None = None
     success: bool | None = None
@@ -202,6 +204,16 @@ class MPCJobResultsResponse(BaseModel):
     session_metadata: dict[str, Any] | None = None
 
     model_config = {"arbitrary_types_allowed": True}
+
+
+class MPCDiagnosisChatRequest(BaseModel):
+    message: str
+    history: list[dict[str, Any]] | None = None
+
+
+class MPCDiagnosisChatResponse(BaseModel):
+    reply: str
+    usage: dict[str, Any] | None = None
 
 
 class GradeDesignRequest(BaseModel):

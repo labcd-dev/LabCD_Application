@@ -12,6 +12,8 @@ from backend_api.http.dependencies import require_action
 from backend_api.http.schemas.mpc import (
     MPCDiagnosticsRequest,
     MPCDiagnosticsResponse,
+    MPCDiagnosisChatRequest,
+    MPCDiagnosisChatResponse,
     MPCSimulateRequest,
     MPCSimulateResponse,
     MPCJobCreateRequest,
@@ -27,6 +29,7 @@ from backend_api.http.services.mpc_job_store import (
 )
 from backend_api.http.services.mpc_service import (
     cancel_job,
+    diagnosis_chat,
     get_export_script,
     get_job,
     get_job_report_pdf,
@@ -254,4 +257,35 @@ def grade_mpc_job(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
     _assert_job_access(record.user_id, user)
     return submit_grade(job_id, rating=request.rating, comment=request.comment, user=user, store=store)
+
+
+@router.post("/jobs/{job_id}/diagnosis/chat", response_model=MPCDiagnosisChatResponse)
+def mpc_diagnosis_chat(
+    job_id: str,
+    request: MPCDiagnosisChatRequest,
+    user: User = Depends(require_action("module:mpc")),
+    store: InMemoryMPCJobStore = Depends(get_mpc_store),
+) -> MPCDiagnosisChatResponse:
+    """Follow-up chat about stored AgentMPC diagnostics for a job."""
+    record = store.get(job_id)
+    if record is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+    _assert_job_access(record.user_id, user)
+    try:
+        out = diagnosis_chat(
+            job_id,
+            request.message,
+            history=request.history,
+            store=store,
+        )
+        return MPCDiagnosisChatResponse(reply=out["reply"], usage=out.get("usage"))
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Diagnosis chat failed: {exc}",
+        ) from exc
 
