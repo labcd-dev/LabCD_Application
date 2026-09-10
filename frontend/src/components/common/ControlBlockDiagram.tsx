@@ -354,43 +354,60 @@ export function ControlBlockDiagram({
 
   const handleMouseUp = () => setIsDragging(false)
 
-  // Fullscreen Management with Native API + Portal Fallback
+  // Fullscreen Management with Viewport Portal + Root Native Fullscreen
   const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      if (containerRef.current?.requestFullscreen) {
-        containerRef.current.requestFullscreen().catch(() => {
-          setIsFullscreen(true)
-        })
-      } else {
-        setIsFullscreen(true)
+    if (!isFullscreen) {
+      setIsFullscreen(true)
+      // Attempt native fullscreen on document.documentElement (never on portaled child to prevent detachment cancellation!)
+      if (typeof document !== 'undefined') {
+        if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+          document.documentElement.requestFullscreen().catch(() => {
+            // Viewport portal fallback still ensures 100% full screen if native is blocked
+          })
+        }
       }
     } else {
-      if (document.exitFullscreen) {
+      setIsFullscreen(false)
+      if (typeof document !== 'undefined' && document.fullscreenElement && document.exitFullscreen) {
         document.exitFullscreen().catch(() => {})
       }
-      setIsFullscreen(false)
     }
   }
 
+  // Synchronize when user exits native browser fullscreen via Escape or F11
   useEffect(() => {
     const handleFsChange = () => {
-      setIsFullscreen(Boolean(document.fullscreenElement))
+      if (!document.fullscreenElement && isFullscreen) {
+        setIsFullscreen(false)
+      }
     }
     document.addEventListener('fullscreenchange', handleFsChange)
     return () => document.removeEventListener('fullscreenchange', handleFsChange)
-  }, [])
+  }, [isFullscreen])
 
+  // Clean keyboard Escape handler
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isFullscreen) {
-        if (document.fullscreenElement) {
+        setIsFullscreen(false)
+        if (typeof document !== 'undefined' && document.fullscreenElement && document.exitFullscreen) {
           document.exitFullscreen().catch(() => {})
         }
-        setIsFullscreen(false)
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isFullscreen])
+
+  // Prevent background body scrolling while in Fullscreen
+  useEffect(() => {
+    if (isFullscreen && typeof document !== 'undefined') {
+      const prevOverflow = document.body.style.overflow
+      document.body.style.overflow = 'hidden'
+      return () => {
+        document.body.style.overflow = prevOverflow
+      }
+    }
   }, [isFullscreen])
 
   // Pure Vector SVG Export (Self-Contained with Full CSS & Shapes embedded)
@@ -607,7 +624,7 @@ export function ControlBlockDiagram({
       ref={containerRef}
       className={`relative flex flex-col overflow-hidden rounded-2xl border border-border bg-surface-elevated transition-all duration-200 shadow-sm ${
         isFullscreen
-          ? 'fixed inset-0 z-[99999] w-screen h-screen rounded-none border-none bg-surface'
+          ? 'fixed inset-0 z-[999999] w-screen h-screen rounded-none border-none bg-surface m-0 p-0'
           : 'w-full'
       }`}
     >
@@ -1115,7 +1132,11 @@ export function ControlBlockDiagram({
             BLOCK INSPECTOR DRAWER
            ======================================================== */}
         {selectedBlock && (
-          <div className="w-full lg:w-96 shrink-0 border-t lg:border-t-0 lg:border-l border-border bg-surface-elevated/95 p-5 shadow-lg backdrop-blur-md animate-in slide-in-from-right duration-200 overflow-y-auto max-h-[520px]">
+          <div
+            className={`w-full lg:w-96 shrink-0 border-t lg:border-t-0 lg:border-l border-border bg-surface-elevated/95 p-5 shadow-lg backdrop-blur-md animate-in slide-in-from-right duration-200 overflow-y-auto ${
+              isFullscreen ? 'h-full max-h-none' : 'max-h-[520px]'
+            }`}
+          >
             <div className="flex items-start justify-between gap-3 border-b border-border/70 pb-3">
               <div className="flex items-center gap-2">
                 <span className="rounded-lg p-1.5 border border-cyan-500/30 bg-cyan-500/10 text-cyan-600 dark:text-cyan-400">
@@ -1250,7 +1271,22 @@ export function ControlBlockDiagram({
 
   // When Fullscreen is requested, Portal to document.body to prevent any parent container clipping!
   if (isFullscreen && typeof document !== 'undefined') {
-    return createPortal(diagramContent, document.body)
+    return (
+      <>
+        <div className="w-full h-[520px] rounded-2xl border border-dashed border-border/60 bg-surface/30 flex flex-col items-center justify-center gap-2 text-xs text-muted-text">
+          <Workflow className="size-6 text-cyan-500/50 animate-pulse" />
+          <span>Diagram is currently expanded in Fullscreen mode</span>
+          <button
+            type="button"
+            onClick={toggleFullscreen}
+            className="mt-1 text-cyan-500 underline text-xs hover:text-cyan-400 cursor-pointer"
+          >
+            Click here or press Esc to return
+          </button>
+        </div>
+        {createPortal(diagramContent, document.body)}
+      </>
+    )
   }
 
   return diagramContent
