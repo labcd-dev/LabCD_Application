@@ -46,6 +46,7 @@ export function MpcPage() {
   // Diagnostics pre-flight state
   const [testingDynamics, setTestingDynamics] = useState(false)
   const [diagnostics, setDiagnostics] = useState<MPCDiagnosticsResponse | null>(null)
+  const hasAutoTestedDynamicsRef = useRef(false)
 
   // 2. Scenario Tab Options
   const [trajectoryMode, setTrajectoryMode] = useState<'reg' | 'sin' | 'pulse'>('reg')
@@ -55,6 +56,22 @@ export function MpcPage() {
   const [trajectoryPulseEnd, setTrajectoryPulseEnd] = useState(0.7)
   const [noiseStd, setNoiseStd] = useState(0.0)
   const [scenarioLevel, setScenarioLevel] = useState<1 | 2 | 3>(1)
+
+  // FR03: Custom States for reference trajectory tracking
+  const [selectedStates, setSelectedStates] = useState<number[]>([0])
+  const availableStateNames = useMemo(() => {
+    if (diagnostics?.state_names && diagnostics.state_names.length > 0) {
+      return diagnostics.state_names
+    }
+    return ['x1', 'x2']
+  }, [diagnostics])
+
+  // FR02: Custom Uncertainty & Disturbance settings
+  const [showCustomScenario, setShowCustomScenario] = useState(false)
+  const [customDriftPct, setCustomDriftPct] = useState(20)
+  const [disturbanceAmp, setDisturbanceAmp] = useState(1.0)
+  const [disturbanceStart, setDisturbanceStart] = useState(25)
+  const [disturbanceType, setDisturbanceType] = useState<'step' | 'pulse' | 'none'>('step')
 
   // 3. Tuning & Constraints Tab Options
   const [np, setNp] = useState(12)
@@ -225,6 +242,9 @@ export function MpcPage() {
         if (res.bryson_r && res.bryson_r.length) {
           setRWeightsInput(res.bryson_r.map((v) => v.toFixed(3)).join(', '))
         }
+        if (res.state_names && res.state_names.length > 0) {
+          setSelectedStates((prev) => (prev.length === 0 ? [0] : prev.filter((i) => i < res.state_names.length)))
+        }
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Diagnostics probe failed')
@@ -232,6 +252,15 @@ export function MpcPage() {
       setTestingDynamics(false)
     }
   }
+
+  // FR04: Auto-trigger pre-flight diagnostics on initial mount or when entering tuning tab
+  useEffect(() => {
+    if (jobId || results) return
+    if (!diagnostics && !testingDynamics && !hasAutoTestedDynamicsRef.current) {
+      hasAutoTestedDynamicsRef.current = true
+      void handleTestDynamics()
+    }
+  }, [setupTab, jobId, results, diagnostics, testingDynamics])
 
   const handleStartJob = async () => {
     setError(null)
@@ -267,6 +296,11 @@ export function MpcPage() {
       r_weights: parsedR.length ? parsedR : undefined,
       model: pipeline.model,
       system_name: pipeline.fileName?.replace('.py', '') || 'Inverted Pendulum Cart-Pole',
+      custom_drift_pct: customDriftPct,
+      disturbance_amplitude: (scenarioLevel === 3 || disturbanceAmp > 0) ? disturbanceAmp : 0,
+      disturbance_start: disturbanceStart / 100,
+      disturbance_type: disturbanceType,
+      target_state_indices: selectedStates,
     }
 
     try {
@@ -616,6 +650,63 @@ export function MpcPage() {
                         className="w-full accent-cyan-500"
                       />
                     </div>
+
+                    {/* FR03: Target States Multi-Select */}
+                    <div className="space-y-2 pt-2 border-t border-border">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-foreground">
+                          Target States for Trajectory Tracking
+                        </span>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedStates(availableStateNames.map((_, i) => i))}
+                            className="text-[10px] text-purple-600 dark:text-purple-400 hover:underline font-mono"
+                          >
+                            All States
+                          </button>
+                          <span className="text-muted text-[10px]">|</span>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedStates([0])}
+                            className="text-[10px] text-purple-600 dark:text-purple-400 hover:underline font-mono"
+                          >
+                            State 1 Only
+                          </button>
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-muted-text">
+                        Selected states track the {trajectoryMode === 'reg' ? 'setpoint' : trajectoryMode} waveform; unselected states remain stabilized at trim equilibrium.
+                      </p>
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        {availableStateNames.map((name, idx) => {
+                          const isSelected = selectedStates.includes(idx)
+                          return (
+                            <button
+                              key={name + idx}
+                              type="button"
+                              onClick={() => {
+                                setSelectedStates((prev) =>
+                                  isSelected
+                                    ? prev.length > 1
+                                      ? prev.filter((i) => i !== idx)
+                                      : prev
+                                    : [...prev, idx].sort((a, b) => a - b)
+                                )
+                              }}
+                              className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-mono transition-all border ${
+                                isSelected
+                                  ? 'border-purple-500 bg-purple-500/15 text-purple-600 dark:text-purple-300 ring-1 ring-purple-500/30 font-semibold'
+                                  : 'border-border bg-surface-muted/60 text-muted-text hover:border-border-input'
+                              }`}
+                            >
+                              <span className={`size-1.5 rounded-full ${isSelected ? 'bg-purple-500' : 'bg-muted'}`} />
+                              <span>x{idx + 1}: {name}</span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
                   </div>
 
                   {/* SVG Preview Card */}
@@ -710,6 +801,132 @@ export function MpcPage() {
                       </p>
                     </button>
                   </div>
+
+                  {/* FR02: Custom Uncertainty & Disturbance Tuning Drawer */}
+                  <div className="mt-3 rounded-xl border border-border bg-surface-elevated/60 p-3.5 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <button
+                        type="button"
+                        onClick={() => setShowCustomScenario(!showCustomScenario)}
+                        className="flex items-center gap-2 text-xs font-bold text-foreground hover:text-purple-600 dark:hover:text-purple-400 transition-colors"
+                      >
+                        <Zap className="size-3.5 text-purple-500" />
+                        <span>Advanced / Custom Uncertainty &amp; Disturbance Knobs</span>
+                        <span className="text-[10px] font-mono text-muted bg-surface-muted px-1.5 py-0.5 rounded border border-border">
+                          {showCustomScenario ? 'Hide Knobs ▲' : 'Customize Sliders ▼'}
+                        </span>
+                      </button>
+
+                      {showCustomScenario && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (scenarioLevel === 1) {
+                              setCustomDriftPct(0)
+                              setDisturbanceAmp(0)
+                            } else if (scenarioLevel === 2) {
+                              setCustomDriftPct(20)
+                              setDisturbanceAmp(0)
+                            } else {
+                              setCustomDriftPct(20)
+                              setDisturbanceAmp(1.0)
+                            }
+                          }}
+                          className="text-[10.5px] font-mono text-muted hover:text-foreground"
+                        >
+                          Reset to Level {scenarioLevel} Presets
+                        </button>
+                      )}
+                    </div>
+
+                    {showCustomScenario && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-border">
+                        {/* Parameter Drift Percentage */}
+                        <div className="space-y-1.5">
+                          <div className="flex justify-between text-xs text-muted-text">
+                            <span>Plant Parameter Drift (&plusmn;%)</span>
+                            <span className="font-mono font-bold text-amber-600 dark:text-amber-300">
+                              &plusmn;{customDriftPct}%
+                            </span>
+                          </div>
+                          <input
+                            type="range"
+                            min={0}
+                            max={50}
+                            step={1}
+                            value={customDriftPct}
+                            onChange={(e) => setCustomDriftPct(Number(e.target.value))}
+                            className="w-full accent-amber-500"
+                          />
+                          <span className="text-[10.5px] text-muted block">
+                            Random physical variance injected into mass, inertia, and damping.
+                          </span>
+                        </div>
+
+                        {/* Force Step Disturbance Amplitude */}
+                        <div className="space-y-1.5">
+                          <div className="flex justify-between text-xs text-muted-text">
+                            <span>Disturbance Amplitude (N / Nm)</span>
+                            <span className="font-mono font-bold text-rose-600 dark:text-rose-300">
+                              {disturbanceAmp.toFixed(1)} N/Nm
+                            </span>
+                          </div>
+                          <input
+                            type="range"
+                            min={0.0}
+                            max={5.0}
+                            step={0.1}
+                            value={disturbanceAmp}
+                            onChange={(e) => setDisturbanceAmp(Number(e.target.value))}
+                            className="w-full accent-rose-500"
+                          />
+                          <span className="text-[10.5px] text-muted block">
+                            External wind-gust or load impulse step magnitude.
+                          </span>
+                        </div>
+
+                        {/* Disturbance Start Time */}
+                        <div className="space-y-1.5">
+                          <div className="flex justify-between text-xs text-muted-text">
+                            <span>Disturbance Start (% time)</span>
+                            <span className="font-mono font-bold text-purple-600 dark:text-purple-300">
+                              {disturbanceStart}%
+                            </span>
+                          </div>
+                          <input
+                            type="range"
+                            min={5}
+                            max={85}
+                            step={5}
+                            value={disturbanceStart}
+                            onChange={(e) => setDisturbanceStart(Number(e.target.value))}
+                            className="w-full accent-purple-500"
+                          />
+                        </div>
+
+                        {/* Disturbance Profile Type */}
+                        <div className="space-y-1.5">
+                          <span className="text-xs text-muted-text block">Disturbance Profile Type</span>
+                          <div className="flex gap-2">
+                            {(['step', 'pulse', 'none'] as const).map((type) => (
+                              <button
+                                key={type}
+                                type="button"
+                                onClick={() => setDisturbanceType(type)}
+                                className={`flex-1 rounded-lg py-1.5 text-xs font-semibold uppercase tracking-wider transition-all border ${
+                                  disturbanceType === type
+                                    ? 'border-purple-500 bg-purple-500/15 text-purple-600 dark:text-purple-300'
+                                    : 'border-border bg-surface-muted text-muted-text hover:bg-surface-hover'
+                                }`}
+                              >
+                                {type}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
@@ -726,6 +943,11 @@ export function MpcPage() {
                         <h4 className="text-xs font-bold text-foreground uppercase tracking-wider">
                           Pre-Flight Dynamics Diagnostics &amp; Bryson Seed Estimation
                         </h4>
+                        {diagnostics && (
+                          <span className="rounded bg-cyan-500/15 text-cyan-600 dark:text-cyan-300 px-2 py-0.5 text-[10px] font-mono font-semibold border border-cyan-500/30">
+                            Auto-Probed
+                          </span>
+                        )}
                       </div>
                       <p className="text-[11.5px] text-muted-text mt-1">
                         Runs open-loop step response probe, checks linearized eigenvalues, verifies controllability rank, and calculates Bryson seed weights Q and R.
@@ -744,7 +966,7 @@ export function MpcPage() {
                         </>
                       ) : (
                         <>
-                          <Zap className="size-3.5 text-cyan-500" /> Test Dynamics &amp; Bryson Probe
+                          <Zap className="size-3.5 text-cyan-500" /> {diagnostics ? 'Re-run Dynamics & Bryson Probe' : 'Test Dynamics & Bryson Probe'}
                         </>
                       )}
                     </button>

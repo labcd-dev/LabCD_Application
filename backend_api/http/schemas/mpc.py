@@ -55,6 +55,14 @@ class MPCJobOptions(BaseModel):
     r_weights: list[float] | None = None
     p_weights: list[float] | None = None
     cost_weights: dict[str, float] | None = None
+    # FR02 Custom Scenario & Disturbance
+    custom_drift_pct: float | None = Field(default=None, ge=0.0, le=100.0, description="Custom parameter drift percentage (0-100%)")
+    disturbance_amplitude: float | None = Field(default=None, ge=0.0, description="External disturbance force/torque step magnitude")
+    disturbance_start: float | None = Field(default=None, ge=0.0, le=1.0, description="Disturbance injection start time as fraction of sim time (0-1)")
+    disturbance_type: str = Field(default="step", description="Disturbance type: step | pulse | none")
+    # FR03 State trajectory multi-select
+    target_state_indices: list[int] | None = Field(default=None, description="Indices of states that track the dynamic trajectory")
+    trajectory_per_state_modes: list[str] | None = Field(default=None, description="Per-state trajectory modes (reg, sin, pulse)")
 
 
 class MPCDynamicsInput(BaseModel):

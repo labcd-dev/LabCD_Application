@@ -271,6 +271,12 @@ export function PlantModelChat({
     onUseModel(finalResult, conversationId)
   }
 
+  const handleConfirmDraft = async () => {
+    if (!draft || loading) return
+    setFinalResult(draft)
+    await sendMessage('confirm')
+  }
+
   const handleDownload = () => {
     if (!finalResult) return
     triggerBlobDownload(
@@ -638,30 +644,52 @@ export function PlantModelChat({
                     Download dynamics.py
                   </button>
                 )}
-                <button
-                  type="button"
-                  className={`${btnPrimary} w-full justify-center py-2.5 text-[13.5px]`}
-                  disabled={!finalResult || disabled}
-                  onClick={handleLaunch}
-                >
-                  Save &amp; View in Case Studies →
-                </button>
+                {finalResult ? (
+                  <button
+                    type="button"
+                    className={`${btnPrimary} w-full justify-center py-2.5 text-[13.5px]`}
+                    disabled={disabled}
+                    onClick={handleLaunch}
+                  >
+                    Save &amp; View in Case Studies →
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className={`${btnPrimary} w-full justify-center py-2.5 text-[13.5px]`}
+                    disabled={!draft || disabled || loading}
+                    onClick={() => void handleConfirmDraft()}
+                  >
+                    Confirm system
+                  </button>
+                )}
               </div>
             </aside>
           </div>
         )}
 
-        {/* Mobile confirm when complete */}
-        {inChat && finalResult && (
+        {/* Mobile confirm when complete or draft */}
+        {inChat && (
           <div className="border-t border-border px-4 py-3 lg:hidden">
-            <button
-              type="button"
-              className={`${btnPrimary} w-full justify-center`}
-              disabled={disabled}
-              onClick={handleLaunch}
-            >
-              Save &amp; View in Case Studies →
-            </button>
+            {finalResult ? (
+              <button
+                type="button"
+                className={`${btnPrimary} w-full justify-center`}
+                disabled={disabled}
+                onClick={handleLaunch}
+              >
+                Save &amp; View in Case Studies →
+              </button>
+            ) : draft ? (
+              <button
+                type="button"
+                className={`${btnPrimary} w-full justify-center`}
+                disabled={disabled || loading}
+                onClick={() => void handleConfirmDraft()}
+              >
+                Confirm system
+              </button>
+            ) : null}
           </div>
         )}
       </div>

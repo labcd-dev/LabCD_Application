@@ -966,6 +966,12 @@ export interface MPCJobOptions {
   r_weights?: number[]
   p_weights?: number[]
   cost_weights?: Record<string, number>
+  custom_drift_pct?: number
+  disturbance_amplitude?: number
+  disturbance_start?: number
+  disturbance_type?: 'none' | 'step' | 'pulse'
+  target_state_indices?: number[]
+  trajectory_per_state_modes?: string[]
 }
 
 export interface MPCDynamicsInput {

@@ -46,6 +46,10 @@ class DataConfig:
                                                                 # dynamics/base.py: SystemConfig.desired_trajectory
     custom_trajectory_fn: Optional[Callable] = None   # set by app.py when a validated custom trajectory file is loaded
     settling_tolerance: float = 0.05   # fraction of the initial error norm considered "settled" -- see agents/metrics.py
+    disturbance_amplitude: float = 0.0   # force/torque step magnitude
+    disturbance_start: float = 0.25      # start fraction of simulation time
+    disturbance_end: float = 0.75        # end fraction of simulation time
+    disturbance_type: str = "step"       # "step" | "pulse" | "none"
 
 
 @dataclass

@@ -806,6 +806,43 @@ def _run_tuning_thread(job_id: str, store: InMemoryJobStore) -> None:
                 elif len(r) > dynamics.n_inputs:
                     seed["R"] = r[: dynamics.n_inputs]
 
+        # Wire Scenario Uncertainty, Custom Drift, Disturbance, and State Trajectory Mask
+        scenario_level = int(options.get("ui_scenario_level") or 1)
+        custom_drift = options.get("custom_drift_pct")
+        drift_frac = float(custom_drift) / 100.0 if custom_drift is not None else 0.2
+        dist_amp = float(options.get("disturbance_amplitude") or (1.0 if scenario_level == 3 else 0.0))
+        dist_start = float(options.get("disturbance_start") or 0.25)
+        dist_type = str(options.get("disturbance_type") or "step")
+
+        cfg.data.disturbance_amplitude = dist_amp if (scenario_level >= 3 or dist_amp > 0) else 0.0
+        cfg.data.disturbance_start = dist_start
+        cfg.data.disturbance_type = dist_type
+
+        # Apply deterministic scenario level (nominal, drift, or robust)
+        try:
+            from backend_core.AgentMPC.agents.scenario_presets import apply_scenario_level
+            apply_scenario_level(
+                dynamics=dynamics,
+                cfg=cfg,
+                level=min(scenario_level, 3),
+                noise_std_value=float(options.get("noise_std") or 0.0),
+                max_param_uncertainty=drift_frac if (scenario_level >= 2 or custom_drift is not None) else 0.2,
+            )
+        except Exception as exc:
+            log.warning("apply_scenario_level note: %s", exc)
+
+        # FR03: Handle custom states for reference trajectory
+        target_state_indices = options.get("target_state_indices")
+        traj_mode = str(options.get("trajectory_mode") or "reg")
+        if target_state_indices is not None and isinstance(target_state_indices, list):
+            per_state_modes = [
+                traj_mode if i in target_state_indices else "reg"
+                for i in range(dynamics.n_states)
+            ]
+            cfg.data.trajectory_per_state_modes = per_state_modes
+        elif options.get("trajectory_per_state_modes"):
+            cfg.data.trajectory_per_state_modes = list(options["trajectory_per_state_modes"])
+
         use_ui = bool(options.get("use_ui_graph", True))
         if use_ui:
             entry = "evaluator" if seed else "actor"

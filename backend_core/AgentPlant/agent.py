@@ -89,7 +89,7 @@ _METADATA_VALIDATE_NOTE_PREFIX = (
 
 _DIGIT_RE = re.compile(r"\d")
 _FINISH_RE = re.compile(
-    r"\b(finish|done|ship\s*it|looks?\s+good|totally\s+good|accept|finalize|finalise|"
+    r"\b(finish|done|confirm|confirm\s+system|accept|accept\s+draft|ship\s*it|looks?\s+good|totally\s+good|finalize|finalise|"
     r"good\s+to\s+go|that'?s\s+(fine|good|ok|okay)|perfect|approved)\b",
     re.IGNORECASE,
 )
@@ -448,7 +448,7 @@ class PlantModelAgent(BaseAgent):
         meta_block = PlantModelAgent._format_metadata_block(parsed.get("metadata"))
         if meta_block:
             parts.append(meta_block)
-        parts.append("_Say what to change, or **finish** to accept this draft._")
+        parts.append("_Say what to change, or click **Confirm system** (or reply **finish**) to accept this draft._")
         return "\n\n".join(parts)
 
     @staticmethod

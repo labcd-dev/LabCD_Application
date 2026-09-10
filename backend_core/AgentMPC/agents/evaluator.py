@@ -155,6 +155,11 @@ def run_closed_loop(
         unstable = False
         unstable_reason = None
 
+        dist_amp = float(getattr(cfg.data, "disturbance_amplitude", 0.0) or 0.0)
+        dist_start_step = int(getattr(cfg.data, "disturbance_start", 0.25) * n_steps)
+        dist_end_step = int(getattr(cfg.data, "disturbance_end", 0.75) * n_steps)
+        dist_type = getattr(cfg.data, "disturbance_type", "step")
+
         for k in range(n_steps):
             ref_window = ref_full[k : k + controller.Np]
             import time as _time
@@ -163,7 +168,17 @@ def run_closed_loop(
             u = controller.control(x, u, ref_window)
             solve_times.append(_time.perf_counter() - t0)
 
-            x = simulator.step(x, u)
+            u_applied = u.copy()
+            if dist_amp > 0:
+                is_active = False
+                if dist_type == "pulse":
+                    is_active = dist_start_step <= k <= min(dist_start_step + max(1, int(n_steps * 0.08)), dist_end_step)
+                elif dist_type != "none":
+                    is_active = dist_start_step <= k <= dist_end_step
+                if is_active:
+                    u_applied[0] += dist_amp
+
+            x = simulator.step(x, u_applied)
             if np.any(cfg.data.noise_std > 0):
                 x = x + rng.normal(scale=cfg.data.noise_std, size=x.shape)
             states.append(x.copy())
