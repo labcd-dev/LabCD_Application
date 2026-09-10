@@ -622,11 +622,27 @@ export function ControlBlockDiagram({
   const diagramContent = (
     <div
       ref={containerRef}
-      className={`relative flex flex-col overflow-hidden rounded-2xl border border-border bg-surface-elevated transition-all duration-200 shadow-sm ${
+      style={
         isFullscreen
-          ? 'fixed inset-0 z-[999999] w-screen h-screen rounded-none border-none bg-surface m-0 p-0'
-          : 'w-full'
-      }`}
+          ? {
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              width: '100vw',
+              height: '100vh',
+              zIndex: 999999,
+              margin: 0,
+              padding: 0,
+            }
+          : undefined
+      }
+      className={
+        isFullscreen
+          ? 'fixed inset-0 z-[999999] flex h-screen w-screen flex-col overflow-hidden bg-surface m-0 p-0 shadow-2xl'
+          : 'relative flex w-full flex-col overflow-hidden rounded-2xl border border-border bg-surface-elevated transition-all duration-200 shadow-sm'
+      }
     >
       {/* Top Header & Controls Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-surface-elevated/95 px-5 py-3.5 backdrop-blur-md shrink-0">
