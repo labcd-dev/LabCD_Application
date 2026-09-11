@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 JobStatus = Literal[
     "queued",
@@ -130,6 +130,13 @@ class MPCJobCreateRequest(BaseModel):
     user_id: int | None = None
     project_id: str | int | None = None
 
+    @field_validator("project_id", mode="before")
+    @classmethod
+    def _coerce_project_id(cls, v: Any) -> str | None:
+        if v is None or v == "":
+            return None
+        return str(v)
+
 
 class MPCJobCreateResponse(BaseModel):
     job_id: str
@@ -160,6 +167,13 @@ class MPCJobStatusResponse(BaseModel):
     updated_at: datetime
     user_id: int | None = None
     project_id: str | int | None = None
+
+    @field_validator("project_id", mode="before")
+    @classmethod
+    def _coerce_project_id(cls, v: Any) -> str | None:
+        if v is None or v == "":
+            return None
+        return str(v)
     options: MPCJobOptions | None = None
     system_name: str | None = None
     # Live telemetry fields for real-time streaming

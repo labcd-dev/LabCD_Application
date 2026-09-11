@@ -207,6 +207,8 @@ class InMemoryAdaptiveJobStore:
             job_id = _new_id()
             while job_id in self._jobs:
                 job_id = _new_id()
+            if project_id is not None:
+                project_id = str(project_id)
             record = JobRecord(
                 job_id=job_id,
                 system_spec=deepcopy(system_spec) if system_spec else None,

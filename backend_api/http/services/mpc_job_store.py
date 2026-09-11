@@ -220,6 +220,8 @@ class InMemoryMPCJobStore:
             job_id = _new_id()
             while job_id in self._jobs:
                 job_id = _new_id()
+            if project_id is not None:
+                project_id = str(project_id)
             record = JobRecord(
                 job_id=job_id,
                 dynamics_ref=deepcopy(dynamics_ref) if dynamics_ref else None,
@@ -258,6 +260,8 @@ class InMemoryMPCJobStore:
             for key, value in fields.items():
                 if not hasattr(record, key):
                     raise AttributeError(f"JobRecord has no field {key!r}")
+                if key == "project_id" and value is not None:
+                    value = str(value)
                 setattr(record, key, value)
             record.updated_at = _now()
             self._sync_to_db(record)

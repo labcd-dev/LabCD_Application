@@ -1768,7 +1768,7 @@ def submit_job(
         dynamics_ref=dynamics_ref,
         options=options,
         user_id=request.user_id,
-        project_id=request.project_id,
+        project_id=str(request.project_id) if request.project_id is not None else None,
         system_name=str(system_name),
     )
     job_id = record.job_id
