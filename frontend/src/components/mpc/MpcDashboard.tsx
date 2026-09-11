@@ -15,15 +15,25 @@ import {
   Sparkles,
   Coins,
   Workflow,
+  Stethoscope,
 } from 'lucide-react'
-import type { MPCJobResultsResponse, MPCJobStatusResponse, MPCSimulateResponse } from '../../api/types'
+import type {
+  DiagnosisApplyPatch,
+  MpcDiagnosis,
+  MPCJobResultsResponse,
+  MPCJobStatusResponse,
+  MPCSimulateResponse,
+} from '../../api/types'
 import { mpcApi } from '../../api/endpoints'
 import { btnBase, btnCompact, btnPrimary } from '../../lib/classes'
 import { MpcConvergenceCharts } from './MpcConvergenceCharts'
 import { MpcSimulationPlot, type SimSeriesData } from './MpcSimulationPlot'
 import { MpcAgentFlowStrip } from './MpcAgentFlowStrip'
+import { MpcDiagnosisChat } from './MpcDiagnosisChat'
 import { ControlBlockDiagram } from '../common/ControlBlockDiagram'
 import { ScoreReportBadge } from '../ScoreReportBadge'
+import { AdaptiveDiagnosisModal } from '../adaptive/AdaptiveDiagnosisModal'
+import { AdaptiveDiagnosisView } from '../adaptive/AdaptiveDiagnosisView'
 
 /**
  * Strictly truncates reasoning logs to maximum 7 words followed by '...'
@@ -45,16 +55,72 @@ interface MpcDashboardProps {
   job?: MPCJobStatusResponse | null
   results?: MPCJobResultsResponse | null
   onDownloadReport?: () => void
+  onRetryFromDiagnosis?: () => void
+  onApplyDiagnosisSuggestion?: (patch: DiagnosisApplyPatch) => void
+  diagnosisApplyUsed?: boolean
+  currentDiagnosisInputs?: {
+    prediction_horizon?: number
+    control_horizon?: number
+    simulation_time?: number
+    dt_mpc?: number
+  } | null
+}
+
+function resolveMpcDiagnosis(results?: MPCJobResultsResponse | null): MpcDiagnosis | null {
+  if (!results) return null
+  const raw = (results.diagnosis ?? results.diagnostics) as MpcDiagnosis | Record<string, unknown> | null | undefined
+  if (!raw || typeof raw !== 'object') return null
+  const report = (raw as MpcDiagnosis).report
+  if (!report || typeof report !== 'object') return null
+  return raw as MpcDiagnosis
 }
 
 export function MpcDashboard({
   job,
   results,
   onDownloadReport,
+  onRetryFromDiagnosis,
+  onApplyDiagnosisSuggestion,
+  diagnosisApplyUsed = false,
+  currentDiagnosisInputs = null,
 }: MpcDashboardProps) {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'logs' | 'schematic' | 'sandbox'>('dashboard')
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'logs' | 'schematic' | 'sandbox' | 'diagnosis'>('dashboard')
   const [reasoningFilter, setReasoningFilter] = useState('')
   const logScrollRef = useRef<HTMLDivElement>(null)
+  const [diagnosisModalOpen, setDiagnosisModalOpen] = useState(false)
+  const diagnosisModalShownForJob = useRef<string | null>(null)
+  const [localApplyUsed, setLocalApplyUsed] = useState(false)
+
+  const diagnosis = useMemo(() => resolveMpcDiagnosis(results), [results])
+  const hasDiagnosis = Boolean(diagnosis?.report)
+  const suggestionCount = Array.isArray(diagnosis?.report?.suggestions)
+    ? diagnosis!.report!.suggestions!.length
+    : 0
+  const applyUsed = diagnosisApplyUsed || localApplyUsed
+
+  useEffect(() => {
+    if (!hasDiagnosis || !results?.job_id) return
+    if (diagnosisModalShownForJob.current === results.job_id) return
+    diagnosisModalShownForJob.current = results.job_id
+    setDiagnosisModalOpen(true)
+  }, [hasDiagnosis, results?.job_id])
+
+  const handleApplyOption = (patch: DiagnosisApplyPatch) => {
+    setLocalApplyUsed(true)
+    onApplyDiagnosisSuggestion?.(patch)
+  }
+
+  const diagnosisCurrentInputs = useMemo(() => {
+    if (!currentDiagnosisInputs) return null
+    return {
+      solverStep: currentDiagnosisInputs.dt_mpc,
+      simTime: currentDiagnosisInputs.simulation_time,
+      reference:
+        currentDiagnosisInputs.prediction_horizon != null
+          ? `Np=${currentDiagnosisInputs.prediction_horizon}, Nc=${currentDiagnosisInputs.control_horizon ?? '?'}`
+          : undefined,
+    }
+  }, [currentDiagnosisInputs])
 
 
   // Sandbox interactive state
@@ -425,6 +491,25 @@ print(f"MPC Controller initialized: Np={Np}, Nc={Nc}, dt={dt}")
           >
             <Play className="size-3.5" /> Manual Simulation Sandbox
           </button>
+
+          {hasDiagnosis && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('diagnosis')}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 transition-all shrink-0 whitespace-nowrap ${
+                activeTab === 'diagnosis'
+                  ? 'bg-amber-600 text-white shadow-sm'
+                  : 'text-amber-800 dark:text-amber-200 hover:text-amber-950 dark:hover:text-amber-50'
+              }`}
+            >
+              <Stethoscope className="size-3.5" /> Diagnoser
+              {suggestionCount > 0 && (
+                <span className="rounded-full bg-black/20 px-1.5 text-[10px] font-bold">
+                  {suggestionCount}
+                </span>
+              )}
+            </button>
+          )}
         </div>
 
         {/* Action shortcut buttons */}
@@ -907,6 +992,52 @@ print(f"MPC Controller initialized: Np={Np}, Nc={Nc}, dt={dt}")
           )}
         </div>
       )}
+
+      {/* TAB: DIAGNOSER (AgentMPC diagnostics) */}
+      {activeTab === 'diagnosis' && hasDiagnosis && (
+        <div className="space-y-4 animate-in fade-in-50 duration-150">
+          <AdaptiveDiagnosisView
+            diagnosis={diagnosis}
+            onApplyOption={onApplyDiagnosisSuggestion ? handleApplyOption : undefined}
+            applyDisabled={applyUsed}
+            currentInputs={diagnosisCurrentInputs}
+          />
+          {results?.job_id && <MpcDiagnosisChat jobId={results.job_id} />}
+          {onRetryFromDiagnosis && (
+            <div className="flex flex-wrap gap-2 items-center">
+              <button
+                type="button"
+                className={`${btnBase} ${btnCompact} text-xs border border-amber-500/40 text-amber-900 dark:text-amber-100 hover:bg-amber-500/15`}
+                onClick={() => onRetryFromDiagnosis()}
+              >
+                Back to launch
+              </button>
+              {applyUsed && (
+                <span className="text-[11px] text-muted-text">
+                  Suggestion Apply already used (max 1). Launch form holds the applied value.
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      <AdaptiveDiagnosisModal
+        open={diagnosisModalOpen && hasDiagnosis}
+        diagnosis={diagnosis}
+        onDismiss={() => setDiagnosisModalOpen(false)}
+        onViewDetails={() => {
+          setDiagnosisModalOpen(false)
+          setActiveTab('diagnosis')
+        }}
+        onRetry={() => {
+          setDiagnosisModalOpen(false)
+          onRetryFromDiagnosis?.()
+        }}
+        onApplyOption={onApplyDiagnosisSuggestion ? handleApplyOption : undefined}
+        applyDisabled={applyUsed}
+        currentInputs={diagnosisCurrentInputs}
+      />
     </div>
   )
 }

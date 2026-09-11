@@ -665,6 +665,7 @@ def _to_results(record: JobRecord) -> MPCJobResultsResponse:
             baseline_series=_json_safe(record.baseline_series),
             usage=_json_safe(record.usage),
             diagnostics=_json_safe(record.diagnostics),
+            diagnosis=_json_safe(record.diagnostics),
             error=str(record.error) if record.error else None,
             score=record.score if record.score is not None else (record.session_metadata or {}).get("score"),
             success=record.success if record.success is not None else (record.session_metadata or {}).get("success"),
@@ -1114,14 +1115,23 @@ def _run_tuning_thread(job_id: str, store: InMemoryJobStore) -> None:
                 break
 
         best_float = float(best_mse) if best_mse is not None else None
-        success_bool = bool(best_float is not None and best_float == best_float)
         if first_mse is not None and best_float is not None and first_mse > 0:
             imp = max(0.0, min(1.0, 1.0 - (best_float / first_mse)))
             score_val = round(max(0.0, min(1.0, 0.5 + 0.5 * imp if imp > 0 else 1.0 / (1.0 + best_float))), 2)
-        elif best_float is not None:
+        elif best_float is not None and best_float == best_float:
             score_val = round(max(0.0, min(1.0, 1.0 / (1.0 + best_float))), 2)
         else:
-            score_val = 0.85 if success_bool else 0.20
+            score_val = 0.20
+
+        has_finite_mse = best_float is not None and best_float == best_float
+        solid_improvement = (
+            first_mse is not None
+            and has_finite_mse
+            and first_mse > 0
+            and (1.0 - (best_float / first_mse)) >= 0.35
+            and best_float < 5.0
+        )
+        success_bool = bool(has_finite_mse and (score_val >= 0.25 or solid_improvement))
 
         session_meta = {
             "tokens": {
@@ -1174,6 +1184,22 @@ def _run_tuning_thread(job_id: str, store: InMemoryJobStore) -> None:
                 fields[key] = val
         store.update(job_id, **fields)
 
+        # AgentMPC diagnostics: scan findings OR poor score / unsuccessful completion
+        try:
+            fs = dict(final_state or {})
+            fs["score"] = score_val
+            fs["success"] = success_bool
+            fs["best_mse"] = best_float
+            fs["first_mse"] = first_mse
+            build_and_store_diagnostics(
+                job_id,
+                store,
+                final_state=fs,
+                force=not success_bool or score_val < 0.25,
+            )
+        except Exception:
+            pass
+
         # Sync completed results to persisted Project
         rec_now = store.get(job_id)
         if rec_now and rec_now.project_id:
@@ -1199,13 +1225,24 @@ def _run_tuning_thread(job_id: str, store: InMemoryJobStore) -> None:
             }
         )
     except Exception as exc:  # noqa: BLE001
+        err_text = f"{type(exc).__name__}: {exc}"
         store.update(
             job_id,
             status="failed",
             stage="error",
             message="Tuning failed",
-            error=f"{type(exc).__name__}: {exc}",
+            error=err_text,
         )
+
+        try:
+            build_and_store_diagnostics(
+                job_id,
+                store,
+                final_state={"error": err_text},
+                force=True,
+            )
+        except Exception:
+            pass
 
         rec_now = store.get(job_id)
         if rec_now and rec_now.project_id:
@@ -1215,7 +1252,7 @@ def _run_tuning_thread(job_id: str, store: InMemoryJobStore) -> None:
                     project_id=int(rec_now.project_id),
                     job_id=job_id,
                     status="failed",
-                    error=f"{type(exc).__name__}: {exc}",
+                    error=err_text,
                 )
             except Exception:
                 pass
@@ -1224,10 +1261,412 @@ def _run_tuning_thread(job_id: str, store: InMemoryJobStore) -> None:
             {
                 "kind": "error",
                 "stage": "error",
-                "text": f"{type(exc).__name__}: {exc}",
+                "text": err_text,
                 "ts": time.time(),
             }
         )
+
+
+def _build_mpc_results_rows(
+    mse_history: list[Any] | None,
+    params_history: list[Any] | None,
+    history: list[Any] | None,
+    final_state: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """Build per-iteration rows for diagnostics_agent.scan_for_issues."""
+    mse_h = list(mse_history or [])
+    params_h = list(params_history or [])
+    n = max(len(mse_h), len(params_h), 1)
+    rows: list[dict[str, Any]] = []
+    unstable_flags = []
+    if isinstance(final_state, dict):
+        unstable_flags = list(final_state.get("unstable_history") or [])
+        solver_diag_hist = list(final_state.get("solver_diagnostics_history") or [])
+        error_hist = list(final_state.get("error_history") or [])
+    else:
+        solver_diag_hist = []
+        error_hist = []
+
+    for i in range(n):
+        mse = mse_h[i] if i < len(mse_h) else None
+        err = error_hist[i] if i < len(error_hist) else None
+        ok = err is None and mse is not None
+        row: dict[str, Any] = {
+            "iteration": i + 1,
+            "ok": bool(ok),
+            "mse": mse,
+        }
+        if err:
+            row["error"] = str(err)[:500]
+        if i < len(unstable_flags) and unstable_flags[i]:
+            row["unstable"] = True
+        if i < len(solver_diag_hist) and isinstance(solver_diag_hist[i], dict):
+            row["solver_diagnostics"] = solver_diag_hist[i]
+        if i < len(params_h) and isinstance(params_h[i], dict):
+            row["params"] = params_h[i]
+        rows.append(row)
+    return rows
+
+
+def _logs_from_progress_and_history(
+    progress: list[Any] | None,
+    history: list[Any] | None,
+    error: str | None = None,
+) -> list[dict[str, str]]:
+    logs: list[dict[str, str]] = []
+    for ev in progress or []:
+        if not isinstance(ev, dict):
+            continue
+        text = str(ev.get("text") or ev.get("message") or "")
+        if text:
+            logs.append({"message": text})
+    for h in history or []:
+        text = str(h) if not isinstance(h, dict) else str(h.get("message") or h.get("text") or h)
+        if text:
+            logs.append({"message": text})
+    if error:
+        logs.append({"message": str(error)})
+    return logs
+
+
+def _build_run_context(
+    *,
+    options: dict[str, Any] | None,
+    best_params: Any,
+    mse_history: list[Any] | None,
+    params_history: list[Any] | None,
+    termination_reason: str | None,
+    error: str | None,
+    system_name: str | None,
+) -> str:
+    parts: list[str] = []
+    if system_name:
+        parts.append(f"System: {system_name}")
+    if options:
+        parts.append(
+            "Run options: "
+            f"Np={options.get('prediction_horizon')}, Nc={options.get('control_horizon')}, "
+            f"dt={options.get('dt_mpc')}, sim_time={options.get('simulation_time')}, "
+            f"trajectory={options.get('trajectory_mode')}, max_iters={options.get('max_iterations')}"
+        )
+    if best_params is not None:
+        parts.append(f"Best/last params: {best_params}")
+    if mse_history:
+        parts.append(f"MSE history (len={len(mse_history)}): {mse_history[:20]}")
+    if params_history:
+        parts.append(f"Params history length: {len(params_history)}")
+    if termination_reason:
+        parts.append(f"Termination reason: {termination_reason}")
+    if error:
+        parts.append(f"Run error: {error[:1500]}")
+    return "\n".join(parts) if parts else "(minimal context)"
+
+
+def build_and_store_diagnostics(
+    job_id: str,
+    store: InMemoryJobStore,
+    *,
+    final_state: dict[str, Any] | None = None,
+    force: bool = False,
+) -> dict[str, Any] | None:
+    """Run AgentMPC scan_for_issues (+ optional LLM report) and persist on the job.
+
+    Only stores a structured diagnosis when findings exist (or force=True with
+    an error). Returns the diagnostics dict or None.
+    """
+    record = store.get(job_id)
+    if record is None:
+        return None
+
+    try:
+        from backend_core.AgentMPC.agents.diagnostics_agent import (
+            ERROR_CATEGORY_TITLES,
+            generate_diagnostics_report,
+            scan_for_issues,
+        )
+    except Exception:
+        return None
+
+    final_state = final_state or {}
+    mse_h = list(record.mse_history or final_state.get("mse_history") or [])
+    params_h = list(record.params_history or final_state.get("params_history") or [])
+    history = list(record.history or final_state.get("history") or [])
+    error = record.error or (str(final_state.get("error")) if final_state.get("error") else None)
+
+    results_rows = _build_mpc_results_rows(mse_h, params_h, history, final_state=final_state)
+    logs = _logs_from_progress_and_history(record.progress, history, error=error)
+    last_outputs: dict[str, str] = {}
+    if error:
+        last_outputs["run_error"] = str(error)[:1000]
+    for key in ("eval_error", "last_error", "message"):
+        val = final_state.get(key)
+        if val:
+            last_outputs[key] = str(val)[:1000]
+
+    findings = scan_for_issues(logs, results_rows, last_outputs=last_outputs or None)
+    if not findings and error:
+        findings = {
+            "dynamics_crash": {
+                "count": 1,
+                "examples": [str(error)[:300]],
+                "iterations": [int(record.iteration or final_state.get("iteration") or 0) or 1],
+            }
+        }
+
+    # Performance failure: completed graph but score/MSE indicates the design missed goals.
+    # This is the common case when Juror accepts_and_end after a plateau with high residual MSE
+    # (UI shows Success + Score 1% without any keyword crash patterns).
+    score = final_state.get("score")
+    if score is None and isinstance(getattr(record, "score", None), (int, float)):
+        score = record.score
+    if score is None and isinstance(record.session_metadata, dict):
+        score = record.session_metadata.get("score")
+    best_mse_val = final_state.get("best_mse", record.best_mse)
+    first_mse_val = final_state.get("first_mse")
+    if first_mse_val is None:
+        for m in mse_h:
+            if isinstance(m, (int, float)) and m > 0:
+                first_mse_val = float(m)
+                break
+    try:
+        score_f = float(score) if score is not None else None
+    except (TypeError, ValueError):
+        score_f = None
+    try:
+        best_mse_f = float(best_mse_val) if best_mse_val is not None else None
+    except (TypeError, ValueError):
+        best_mse_f = None
+
+    poor_score = score_f is not None and score_f < 0.25
+    catastrophic_mse = best_mse_f is not None and best_mse_f == best_mse_f and best_mse_f >= 10.0
+    no_improvement = (
+        first_mse_val is not None
+        and best_mse_f is not None
+        and first_mse_val > 0
+        and best_mse_f >= 0.85 * float(first_mse_val)
+        and best_mse_f >= 1.0
+    )
+    if not findings and (poor_score or catastrophic_mse or no_improvement or force):
+        examples = []
+        if score_f is not None:
+            examples.append(f"Design score={score_f:.0%} (threshold for OK is ~25%).")
+        if best_mse_f is not None:
+            examples.append(f"Best MSE={best_mse_f:.6g}.")
+        if first_mse_val is not None and best_mse_f is not None:
+            examples.append(f"First MSE={float(first_mse_val):.6g} → best={best_mse_f:.6g}.")
+        term = record.termination_reason or final_state.get("termination_reason")
+        if term:
+            examples.append(f"Termination: {term}")
+        findings = {
+            "poor_performance": {
+                "count": 1,
+                "examples": examples[:4],
+                "iterations": [int(record.iteration or final_state.get("iteration") or 0) or 1],
+            }
+        }
+
+    if not findings and not force:
+        return None
+
+    n_total = max(len(results_rows), int(record.iteration or 0), 1)
+    run_context = _build_run_context(
+        options=record.options if isinstance(record.options, dict) else {},
+        best_params=record.best_params or final_state.get("best_params") or final_state.get("current_params"),
+        mse_history=mse_h,
+        params_history=params_h,
+        termination_reason=record.termination_reason or final_state.get("termination_reason"),
+        error=error,
+        system_name=record.system_name,
+    )
+    if score_f is not None:
+        run_context = f"{run_context}\nDesign score: {score_f:.0%}"
+    if best_mse_f is not None:
+        run_context = f"{run_context}\nBest MSE: {best_mse_f}"
+
+    # Titles for synthetic categories not in diagnostics_agent ERROR_CATEGORY_TITLES
+    category_titles = dict(ERROR_CATEGORY_TITLES)
+    category_titles.setdefault(
+        "poor_performance",
+        "Controller did not meet tracking / performance goals",
+    )
+
+    report_obj = None
+    if findings:
+        try:
+            report_obj = generate_diagnostics_report(
+                findings,
+                n_total_iterations=n_total,
+                run_context=run_context,
+            )
+        except Exception:
+            report_obj = None
+
+    suggestions: list[dict[str, Any]] = []
+    explanation_parts: list[str] = []
+    headline_parts: list[str] = []
+
+    if report_obj is not None and getattr(report_obj, "recommendations", None):
+        for rec in report_obj.recommendations:
+            cat = getattr(rec, "category", "") or ""
+            title = category_titles.get(cat, cat.replace("_", " ").title() or "Issue")
+            expl = getattr(rec, "explanation", "") or ""
+            recom = getattr(rec, "recommendation", "") or ""
+            contrib = getattr(rec, "contribution_estimate", "") or ""
+            headline_parts.append(title)
+            if expl:
+                explanation_parts.append(expl)
+            suggestion: dict[str, Any] = {
+                "title": title,
+                "detail": recom,
+                "rationale": expl,
+                "text": recom,
+                "category": cat,
+                "contribution_estimate": contrib,
+            }
+            # Soft apply targets when recommendation mentions tunable knobs
+            lower = f"{recom} {expl}".lower()
+            if "prediction horizon" in lower or " np" in lower or "np/" in lower:
+                suggestion["field"] = "prediction_horizon"
+                suggestion["lever"] = "prediction_horizon"
+            elif "control horizon" in lower or " nc" in lower:
+                suggestion["field"] = "control_horizon"
+                suggestion["lever"] = "control_horizon"
+            elif "simulation time" in lower or "sim time" in lower:
+                suggestion["field"] = "simulation_time"
+                suggestion["lever"] = "simulation_time"
+            elif " dt" in lower or "sampling" in lower or "time step" in lower:
+                suggestion["field"] = "dt_mpc"
+                suggestion["lever"] = "dt_mpc"
+            suggestions.append(suggestion)
+    else:
+        for cat_key, info in (findings or {}).items():
+            title = category_titles.get(cat_key, cat_key.replace("_", " ").title())
+            headline_parts.append(title)
+            examples = info.get("examples") or []
+            if cat_key == "poor_performance":
+                explanation_parts.append(
+                    "The tuning run finished, but the design score / residual MSE shows the "
+                    "controller did not meet tracking goals (plateau or high error)."
+                )
+                detail = (
+                    "Revisit seed Q/R, prediction/control horizons (Np/Nc), sampling time dt, "
+                    "and scenario difficulty. Try the dynamics/Bryson probe, then relaunch with "
+                    "adjusted knobs or a milder trajectory."
+                )
+                if examples:
+                    explanation_parts.append(" ".join(str(e) for e in examples[:3]))
+            else:
+                explanation_parts.append(
+                    f"Detected {info.get('count', 1)} occurrence(s) of {title}."
+                )
+                detail = f"See logs for details ({info.get('count', 1)} hit(s))."
+            suggestions.append(
+                {
+                    "title": title,
+                    "detail": detail,
+                    "category": cat_key,
+                    "rationale": explanation_parts[-1] if explanation_parts else "",
+                    "text": detail,
+                }
+            )
+
+    headline = "; ".join(headline_parts[:3]) if headline_parts else (
+        "Run issues detected" if findings else "Diagnostics"
+    )
+    report_dict: dict[str, Any] = {
+        "headline": headline,
+        "cause": headline,
+        "explanation": explanation_parts,
+        "suggestions": suggestions,
+    }
+    if error:
+        report_dict["error"] = str(error)[:2000]
+
+    diagnostics_payload: dict[str, Any] = {
+        "report": report_dict,
+        "evidence": findings or {},
+        "findings": findings or {},
+        "run_context": run_context,
+    }
+
+    try:
+        store.update(job_id, diagnostics=diagnostics_payload)
+    except Exception:
+        pass
+    return diagnostics_payload
+
+
+def diagnosis_chat(
+    job_id: str,
+    message: str,
+    *,
+    history: list[dict[str, Any]] | None = None,
+    store: InMemoryJobStore | None = None,
+) -> dict[str, Any]:
+    """Follow-up chat about stored MPC diagnostics (mirrors Adaptive diagnosis_chat)."""
+    job_store = _store(store)
+    record = job_store.get(job_id)
+    if record is None:
+        raise KeyError(job_id)
+
+    diagnostics = record.diagnostics if isinstance(record.diagnostics, dict) else None
+    if not diagnostics:
+        raise ValueError("No diagnostics available for this job")
+
+    from backend_core.AgentMPC.agents.diagnostics_agent import (
+        DiagnosticsReport,
+        chat_about_issues,
+    )
+
+    findings = diagnostics.get("findings") or diagnostics.get("evidence") or {}
+    if not isinstance(findings, dict):
+        findings = {}
+
+    report_dict = diagnostics.get("report") if isinstance(diagnostics.get("report"), dict) else {}
+    report_obj = None
+    try:
+        # Reconstruct structured report from stored suggestions when possible
+        raw_suggestions = report_dict.get("suggestions") or []
+        # DiagnosticsReport expects pydantic recommendation models; build via
+        # model_validate on a plain dict shape matching the agent schema.
+        payload = {
+            "recommendations": [
+                {
+                    "category": str(s.get("category") or "issue"),
+                    "explanation": str(s.get("rationale") or s.get("detail") or ""),
+                    "recommendation": str(s.get("detail") or s.get("text") or s.get("title") or ""),
+                    "contribution_estimate": str(s.get("contribution_estimate") or ""),
+                }
+                for s in raw_suggestions
+                if isinstance(s, dict)
+            ]
+        }
+        if payload["recommendations"]:
+            report_obj = DiagnosticsReport.model_validate(payload)
+    except Exception:
+        report_obj = None
+
+    norm_history: list[dict[str, str]] = []
+    for turn in history or []:
+        if not isinstance(turn, dict):
+            continue
+        role = str(turn.get("role") or "user")
+        content = str(turn.get("content") or turn.get("text") or turn.get("message") or "")
+        if content:
+            norm_history.append({"role": role, "content": content})
+
+    run_context = str(diagnostics.get("run_context") or "")
+    run_error = record.error
+
+    reply = chat_about_issues(
+        user_message=str(message or "").strip(),
+        findings=findings,
+        report=report_obj,
+        conversation_history=norm_history,
+        run_error=run_error,
+        run_context=run_context,
+    )
+    return {"reply": reply, "usage": None}
 
 
 def _start_tuning_async(job_id: str, store: InMemoryJobStore) -> None:

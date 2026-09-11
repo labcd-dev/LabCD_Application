@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import { mpcApi } from '../api/endpoints'
 import type {
+  DiagnosisApplyPatch,
   MPCDiagnosticsResponse,
   MPCJobOptions,
   MPCJobResultsResponse,
@@ -39,6 +40,7 @@ export function MpcPage() {
   const [gradeModalOpen, setGradeModalOpen] = useState(false)
   const [showCompletedToast, setShowCompletedToast] = useState(false)
   const hasPromptedGradeRef = useRef(false)
+  const [diagnosisApplyUsed, setDiagnosisApplyUsed] = useState(false)
 
   // Setup tabs
   const [setupTab, setSetupTab] = useState<'scenario' | 'tuning'>('scenario')
@@ -329,6 +331,7 @@ export function MpcPage() {
         options,
         project_id: pipeline.projectId ? String(pipeline.projectId) : undefined,
       })
+      setDiagnosisApplyUsed(false)
       setJobId(res.job_id)
       setJob({
         job_id: res.job_id,
@@ -348,6 +351,47 @@ export function MpcPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const applyDiagnosisSuggestion = (patch: DiagnosisApplyPatch) => {
+    // Write suggestion into launch form only (does not start a job). Max 1 Apply in dashboard.
+    const field = (patch.lever || patch.field || '').toLowerCase()
+    const value = patch.value
+    if (value == null && !field) {
+      setDiagnosisApplyUsed(true)
+      return
+    }
+    const n = typeof value === 'number' ? value : parseFloat(String(value ?? ''))
+    if (field.includes('prediction') || field === 'np' || (field.includes('horizon') && field.includes('pred'))) {
+      if (!Number.isNaN(n) && n > 0) setNp(Math.round(n))
+    } else if (field.includes('control_horizon') || field === 'nc' || (field.includes('control') && field.includes('horizon'))) {
+      if (!Number.isNaN(n) && n > 0) setNc(Math.round(n))
+    } else if (field.includes('sim') && field.includes('time')) {
+      if (!Number.isNaN(n) && n > 0) setSimTime(n)
+    } else if (field.includes('dt') || field.includes('sampling') || field.includes('step')) {
+      if (!Number.isNaN(n) && n > 0) setDtMpc(n)
+    } else if (field.includes('max_iter')) {
+      if (!Number.isNaN(n) && n > 0) setMaxIterations(Math.round(n))
+    }
+    setDiagnosisApplyUsed(true)
+  }
+
+  const handleRetryFromDiagnosis = () => {
+    // Return to launch form without starting a new job; preserve form values.
+    if (pollTimerRef.current) clearInterval(pollTimerRef.current)
+    setJobId(null)
+    setJob(null)
+    setResults(null)
+    setError(null)
+    setShowCompletedToast(false)
+    requestAnimationFrame(() => {
+      const el = document.getElementById('mpc-launch-section')
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      } else {
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+      }
+    })
   }
 
   const handleCancel = async () => {
@@ -457,7 +501,10 @@ export function MpcPage() {
 
         {/* Setup Screen when no job running */}
         {!job && (
-          <div className="relative overflow-hidden rounded-2xl border border-border bg-surface-elevated p-6 sm:p-7 shadow-sm backdrop-blur-md">
+          <div
+            id="mpc-launch-section"
+            className="relative overflow-hidden rounded-2xl border border-border bg-surface-elevated p-6 sm:p-7 shadow-sm backdrop-blur-md"
+          >
             <div className="pointer-events-none absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-purple-500/80 to-transparent" />
             
             {/* Title Header */}
@@ -1278,6 +1325,15 @@ export function MpcPage() {
                   console.error('Failed to download MPC PDF report:', err)
                 })
               }
+            }}
+            onRetryFromDiagnosis={handleRetryFromDiagnosis}
+            onApplyDiagnosisSuggestion={applyDiagnosisSuggestion}
+            diagnosisApplyUsed={diagnosisApplyUsed}
+            currentDiagnosisInputs={{
+              prediction_horizon: np,
+              control_horizon: nc,
+              simulation_time: simTime,
+              dt_mpc: dtMpc,
             }}
           />
         )}

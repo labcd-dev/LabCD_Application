@@ -1081,6 +1081,11 @@ export const mpcApi = {
     apiFetch<MPCJobStatusResponse>(`/mpc/jobs/${jobId}/cancel`, { method: 'POST' }),
   getResults: (jobId: string) =>
     apiFetch<MPCJobResultsResponse>(`/mpc/jobs/${jobId}/results`),
+  diagnosisChat: (jobId: string, body: AdaptiveDiagnosisChatRequest) =>
+    apiFetch<AdaptiveDiagnosisChatResponse>(`/mpc/jobs/${jobId}/diagnosis/chat`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
   streamEvents: (
     jobId: string,
     onEvent: (event: string, data: any) => void,

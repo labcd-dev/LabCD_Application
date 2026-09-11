@@ -872,6 +872,10 @@ export interface AdaptiveDiagnosisChatResponse {
   usage?: Record<string, unknown> | null
 }
 
+export type MpcDiagnosis = AdaptiveDiagnosis
+export type MPCDiagnosisChatRequest = AdaptiveDiagnosisChatRequest
+export type MPCDiagnosisChatResponse = AdaptiveDiagnosisChatResponse
+
 export interface AdaptiveJobResultsResponse {
   job_id: string
   status: AdaptiveJobStatus
@@ -1147,6 +1151,7 @@ export interface MPCJobResultsResponse {
     [key: string]: unknown
   } | null
   diagnostics?: Record<string, unknown> | null
+  diagnosis?: MpcDiagnosis | Record<string, unknown> | null
   series?: {
     t: number[]
     x: Record<string, number[]>
