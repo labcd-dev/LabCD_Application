@@ -140,6 +140,9 @@ def _silo_worker(job_id: str) -> None:
             status="completed",
             results=_silo_project_results(job),
         )
+        from backend_api.http.services import credit_service
+
+        credit_service.end_job_usage(job_id=job_id)
     except DesignCancelledError:
         job.metadata["monitor_state"] = get_serializable_monitor_state(monitor)
         job.event_queue.put({"type": "monitor", "content": job.metadata["monitor_state"]})
@@ -152,6 +155,9 @@ def _silo_worker(job_id: str) -> None:
             results=_silo_project_results(job),
             error=job.error,
         )
+        from backend_api.http.services import credit_service
+
+        credit_service.end_job_usage(job_id=job_id, cancel=True)
     except Exception as exc:
         job.error = str(exc)
         job.event_queue.put({"type": "error", "content": str(exc)})
@@ -162,6 +168,9 @@ def _silo_worker(job_id: str) -> None:
             status="failed",
             error=str(exc),
         )
+        from backend_api.http.services import credit_service
+
+        credit_service.end_job_usage(job_id=job_id)
     finally:
         stop_event.set()
         publisher.join(timeout=1.0)
@@ -186,6 +195,10 @@ def start_silo_job(
     file_name = config.get("file_name")
     if isinstance(file_name, str) and file_name.strip():
         runtime_config["file_name"] = file_name.strip()
+    from backend_api.http.services.analytics_service import record_llm_use, record_module_use
+    from backend_api.http.services import credit_service
+
+    credit_service.require_job_credits(user_id)
     monitor = DesignMonitor()
     job = job_store.create(
         "silo",
@@ -195,10 +208,10 @@ def start_silo_job(
         },
         user_id=user_id,
     )
-    from backend_api.http.services.analytics_service import record_llm_use, record_module_use
 
     record_module_use(user_id, "silo")
     record_llm_use(user_id, runtime_config.get("llm_model") or config.get("llm_model"))
+    credit_service.begin_job_usage(user_id, "silo", job_id=job.id, check_balance=False)
     linked_project_id = link_or_create_for_job(
         user_id=user_id,
         project_id=project_id,

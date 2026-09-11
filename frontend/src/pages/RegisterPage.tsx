@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { Link, Navigate } from 'react-router-dom'
+import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import { PasswordStrengthMeter } from '../components/PasswordStrengthMeter'
 import { StatusMessage } from '../components/StatusMessage'
 import { useAuth } from '../context/AuthContext'
@@ -8,9 +8,13 @@ import { passwordMeetsPolicy, passwordPolicyError } from '../lib/passwordStrengt
 
 export function RegisterPage() {
   const { user, loading, register } = useAuth()
+  const [searchParams] = useSearchParams()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [referralCode, setReferralCode] = useState(
+    () => (searchParams.get('ref') || '').trim().toUpperCase(),
+  )
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -36,7 +40,7 @@ export function RegisterPage() {
 
     setSubmitting(true)
     try {
-      const result = await register(email.trim(), password)
+      const result = await register(email.trim(), password, referralCode.trim() || null)
       setSuccess(result.message)
       setPassword('')
       setConfirmPassword('')
@@ -82,12 +86,11 @@ export function RegisterPage() {
                 type="password"
                 autoComplete="new-password"
                 required
-                minLength={12}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
-              <PasswordStrengthMeter password={password} email={email} />
             </label>
+            <PasswordStrengthMeter password={password} email={email} />
             <label className={fieldLabel}>
               <span>Confirm password</span>
               <input
@@ -95,33 +98,32 @@ export function RegisterPage() {
                 type="password"
                 autoComplete="new-password"
                 required
-                minLength={12}
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
               />
             </label>
+            <label className={fieldLabel}>
+              <span>Referral code (optional)</span>
+              <input
+                className={fieldInput}
+                type="text"
+                autoComplete="off"
+                value={referralCode}
+                onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
+                maxLength={32}
+              />
+            </label>
             <button type="submit" className={`${btnPrimary} ${btnWide}`} disabled={submitting}>
-              {submitting ? 'Creating account…' : 'Create account'}
+              {submitting ? 'Creating…' : 'Create account'}
             </button>
           </form>
         )}
 
-        <p className="m-0 text-center text-sm text-muted-text">
-          {success ? (
-            <>
-              Ready to sign in after verifying?{' '}
-              <Link to="/login" className="font-medium text-primary hover:underline">
-                Sign in
-              </Link>
-            </>
-          ) : (
-            <>
-              Already have an account?{' '}
-              <Link to="/login" className="font-medium text-primary hover:underline">
-                Sign in
-              </Link>
-            </>
-          )}
+        <p className="mb-0 text-sm text-muted-text">
+          Already have an account?{' '}
+          <Link className="font-medium text-accent hover:underline" to="/login">
+            Sign in
+          </Link>
         </p>
       </div>
     </section>

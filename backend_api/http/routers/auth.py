@@ -229,6 +229,7 @@ def register(
         is_admin=False,
         assign_default_plan=True,
         email_verified=False,
+        referral_code=request.referral_code,
     )
     raw_token = token_service.create_email_verify_token(db, user)
     send_verification_email(to=user.email, token=raw_token)
@@ -286,6 +287,9 @@ def verify_email(
     user.email_verified = True
     db.add(user)
     db.commit()
+    from backend_api.http.services import credit_service
+
+    credit_service.on_user_verified(db, user)
     audit_service.record_from_request(
         db,
         http_request,

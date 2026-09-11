@@ -1,6 +1,6 @@
 """Regularizer routes."""
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from backend_api.db.models import User
 from backend_api.http.dependencies import assert_model_allowed, require_action
@@ -11,6 +11,11 @@ from backend_api.http.schemas.regularizer import (
     StandardizeResponse,
 )
 from backend_api.http.services.analytics_service import record_module_use
+from backend_api.http.services.credit_service import (
+    InsufficientCreditsError,
+    begin_job_usage,
+    end_job_usage,
+)
 from backend_api.http.services.regularizer_service import run_regularize, run_standardize
 
 router = APIRouter(prefix="/regularize", tags=["regularizer"])
@@ -22,13 +27,20 @@ def regularize_file(
     user: User = Depends(require_action("module:regularize")),
 ) -> RegularizeResponse:
     assert_model_allowed(user, request.model)
+    try:
+        session_id = begin_job_usage(user.id, "regularize")
+    except InsufficientCreditsError as exc:
+        raise HTTPException(status_code=402, detail=str(exc)) from exc
     record_module_use(user.id, "regularize")
-    result = run_regularize(
-        request.file_content,
-        request.file_name,
-        request.file_type,
-        request.model,
-    )
+    try:
+        result = run_regularize(
+            request.file_content,
+            request.file_name,
+            request.file_type,
+            request.model,
+        )
+    finally:
+        end_job_usage(session_id=session_id)
     return RegularizeResponse(
         file_content=result["file_content"],
         change_applied=result["change_applied"],
@@ -42,6 +54,13 @@ def standardize_file(
     user: User = Depends(require_action("module:regularize")),
 ) -> StandardizeResponse:
     assert_model_allowed(user, request.model)
+    try:
+        session_id = begin_job_usage(user.id, "regularize")
+    except InsufficientCreditsError as exc:
+        raise HTTPException(status_code=402, detail=str(exc)) from exc
     record_module_use(user.id, "regularize")
-    result = run_standardize(request.file_content, request.model, request.silo_pipeline)
+    try:
+        result = run_standardize(request.file_content, request.model, request.silo_pipeline)
+    finally:
+        end_job_usage(session_id=session_id)
     return StandardizeResponse(file_content=result["file_content"])

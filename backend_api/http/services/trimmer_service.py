@@ -170,6 +170,9 @@ def _trimmer_worker(job_id: str) -> None:
                     error=summary["error"],
                 ),
             )
+            from backend_api.http.services import credit_service
+
+            credit_service.end_job_usage(job_id=job_id)
             return
 
         final_state = summary.get("final_state") or job.metadata.get("final_values") or {}
@@ -188,6 +191,9 @@ def _trimmer_worker(job_id: str) -> None:
             results=_project_results_with_summaries(job, artifacts),
         )
         job.event_queue.put({"type": "done", "summary": job.metadata["summary"]})
+        from backend_api.http.services import credit_service
+
+        credit_service.end_job_usage(job_id=job_id)
     except HumanInputRequired as exc:
         job.metadata["pending_request"] = exc.request
         job.event_queue.put({"type": "human_input", "content": exc.request})
@@ -207,6 +213,9 @@ def _trimmer_worker(job_id: str) -> None:
                 error=str(exc),
             ),
         )
+        from backend_api.http.services import credit_service
+
+        credit_service.end_job_usage(job_id=job_id)
 
 
 def _finalize_job(job_id: str) -> None:
@@ -258,15 +267,19 @@ def start_trimmer_job(
         recommender_summary = _snapshot_recommender_summary(recommender_job_id)
         if recommender_summary is not None:
             metadata["recommender_summary"] = recommender_summary
+    from backend_api.http.services.analytics_service import record_llm_use, record_module_use
+    from backend_api.http.services import credit_service
+
+    credit_service.require_job_credits(user_id)
     job = job_store.create(
         "trimmer",
         metadata=metadata,
         user_id=user_id,
     )
-    from backend_api.http.services.analytics_service import record_llm_use, record_module_use
 
     record_module_use(user_id, "trimmer")
     record_llm_use(user_id, model)
+    credit_service.begin_job_usage(user_id, "trimmer", job_id=job.id, check_balance=False)
     linked_project_id = link_or_create_for_job(
         user_id=user_id,
         project_id=project_id,

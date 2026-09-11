@@ -598,6 +598,14 @@ def _run_pipeline_thread(job_id: str, store: InMemoryAdaptiveJobStore) -> None:
             session_metadata=session_meta,
         )
 
+        from backend_api.http.services import credit_service
+
+        credit_service.end_job_usage(
+            job_id=job_id,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+        )
+
         # Sync completed results to persisted Project
         rec_now = store.get(job_id)
         if rec_now and rec_now.project_id:
@@ -633,6 +641,10 @@ def _run_pipeline_thread(job_id: str, store: InMemoryAdaptiveJobStore) -> None:
             error=f"{type(exc).__name__}: {exc}",
         )
 
+        from backend_api.http.services import credit_service
+
+        credit_service.end_job_usage(job_id=job_id)
+
         rec_now = store.get(job_id)
         if rec_now and rec_now.project_id:
             try:
@@ -662,6 +674,9 @@ def submit_job(
         system_spec_mod.normalize_defaults(request.system_spec) if request.system_spec else {}
     )
 
+    from backend_api.http.services import credit_service
+
+    credit_service.require_job_credits(request.user_id)
     record = job_store.create(
         system_spec=spec,
         options=options,
@@ -669,6 +684,8 @@ def submit_job(
         project_id=_coerce_project_id(request.project_id),
     )
     job_id = record.job_id
+
+    credit_service.begin_job_usage(request.user_id, "adaptive", job_id=job_id, check_balance=False)
 
     # Automatically link or create in Project database so it appears in Projects history
     sys_name = _system_name(spec) or "adaptive_system"
@@ -940,6 +957,9 @@ def cancel_job(
             message="Cancelled by client",
         )
         assert updated is not None
+        from backend_api.http.services import credit_service
+
+        credit_service.end_job_usage(job_id=job_id, cancel=True)
         return _to_status_response(updated)
     updated = job_store.update(job_id, message="Cancel requested")
     assert updated is not None

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import {
   Camera,
+  Coins,
   KeyRound,
   Monitor,
   Palette,
@@ -9,8 +10,13 @@ import {
   UserCircle,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { authApi } from '../api/endpoints'
-import type { AuthSessionInfo } from '../api/types'
+import { authApi, creditsApi } from '../api/endpoints'
+import type {
+  AuthSessionInfo,
+  CreditDashboard,
+  CreditLedgerEntry,
+  CreditUsageSession,
+} from '../api/types'
 import { PasswordStrengthMeter } from '../components/PasswordStrengthMeter'
 import { StatusMessage } from '../components/StatusMessage'
 import { useAuth } from '../context/AuthContext'
@@ -20,7 +26,14 @@ import { passwordMeetsPolicy, passwordPolicyError } from '../lib/passwordStrengt
 import { getThemeOfDay } from '../lib/themeOfDay'
 import { formatDate, formatDateTime } from '../lib/formatDateTime'
 
-type ProfileSection = 'account' | 'photo' | 'appearance' | 'security' | 'devices' | 'about'
+type ProfileSection =
+  | 'account'
+  | 'photo'
+  | 'appearance'
+  | 'security'
+  | 'devices'
+  | 'credits'
+  | 'about'
 
 const SECTIONS: {
   id: ProfileSection
@@ -33,6 +46,7 @@ const SECTIONS: {
   { id: 'appearance', label: 'Appearance', description: 'Theme preference', icon: Palette },
   { id: 'security', label: 'Security', description: 'Change password', icon: KeyRound },
   { id: 'devices', label: 'Devices', description: 'Active sessions', icon: Monitor },
+  { id: 'credits', label: 'Credits', description: 'Balance and usage', icon: Coins },
   { id: 'about', label: 'About', description: 'Account details', icon: UserCircle },
 ]
 
@@ -64,6 +78,12 @@ function userInitials(user: { display_name: string | null; email: string }): str
   return source.slice(0, 2).toUpperCase()
 }
 
+function formatCredits(value: number | string): string {
+  const n = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(n)) return String(value)
+  return n.toLocaleString(undefined, { maximumFractionDigits: 2 })
+}
+
 export function ProfilePage() {
   const { user, refreshUser, logout } = useAuth()
   const navigate = useNavigate()
@@ -93,12 +113,38 @@ export function ProfilePage() {
   const [sessionsError, setSessionsError] = useState<string | null>(null)
   const [sessionsBusy, setSessionsBusy] = useState(false)
 
+  const [credits, setCredits] = useState<CreditDashboard | null>(null)
+  const [ledger, setLedger] = useState<CreditLedgerEntry[]>([])
+  const [usageSessions, setUsageSessions] = useState<CreditUsageSession[]>([])
+  const [creditsError, setCreditsError] = useState<string | null>(null)
+  const [creditsLoading, setCreditsLoading] = useState(false)
+  const [referralCopied, setReferralCopied] = useState(false)
+
   const loadSessions = async () => {
     setSessionsError(null)
     try {
       setSessions(await authApi.listSessions())
     } catch (err) {
       setSessionsError(err instanceof Error ? err.message : 'Failed to load devices')
+    }
+  }
+
+  const loadCredits = async () => {
+    setCreditsLoading(true)
+    setCreditsError(null)
+    try {
+      const [dashboard, ledgerRows, sessionRows] = await Promise.all([
+        creditsApi.getDashboard(),
+        creditsApi.getLedger(),
+        creditsApi.getSessions(),
+      ])
+      setCredits(dashboard)
+      setLedger(ledgerRows)
+      setUsageSessions(sessionRows)
+    } catch (err) {
+      setCreditsError(err instanceof Error ? err.message : 'Failed to load credits')
+    } finally {
+      setCreditsLoading(false)
     }
   }
 
@@ -109,6 +155,12 @@ export function ProfilePage() {
     setSelectedTheme(user.theme)
     void loadSessions()
   }, [user])
+
+  useEffect(() => {
+    if (section === 'credits') {
+      void loadCredits()
+    }
+  }, [section])
 
   if (!user) {
     return null
@@ -579,6 +631,136 @@ export function ProfilePage() {
                       ))}
                     </ul>
                   )}
+                </div>
+              )}
+
+              {section === 'credits' && (
+                <div className="space-y-5">
+                  <p className="m-0 text-sm leading-relaxed text-muted-text">
+                    Daily credits reset each UTC day and do not roll over. Bonus credits from
+                    signup and referrals persist. Starting a design job requires a positive
+                    balance when hard gating is enabled.
+                  </p>
+                  {creditsError && <StatusMessage type="error" message={creditsError} />}
+                  {creditsLoading && !credits ? (
+                    <p className="m-0 text-sm text-muted-text">Loading credits…</p>
+                  ) : credits ? (
+                    <>
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        <div className="rounded-xl border border-border-subtle bg-surface-muted px-4 py-3">
+                          <p className="m-0 text-[11px] font-semibold uppercase tracking-[0.05em] text-muted">
+                            Spendable
+                          </p>
+                          <p className="mt-1 mb-0 text-2xl font-semibold text-foreground">
+                            {formatCredits(credits.spendable)}
+                          </p>
+                        </div>
+                        <div className="rounded-xl border border-border-subtle bg-surface-muted px-4 py-3">
+                          <p className="m-0 text-[11px] font-semibold uppercase tracking-[0.05em] text-muted">
+                            Daily
+                          </p>
+                          <p className="mt-1 mb-0 text-2xl font-semibold text-foreground">
+                            {formatCredits(credits.daily_balance)}
+                          </p>
+                          <p className="mt-1 mb-0 text-xs text-muted">
+                            Allotment {formatCredits(credits.daily_allotment)}
+                            {credits.daily_date ? ` · ${credits.daily_date}` : ''}
+                          </p>
+                        </div>
+                        <div className="rounded-xl border border-border-subtle bg-surface-muted px-4 py-3">
+                          <p className="m-0 text-[11px] font-semibold uppercase tracking-[0.05em] text-muted">
+                            Bonus
+                          </p>
+                          <p className="mt-1 mb-0 text-2xl font-semibold text-foreground">
+                            {formatCredits(credits.bonus_balance)}
+                          </p>
+                          <p className="mt-1 mb-0 text-xs text-muted">
+                            Spent today {formatCredits(credits.today_spent)}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl border border-border-subtle bg-surface-muted px-4 py-3">
+                        <p className="m-0 text-sm font-medium text-foreground">Referral</p>
+                        <p className="mt-1 mb-0 font-mono text-sm text-foreground">
+                          {credits.referral_code || '—'}
+                        </p>
+                        {credits.referral_link && (
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              className={btnBase}
+                              onClick={() => {
+                                void navigator.clipboard.writeText(credits.referral_link || '')
+                                setReferralCopied(true)
+                                window.setTimeout(() => setReferralCopied(false), 2000)
+                              }}
+                            >
+                              {referralCopied ? 'Copied' : 'Copy invite link'}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      <div>
+                        <h3 className="m-0 text-sm font-semibold text-foreground">Recent usage</h3>
+                        {usageSessions.length === 0 ? (
+                          <p className="mt-2 mb-0 text-sm text-muted-text">No usage sessions yet.</p>
+                        ) : (
+                          <ul className="mt-2 m-0 list-none space-y-2 p-0">
+                            {usageSessions.slice(0, 10).map((row) => (
+                              <li
+                                key={row.id}
+                                className="rounded-lg border border-border-subtle px-3 py-2 text-sm"
+                              >
+                                <span className="font-medium text-foreground">{row.module}</span>
+                                <span className="text-muted-text">
+                                  {' '}
+                                  · {row.status} · {row.duration_seconds}s ·{' '}
+                                  {row.prompt_tokens + row.completion_tokens} tok ·{' '}
+                                  {formatCredits(
+                                    row.status === 'open'
+                                      ? row.live_credits_estimate
+                                      : row.credits_charged,
+                                  )}{' '}
+                                  cr
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+
+                      <div>
+                        <h3 className="m-0 text-sm font-semibold text-foreground">Ledger</h3>
+                        {ledger.length === 0 ? (
+                          <p className="mt-2 mb-0 text-sm text-muted-text">No ledger entries yet.</p>
+                        ) : (
+                          <ul className="mt-2 m-0 list-none space-y-2 p-0">
+                            {ledger.slice(0, 15).map((row) => (
+                              <li
+                                key={row.id}
+                                className="rounded-lg border border-border-subtle px-3 py-2 text-sm"
+                              >
+                                <span className="font-medium text-foreground">
+                                  {Number(row.amount) > 0 ? '+' : ''}
+                                  {formatCredits(row.amount)}
+                                </span>
+                                <span className="text-muted-text">
+                                  {' '}
+                                  · {row.entry_type} · bal {formatCredits(row.balance_after)} ·{' '}
+                                  {formatDateTime(row.created_at)}
+                                </span>
+                                {row.note ? (
+                                  <p className="mt-1 mb-0 text-xs text-muted">{row.note}</p>
+                                ) : null}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    </>
+                  ) : null}
                 </div>
               )}
 

@@ -58,7 +58,14 @@ def create_adaptive_job(
 ) -> AdaptiveJobCreateResponse:
     if request.user_id is None:
         request.user_id = user.id
-    return submit_job(request, store=store)
+    try:
+        return submit_job(request, store=store)
+    except Exception as exc:
+        from backend_api.http.services.credit_service import InsufficientCreditsError
+
+        if isinstance(exc, InsufficientCreditsError):
+            raise HTTPException(status_code=402, detail=str(exc)) from exc
+        raise
 
 
 @router.get("/jobs", response_model=list[AdaptiveJobSummary])

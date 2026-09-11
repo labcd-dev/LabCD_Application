@@ -20,6 +20,7 @@ class LoginRequest(BaseModel):
 class RegisterRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=MIN_PASSWORD_LENGTH)
+    referral_code: str | None = Field(default=None, max_length=32)
 
 
 class MessageResponse(BaseModel):

@@ -178,6 +178,9 @@ def _mulo_worker(job_id: str) -> None:
                 "modified_controller_structure": job.metadata.get("modified_controller_structure"),
             },
         )
+        from backend_api.http.services import credit_service
+
+        credit_service.end_job_usage(job_id=job_id)
     except Exception as exc:
         job.error = str(exc)
         job.event_queue.put({"type": "run_error", "error": str(exc)})
@@ -188,6 +191,9 @@ def _mulo_worker(job_id: str) -> None:
             status="failed",
             error=str(exc),
         )
+        from backend_api.http.services import credit_service
+
+        credit_service.end_job_usage(job_id=job_id)
     finally:
         unregister_callback()
 
@@ -219,6 +225,10 @@ def init_mulo_designer(
         trimming_result,
         equation,
     )
+    from backend_api.http.services.analytics_service import record_llm_use, record_module_use
+    from backend_api.http.services import credit_service
+
+    credit_service.require_job_credits(user_id)
     job = job_store.create(
         "mulo",
         metadata={
@@ -230,10 +240,10 @@ def init_mulo_designer(
         },
         user_id=user_id,
     )
-    from backend_api.http.services.analytics_service import record_llm_use, record_module_use
 
     record_module_use(user_id, "mulo")
     record_llm_use(user_id, normalized_run_config.get("llm_model"))
+    credit_service.begin_job_usage(user_id, "mulo", job_id=job.id, check_balance=False)
     case_name = str(normalized_run_config.get("case_study_file") or file_name or "mulo")
     linked_project_id = link_or_create_for_job(
         user_id=user_id,
@@ -257,6 +267,7 @@ def init_mulo_designer(
             "run_config": make_serializable(normalized_run_config),
         },
     )
+    credit_service.end_job_usage(job_id=job.id)
     return job.id
 
 
@@ -289,6 +300,10 @@ def run_mulo_optimization(job_id: str) -> None:
         job_id=job_id,
         status="running",
     )
+    from backend_api.http.services import credit_service
+
+    credit_service.require_job_credits(job.user_id)
+    credit_service.begin_job_usage(job.user_id, "mulo", job_id=job_id, check_balance=False)
     _start_worker(job_id)
 
 

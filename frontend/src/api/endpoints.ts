@@ -2,12 +2,18 @@ import { apiFetch, artifactUrl, AUTH_TIMEOUT_MS, getAuthToken, projectArtifactUr
 import type {
   ActionInfo,
   ArtifactResponse,
+  AdminUserCredits,
   AdminUserDetail,
   ApiKeysResponse,
   ApiKeysUpdate,
   AuthUser,
   CaseStudiesResponse,
   ControlDesignTemplate,
+  CreditDashboard,
+  CreditLedgerEntry,
+  CreditSettings,
+  CreditSettingsUpdate,
+  CreditUsageSession,
   DefaultPlanInfo,
   ErrorEvent,
   ErrorTrackingSettings,
@@ -138,7 +144,7 @@ export const authApi = {
       },
       AUTH_TIMEOUT_MS,
     ),
-  register: (body: { email: string; password: string }) =>
+  register: (body: { email: string; password: string; referral_code?: string | null }) =>
     apiFetch<MessageResponse>(
       '/auth/register',
       {
@@ -315,6 +321,19 @@ export const adminApi = {
     }),
   listUsers: () => apiFetch<AuthUser[]>('/admin/users'),
   getUser: (userId: number) => apiFetch<AdminUserDetail>(`/admin/users/${userId}`),
+  getUserCredits: (userId: number) =>
+    apiFetch<AdminUserCredits>(`/admin/users/${userId}/credits`),
+  adjustUserCredits: (userId: number, body: { amount: number; note?: string }) =>
+    apiFetch<AdminUserCredits>(`/admin/users/${userId}/credits/adjust`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  getCreditSettings: () => apiFetch<CreditSettings>('/admin/credits/settings'),
+  updateCreditSettings: (body: CreditSettingsUpdate) =>
+    apiFetch<CreditSettings>('/admin/credits/settings', {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
   revokeUserSession: (userId: number, sessionId: number) =>
     apiFetch<void>(`/admin/users/${userId}/sessions/${sessionId}`, { method: 'DELETE' }),
   createUser: (body: {
@@ -1157,5 +1176,15 @@ export const plantArtifactApi = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+}
+
+export const creditsApi = {
+  getDashboard: () => apiFetch<CreditDashboard>('/credits/me'),
+  getLedger: (limit = 50, offset = 0) =>
+    apiFetch<CreditLedgerEntry[]>(`/credits/me/ledger?limit=${limit}&offset=${offset}`),
+  getSessions: (limit = 50, offset = 0) =>
+    apiFetch<CreditUsageSession[]>(`/credits/me/sessions?limit=${limit}&offset=${offset}`),
+  getSession: (sessionId: number) =>
+    apiFetch<CreditUsageSession>(`/credits/sessions/${sessionId}`),
 }
 

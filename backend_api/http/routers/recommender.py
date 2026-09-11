@@ -37,14 +37,21 @@ def start_recommender(
 ) -> JobResponse:
     _require_mulo_pipeline(user)
     assert_model_allowed(user, request.model)
-    job_id = start_recommender_job(
-        request.file_content,
-        request.file_name,
-        request.model,
-        request.step,
-        user_id=user.id,
-        user_prompt=request.user_prompt,
-    )
+    try:
+        job_id = start_recommender_job(
+            request.file_content,
+            request.file_name,
+            request.model,
+            request.step,
+            user_id=user.id,
+            user_prompt=request.user_prompt,
+        )
+    except Exception as exc:
+        from backend_api.http.services.credit_service import InsufficientCreditsError
+
+        if isinstance(exc, InsufficientCreditsError):
+            raise HTTPException(status_code=402, detail=str(exc)) from exc
+        raise
     job = job_store.get(job_id)
     return JobResponse(job_id=job_id, module=job.module, status=job.status.value)
 

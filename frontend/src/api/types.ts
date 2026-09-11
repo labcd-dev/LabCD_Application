@@ -1286,4 +1286,82 @@ export interface ValidationResponse {
   warnings: string[]
 }
 
+export interface CreditRates {
+  per_1k_tokens: number | string
+  per_minute: number | string
+  min_job_charge: number | string
+}
+
+export interface CreditDashboard {
+  bonus_balance: number | string
+  daily_balance: number | string
+  spendable: number | string
+  daily_allotment: number | string
+  daily_date: string | null
+  today_spent: number | string
+  referral_code: string | null
+  referral_link: string | null
+  hard_gate_enabled: boolean
+  rates: CreditRates
+}
+
+export interface CreditLedgerEntry {
+  id: number
+  amount: number | string
+  balance_after: number | string
+  entry_type: string
+  usage_session_id: number | null
+  note: string
+  created_at: string
+}
+
+export interface CreditUsageSession {
+  id: number
+  module: string
+  job_id: string | null
+  status: string
+  started_at: string
+  ended_at: string | null
+  duration_seconds: number
+  prompt_tokens: number
+  completion_tokens: number
+  credits_charged: number | string
+  live_credits_estimate: number | string
+}
+
+export interface CreditSettings {
+  new_user_bonus: number | string
+  referral_inviter_bonus: number | string
+  referral_invitee_bonus: number | string
+  daily_allotment: number | string
+  per_1k_tokens: number | string
+  per_minute: number | string
+  min_job_charge: number | string
+  hard_gate_enabled: boolean
+}
+
+export interface CreditSettingsUpdate {
+  new_user_bonus?: number
+  referral_inviter_bonus?: number
+  referral_invitee_bonus?: number
+  daily_allotment?: number
+  per_1k_tokens?: number
+  per_minute?: number
+  min_job_charge?: number
+  hard_gate_enabled?: boolean
+}
+
+export interface AdminUserCredits {
+  user_id: number
+  bonus_balance: number | string
+  daily_balance: number | string
+  spendable: number | string
+  daily_date: string | null
+  referral_code: string | null
+  referred_by_user_id: number | null
+  new_user_bonus_granted_at: string | null
+  ledger: CreditLedgerEntry[]
+  sessions: CreditUsageSession[]
+}
+
 

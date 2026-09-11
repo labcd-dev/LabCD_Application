@@ -403,8 +403,10 @@ def resolve_or_create_user(
     else:
         if not user.is_active:
             raise SsoError("Account is inactive")
+        newly_verified = False
         if not user.email_verified:
             user.email_verified = True
+            newly_verified = True
         if profile.display_name and not user.display_name:
             user.display_name = profile.display_name
         if profile.avatar_url and not user.avatar_url:
@@ -412,6 +414,10 @@ def resolve_or_create_user(
         db.add(user)
         db.commit()
         db.refresh(user)
+        if newly_verified:
+            from backend_api.http.services import credit_service
+
+            credit_service.on_user_verified(db, user)
 
     db.add(
         UserIdentity(

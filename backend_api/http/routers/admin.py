@@ -45,6 +45,14 @@ from backend_api.http.schemas.error_tracking import (
     ErrorTrackingSettingsUpdate,
 )
 from backend_api.http.schemas.audit import AuditLogOut
+from backend_api.http.schemas.credits import (
+    AdminUserCreditsOut,
+    CreditAdjustRequest,
+    CreditLedgerEntryOut,
+    CreditSettingsOut,
+    CreditSettingsUpdate,
+    CreditUsageSessionOut,
+)
 from backend_api.http.schemas.analytics import (
     AnalyticsResponse,
     TelegramAnalyticsSettings,
@@ -909,6 +917,195 @@ def list_user_sessions(
         )
         for row in session_service.list_user_sessions(db, user_id)
     ]
+
+
+@router.get("/credits/settings", response_model=CreditSettingsOut)
+def get_credit_settings(
+    _: User = Depends(require_action("admin:credits")),
+    db: Session = Depends(get_db),
+) -> CreditSettingsOut:
+    from backend_api.http.services import credit_service
+
+    settings = credit_service.get_settings(db)
+    return CreditSettingsOut(
+        new_user_bonus=settings.new_user_bonus,
+        referral_inviter_bonus=settings.referral_inviter_bonus,
+        referral_invitee_bonus=settings.referral_invitee_bonus,
+        daily_allotment=settings.daily_allotment,
+        per_1k_tokens=settings.per_1k_tokens,
+        per_minute=settings.per_minute,
+        min_job_charge=settings.min_job_charge,
+        hard_gate_enabled=settings.hard_gate_enabled,
+    )
+
+
+@router.patch("/credits/settings", response_model=CreditSettingsOut)
+def update_credit_settings(
+    request: CreditSettingsUpdate,
+    http_request: Request,
+    admin: User = Depends(require_action("admin:credits")),
+    db: Session = Depends(get_db),
+) -> CreditSettingsOut:
+    from backend_api.http.services import credit_service
+
+    try:
+        settings = credit_service.update_settings(
+            db,
+            new_user_bonus=request.new_user_bonus,
+            referral_inviter_bonus=request.referral_inviter_bonus,
+            referral_invitee_bonus=request.referral_invitee_bonus,
+            daily_allotment=request.daily_allotment,
+            per_1k_tokens=request.per_1k_tokens,
+            per_minute=request.per_minute,
+            min_job_charge=request.min_job_charge,
+            hard_gate_enabled=request.hard_gate_enabled,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    audit_service.record_from_request(
+        db,
+        http_request,
+        action="admin.credits.settings",
+        category="admin",
+        actor=admin,
+        resource_type="credit_settings",
+        success=True,
+    )
+    return CreditSettingsOut(
+        new_user_bonus=settings.new_user_bonus,
+        referral_inviter_bonus=settings.referral_inviter_bonus,
+        referral_invitee_bonus=settings.referral_invitee_bonus,
+        daily_allotment=settings.daily_allotment,
+        per_1k_tokens=settings.per_1k_tokens,
+        per_minute=settings.per_minute,
+        min_job_charge=settings.min_job_charge,
+        hard_gate_enabled=settings.hard_gate_enabled,
+    )
+
+
+@router.get("/users/{user_id}/credits", response_model=AdminUserCreditsOut)
+def get_user_credits(
+    user_id: int,
+    _: User = Depends(require_action("admin:credits")),
+    db: Session = Depends(get_db),
+) -> AdminUserCreditsOut:
+    from backend_api.http.services import credit_service
+
+    user = get_user_by_id(db, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    summary = credit_service.account_summary(db, user_id)
+    ledger = credit_service.list_ledger(db, user_id, limit=50)
+    sessions = credit_service.list_sessions(db, user_id, limit=50)
+    return AdminUserCreditsOut(
+        user_id=user_id,
+        bonus_balance=summary["bonus_balance"],
+        daily_balance=summary["daily_balance"],
+        spendable=summary["spendable"],
+        daily_date=summary["daily_date"],
+        referral_code=user.referral_code,
+        referred_by_user_id=user.referred_by_user_id,
+        new_user_bonus_granted_at=user.new_user_bonus_granted_at,
+        ledger=[
+            CreditLedgerEntryOut(
+                id=row.id,
+                amount=row.amount,
+                balance_after=row.balance_after,
+                entry_type=row.entry_type,
+                usage_session_id=row.usage_session_id,
+                note=row.note or "",
+                created_at=row.created_at,
+            )
+            for row in ledger
+        ],
+        sessions=[
+            CreditUsageSessionOut(
+                id=row.id,
+                module=row.module,
+                job_id=row.job_id,
+                status=row.status,
+                started_at=row.started_at,
+                ended_at=row.ended_at,
+                duration_seconds=row.duration_seconds,
+                prompt_tokens=row.prompt_tokens,
+                completion_tokens=row.completion_tokens,
+                credits_charged=row.credits_charged,
+                live_credits_estimate=row.live_credits_estimate,
+            )
+            for row in sessions
+        ],
+    )
+
+
+@router.post("/users/{user_id}/credits/adjust", response_model=AdminUserCreditsOut)
+def adjust_user_credits(
+    user_id: int,
+    request: CreditAdjustRequest,
+    http_request: Request,
+    admin: User = Depends(require_action("admin:credits")),
+    db: Session = Depends(get_db),
+) -> AdminUserCreditsOut:
+    from backend_api.http.services import credit_service
+
+    user = get_user_by_id(db, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    try:
+        credit_service.admin_adjust(db, user_id, request.amount, note=request.note)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    audit_service.record_from_request(
+        db,
+        http_request,
+        action="admin.credits.adjust",
+        category="admin",
+        actor=admin,
+        resource_type="user",
+        resource_id=user_id,
+        success=True,
+        details={"amount": str(request.amount), "note": request.note},
+    )
+    summary = credit_service.account_summary(db, user_id)
+    ledger = credit_service.list_ledger(db, user_id, limit=50)
+    sessions = credit_service.list_sessions(db, user_id, limit=50)
+    return AdminUserCreditsOut(
+        user_id=user_id,
+        bonus_balance=summary["bonus_balance"],
+        daily_balance=summary["daily_balance"],
+        spendable=summary["spendable"],
+        daily_date=summary["daily_date"],
+        referral_code=user.referral_code,
+        referred_by_user_id=user.referred_by_user_id,
+        new_user_bonus_granted_at=user.new_user_bonus_granted_at,
+        ledger=[
+            CreditLedgerEntryOut(
+                id=row.id,
+                amount=row.amount,
+                balance_after=row.balance_after,
+                entry_type=row.entry_type,
+                usage_session_id=row.usage_session_id,
+                note=row.note or "",
+                created_at=row.created_at,
+            )
+            for row in ledger
+        ],
+        sessions=[
+            CreditUsageSessionOut(
+                id=row.id,
+                module=row.module,
+                job_id=row.job_id,
+                status=row.status,
+                started_at=row.started_at,
+                ended_at=row.ended_at,
+                duration_seconds=row.duration_seconds,
+                prompt_tokens=row.prompt_tokens,
+                completion_tokens=row.completion_tokens,
+                credits_charged=row.credits_charged,
+                live_credits_estimate=row.live_credits_estimate,
+            )
+            for row in sessions
+        ],
+    )
 
 
 @router.delete("/users/{user_id}/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)

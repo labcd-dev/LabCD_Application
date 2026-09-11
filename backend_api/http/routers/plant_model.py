@@ -108,19 +108,32 @@ def plant_model_chat(
             raise HTTPException(status_code=403, detail=str(exc)) from exc
 
     record_module_use(user.id, "plant_model")
-    response = run_plant_model_chat(request)
-    conversation = persist_turn(
-        db,
-        user_id=user.id,
-        conversation_id=request.conversation_id,
-        user_message=request.user_message.strip(),
-        assistant_reply=response.reply,
-        llm_model=request.model,
-        session_state=response.session_state,
-        final_result=response.final_result,
+    from backend_api.http.services.credit_service import (
+        InsufficientCreditsError,
+        begin_job_usage,
+        end_job_usage,
     )
-    response.conversation_id = conversation.id
-    return response
+
+    try:
+        session_id = begin_job_usage(user.id, "plant_model")
+    except InsufficientCreditsError as exc:
+        raise HTTPException(status_code=402, detail=str(exc)) from exc
+    try:
+        response = run_plant_model_chat(request)
+        conversation = persist_turn(
+            db,
+            user_id=user.id,
+            conversation_id=request.conversation_id,
+            user_message=request.user_message.strip(),
+            assistant_reply=response.reply,
+            llm_model=request.model,
+            session_state=response.session_state,
+            final_result=response.final_result,
+        )
+        response.conversation_id = conversation.id
+        return response
+    finally:
+        end_job_usage(session_id=session_id)
 
 
 # ---------------------------------------------------------------------------

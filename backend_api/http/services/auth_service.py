@@ -54,6 +54,7 @@ DEFAULT_ACTIONS: list[tuple[str, str]] = [
     ("admin:audit", "View audit log"),
     ("admin:api_keys", "Manage LLM and search API keys"),
     ("admin:sso", "Manage SSO providers"),
+    ("admin:credits", "Manage credit settings and user balances"),
 ]
 
 PIPELINE_ACTIONS = {
@@ -195,8 +196,9 @@ def create_user(
     skip_password_policy: bool = False,
     display_name: str | None = None,
     avatar_url: str | None = None,
+    referral_code: str | None = None,
 ) -> User:
-    from backend_api.http.services import plan_service, role_service
+    from backend_api.http.services import credit_service, plan_service, role_service
     from backend_api.http.services.password_policy import validate_password
 
     if password is not None and not skip_password_policy:
@@ -222,6 +224,9 @@ def create_user(
         resolved_role is not None and resolved_role.is_system
     )
 
+    referrer = credit_service.resolve_referrer(db, referral_code)
+    own_code = credit_service.generate_referral_code(db)
+
     user = User(
         email=email.lower().strip(),
         password_hash=hash_password(password) if password is not None else None,
@@ -232,6 +237,8 @@ def create_user(
         role_id=resolved_role.id if resolved_role is not None else None,
         display_name=display_name,
         avatar_url=avatar_url,
+        referral_code=own_code,
+        referred_by_user_id=referrer.id if referrer is not None else None,
     )
     if resolved_role is not None:
         user.role = resolved_role
@@ -239,6 +246,14 @@ def create_user(
     db.add(user)
     db.commit()
     db.refresh(user)
+
+    # Ensure account row exists; grant bonuses immediately when already verified.
+    credit_service.get_or_create_account(db, user.id)
+    if user.email_verified:
+        credit_service.on_user_verified(db, user)
+        db.refresh(user)
+    else:
+        db.commit()
     return user
 
 
@@ -362,7 +377,7 @@ def _ensure_default_plans(db: Session) -> Plan:
 
 
 def seed_auth_data(db: Session) -> None:
-    from backend_api.http.services import role_service
+    from backend_api.http.services import credit_service, role_service
 
     for code, description in DEFAULT_ACTIONS:
         action = db.query(Action).filter(Action.code == code).first()
@@ -371,6 +386,8 @@ def seed_auth_data(db: Session) -> None:
         elif not action.description:
             action.description = description
     db.commit()
+
+    credit_service.seed_credit_settings(db)
 
     free_plan = _ensure_default_plans(db)
 
@@ -404,6 +421,12 @@ def seed_auth_data(db: Session) -> None:
             admin.email_verified = True
             db.add(admin)
             db.commit()
+        if not admin.referral_code:
+            admin.referral_code = credit_service.generate_referral_code(db)
+            db.add(admin)
+            db.commit()
+        if admin.new_user_bonus_granted_at is None and admin.email_verified:
+            credit_service.on_user_verified(db, admin)
         if admin.plan_id is None and not (
             admin.role is not None and admin.role.is_system
         ) and not admin.is_admin:
@@ -412,3 +435,9 @@ def seed_auth_data(db: Session) -> None:
             db.commit()
 
     role_service.migrate_users_to_roles(db, admin_role, user_role)
+
+    # Backfill referral codes for existing users.
+    for user in db.query(User).filter(User.referral_code.is_(None)).all():
+        user.referral_code = credit_service.generate_referral_code(db)
+        db.add(user)
+    db.commit()
