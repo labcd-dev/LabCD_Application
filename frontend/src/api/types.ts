@@ -891,6 +891,8 @@ export interface AdaptiveJobResultsResponse {
   abstract?: string | null
   report?: string | null
   method?: string | null
+  control_law?: string | null
+  stability_proof?: string | null
   export_script?: string | null
   final_metrics?: Record<string, unknown> | null
   tuning_log?: Array<Record<string, unknown>>

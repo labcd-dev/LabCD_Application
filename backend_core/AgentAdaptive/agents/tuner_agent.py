@@ -784,6 +784,9 @@ def run_full_pipeline(description, enable_tuning=False, target_rms_frac=0.02,
                 final_metrics["mse_target_from_tuner"] = enable_tuning
             result["final_metrics"] = final_metrics
             result["series"] = extract_series(final_components)
+            result["control_law"] = final_components.get("control_law")
+            result["stability_proof"] = final_components.get("stability")
+            result["final_components"] = final_components
 
             states_list = substituted_spec.get("dynamics", {}).get("states") or []
             meanings_list = substituted_spec.get("dynamics", {}).get("state_meanings") or []

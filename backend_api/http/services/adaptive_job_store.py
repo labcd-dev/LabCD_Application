@@ -77,6 +77,8 @@ class JobRecord:
     session_metadata: dict[str, Any] | None = None
     export_script: str | None = None
     diagnosis: dict[str, Any] | None = None
+    control_law: str | None = None
+    stability_proof: str | None = None
     created_at: datetime = field(default_factory=_now)
     updated_at: datetime = field(default_factory=_now)
 
@@ -110,6 +112,8 @@ class InMemoryAdaptiveJobStore:
                     "session_metadata": record.session_metadata,
                     "export_script": record.export_script,
                     "diagnosis": record.diagnosis,
+                    "control_law": record.control_law,
+                    "stability_proof": record.stability_proof,
                 }
                 if row is None:
                     row = DBAdaptiveJob(
