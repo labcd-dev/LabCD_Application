@@ -47,6 +47,43 @@ const PALETTE = [
   '#fb7185', // rose
 ]
 
+function generateNiceTicks(min: number, max: number, targetCount = 6): number[] {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min >= max) {
+    return [min]
+  }
+  const span = max - min
+  const stepRaw = span / Math.max(1, targetCount)
+  const power = Math.floor(Math.log10(stepRaw))
+  const frac = stepRaw / Math.pow(10, power)
+  let niceFrac: number
+  if (frac <= 1.5) niceFrac = 1
+  else if (frac <= 3) niceFrac = 2
+  else if (frac <= 7) niceFrac = 5
+  else niceFrac = 10
+  const step = niceFrac * Math.pow(10, power)
+  const start = Math.ceil(min / step) * step
+  const ticks: number[] = []
+  for (let v = start; v <= max + step * 0.05; v += step) {
+    const rounded = Number(v.toFixed(Math.max(0, -power + 2)))
+    if (rounded >= min - step * 0.05 && rounded <= max + step * 0.05) {
+      ticks.push(rounded)
+    }
+  }
+  return ticks.length >= 2 ? ticks : [min, (min + max) / 2, max]
+}
+
+function formatTickValue(v: number): string {
+  const abs = Math.abs(v)
+  if (abs === 0) return '0'
+  if (abs >= 10000 || abs < 0.001) {
+    return v.toExponential(1)
+  }
+  if (abs >= 100) return v.toFixed(0)
+  if (abs >= 10) return v.toFixed(1)
+  if (abs >= 1) return v.toFixed(2)
+  return v.toFixed(3)
+}
+
 export function MpcSimulationPlot({
   series,
   baselineSeries,
@@ -86,10 +123,15 @@ export function MpcSimulationPlot({
   const tMax = t[t.length - 1] ?? 3.0
   const tRange = tMax - tMin || 1.0
 
-  // SVG Drawing dimensions
-  const W = 920
-  const H = 320
-  const PAD = 35
+  // SVG Drawing dimensions with dedicated padding for axes
+  const W = 960
+  const H = 340
+  const PAD_LEFT = 68
+  const PAD_RIGHT = 32
+  const PAD_TOP = 25
+  const PAD_BOTTOM = 48
+  const plotW = W - PAD_LEFT - PAD_RIGHT
+  const plotH = H - PAD_TOP - PAD_BOTTOM
 
   // Compute scale depending on active tab
   const { lines, boundsLines, yMin, yMax } = useMemo(() => {
@@ -200,8 +242,8 @@ export function MpcSimulationPlot({
       return arr
         .map((y, i) => {
           const tVal = t[i] ?? tMin + (i / (arr.length - 1)) * tRange
-          const nx = PAD + ((tVal - tMin) / tRange) * (W - 2 * PAD)
-          const ny = H - PAD - ((y - min) / yR) * (H - 2 * PAD)
+          const nx = PAD_LEFT + ((tVal - tMin) / tRange) * plotW
+          const ny = PAD_TOP + plotH - ((y - min) / yR) * plotH
           return `${i === 0 ? 'M' : 'L'} ${nx.toFixed(1)} ${ny.toFixed(1)}`
         })
         .join(' ')
@@ -214,7 +256,7 @@ export function MpcSimulationPlot({
 
     const calculatedBounds = bounds.map((b) => ({
       ...b,
-      y: H - PAD - ((b.val - min) / yR) * (H - 2 * PAD),
+      y: PAD_TOP + plotH - ((b.val - min) / yR) * plotH,
     }))
 
     return {
@@ -223,7 +265,25 @@ export function MpcSimulationPlot({
       yMin: min,
       yMax: max,
     }
-  }, [hasRealData, sim, activeTab, selectedStateIdx, showBaseline, baselineSeries, t, tMin, tRange])
+  }, [hasRealData, sim, activeTab, selectedStateIdx, showBaseline, baselineSeries, t, tMin, tRange, plotW, plotH])
+
+  const yAxisTitle = useMemo(() => {
+    if (activeTab === 'all_states' || activeTab === 'single_state') {
+      return 'State Response x(t) [units]'
+    }
+    if (activeTab === 'controls') {
+      return 'Actuator Effort u(t) [effort]'
+    }
+    return 'Tracking Error e(t) [units]'
+  }, [activeTab])
+
+  const xTicks = useMemo(() => {
+    return generateNiceTicks(tMin, tMax, 7)
+  }, [tMin, tMax])
+
+  const yTicks = useMemo(() => {
+    return generateNiceTicks(yMin, yMax, 6)
+  }, [yMin, yMax])
 
   if (!hasRealData) {
     return (
@@ -286,7 +346,8 @@ export function MpcSimulationPlot({
   // Mouse Move over chart for crosshair
   const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
     const rect = e.currentTarget.getBoundingClientRect()
-    const xPct = Math.max(0, Math.min(1, (e.clientX - rect.left - PAD) / (rect.width - 2 * PAD)))
+    const svgX = ((e.clientX - rect.left) / rect.width) * W
+    const xPct = Math.max(0, Math.min(1, (svgX - PAD_LEFT) / plotW))
     const idx = Math.round(xPct * (t.length - 1))
     setHoverIndex(idx)
   }
@@ -457,44 +518,167 @@ export function MpcSimulationPlot({
       </div>
 
       {/* Main SVG Oscilloscope Screen */}
-      <div className="relative overflow-hidden rounded-xl border border-border bg-surface p-2">
+      <div className="relative overflow-hidden rounded-xl border border-border bg-surface p-2.5">
         <svg
           viewBox={`0 0 ${W} ${H}`}
           className="size-full overflow-visible select-none"
           onMouseMove={handleMouseMove}
           onMouseLeave={() => setHoverIndex(null)}
         >
-          {/* Grid lines */}
-          <line x1={PAD} y1={PAD} x2={W - PAD} y2={PAD} stroke="var(--app-border)" strokeDasharray="3 3" />
-          <line x1={PAD} y1={H / 2} x2={W - PAD} y2={H / 2} stroke="var(--app-border)" />
-          <line x1={PAD} y1={H - PAD} x2={W - PAD} y2={H - PAD} stroke="var(--app-border)" strokeDasharray="3 3" />
+          {/* Plot Canvas Box */}
+          <rect
+            x={PAD_LEFT}
+            y={PAD_TOP}
+            width={plotW}
+            height={plotH}
+            fill="rgba(15, 23, 42, 0.25)"
+            stroke="var(--app-border)"
+            strokeWidth="1"
+            rx="4"
+          />
 
-          {/* Zero Axis if in range */}
+          {/* Horizontal Y Grid lines & Tick Labels */}
+          {yTicks.map((val) => {
+            const yPos = PAD_TOP + plotH - ((val - yMin) / (yMax - yMin || 1)) * plotH
+            return (
+              <g key={`y-${val}`}>
+                <line
+                  x1={PAD_LEFT}
+                  y1={yPos}
+                  x2={PAD_LEFT + plotW}
+                  y2={yPos}
+                  stroke="var(--app-border)"
+                  strokeWidth="1"
+                  strokeDasharray="3 3"
+                  opacity="0.45"
+                />
+                <line
+                  x1={PAD_LEFT - 4}
+                  y1={yPos}
+                  x2={PAD_LEFT}
+                  y2={yPos}
+                  stroke="var(--app-border)"
+                  strokeWidth="1.2"
+                />
+                <text
+                  x={PAD_LEFT - 8}
+                  y={yPos + 3.5}
+                  textAnchor="end"
+                  fontSize="10"
+                  fontFamily="monospace"
+                  fill="currentColor"
+                  className="text-muted-text"
+                >
+                  {formatTickValue(val)}
+                </text>
+              </g>
+            )
+          })}
+
+          {/* Vertical X Grid lines & Tick Labels */}
+          {xTicks.map((tVal) => {
+            const xPos = PAD_LEFT + ((tVal - tMin) / tRange) * plotW
+            return (
+              <g key={`x-${tVal}`}>
+                <line
+                  x1={xPos}
+                  y1={PAD_TOP}
+                  x2={xPos}
+                  y2={PAD_TOP + plotH}
+                  stroke="var(--app-border)"
+                  strokeWidth="1"
+                  strokeDasharray="3 3"
+                  opacity="0.35"
+                />
+                <line
+                  x1={xPos}
+                  y1={PAD_TOP + plotH}
+                  x2={xPos}
+                  y2={PAD_TOP + plotH + 5}
+                  stroke="var(--app-border)"
+                  strokeWidth="1.2"
+                />
+                <text
+                  x={xPos}
+                  y={PAD_TOP + plotH + 18}
+                  textAnchor="middle"
+                  fontSize="10"
+                  fontFamily="monospace"
+                  fill="currentColor"
+                  className="text-muted-text"
+                >
+                  {tVal.toFixed(2)}s
+                </text>
+              </g>
+            )
+          })}
+
+          {/* Axis Labels & Titles */}
+          <text
+            x={PAD_LEFT + plotW / 2}
+            y={H - 8}
+            textAnchor="middle"
+            fontSize="11"
+            fontWeight="600"
+            fill="currentColor"
+            className="text-muted-text"
+          >
+            Time t (seconds)
+          </text>
+
+          <g transform={`translate(16, ${PAD_TOP + plotH / 2}) rotate(-90)`}>
+            <text
+              textAnchor="middle"
+              fontSize="11"
+              fontWeight="600"
+              fill="currentColor"
+              className="text-muted-text"
+            >
+              {yAxisTitle}
+            </text>
+          </g>
+
+          {/* Zero Reference Line if in range */}
           {yMin < 0 && yMax > 0 && (
-            <line
-              x1={PAD}
-              y1={H - PAD - ((0 - yMin) / (yMax - yMin)) * (H - 2 * PAD)}
-              x2={W - PAD}
-              y2={H - PAD - ((0 - yMin) / (yMax - yMin)) * (H - 2 * PAD)}
-              stroke="var(--app-border)"
-              strokeDasharray="2 2"
-            />
+            <g>
+              <line
+                x1={PAD_LEFT}
+                y1={PAD_TOP + plotH - ((0 - yMin) / (yMax - yMin)) * plotH}
+                x2={PAD_LEFT + plotW}
+                y2={PAD_TOP + plotH - ((0 - yMin) / (yMax - yMin)) * plotH}
+                stroke="#06b6d4"
+                strokeWidth="1.2"
+                strokeDasharray="4 2"
+                opacity="0.75"
+              />
+              <text
+                x={PAD_LEFT + plotW - 6}
+                y={PAD_TOP + plotH - ((0 - yMin) / (yMax - yMin)) * plotH - 4}
+                textAnchor="end"
+                fontSize="9"
+                fontFamily="monospace"
+                fill="#06b6d4"
+                opacity="0.85"
+              >
+                0.0 (equilibrium)
+              </text>
+            </g>
           )}
 
           {/* Bounds reference lines */}
           {boundsLines.map((b, i) => (
             <g key={i}>
               <line
-                x1={PAD}
+                x1={PAD_LEFT}
                 y1={b.y}
-                x2={W - PAD}
+                x2={PAD_LEFT + plotW}
                 y2={b.y}
                 stroke={b.color}
                 strokeWidth="1.2"
                 strokeDasharray="4 3"
                 opacity="0.8"
               />
-              <text x={W - PAD - 80} y={b.y - 4} fill={b.color} fontSize="9" fontFamily="monospace">
+              <text x={PAD_LEFT + plotW - 80} y={b.y - 4} fill={b.color} fontSize="9" fontFamily="monospace">
                 {b.label}
               </text>
             </g>
@@ -518,20 +702,22 @@ export function MpcSimulationPlot({
           {hoverIndex !== null && hoverTime !== null && (
             <g>
               <line
-                x1={PAD + ((hoverTime - tMin) / tRange) * (W - 2 * PAD)}
-                y1={PAD}
-                x2={PAD + ((hoverTime - tMin) / tRange) * (W - 2 * PAD)}
-                y2={H - PAD}
-                stroke="rgba(6, 182, 212, 0.6)"
-                strokeWidth="1"
+                x1={PAD_LEFT + ((hoverTime - tMin) / tRange) * plotW}
+                y1={PAD_TOP}
+                x2={PAD_LEFT + ((hoverTime - tMin) / tRange) * plotW}
+                y2={PAD_TOP + plotH}
+                stroke="rgba(6, 182, 212, 0.75)"
+                strokeWidth="1.2"
                 strokeDasharray="3 3"
               />
               {lines.map((l) => {
                 const val = l.values[hoverIndex]
                 if (typeof val !== 'number') return null
-                const cy = H - PAD - ((val - yMin) / (yMax - yMin)) * (H - 2 * PAD)
-                const cx = PAD + ((hoverTime - tMin) / tRange) * (W - 2 * PAD)
-                return <circle key={l.name} cx={cx} cy={cy} r="4" fill={l.color} />
+                const cy = PAD_TOP + plotH - ((val - yMin) / (yMax - yMin || 1)) * plotH
+                const cx = PAD_LEFT + ((hoverTime - tMin) / tRange) * plotW
+                return (
+                  <circle key={l.name} cx={cx} cy={cy} r="4.5" fill={l.color} stroke="#0f172a" strokeWidth="1.5" />
+                )
               })}
             </g>
           )}
@@ -539,8 +725,8 @@ export function MpcSimulationPlot({
 
         {/* Floating HUD Tooltip */}
         {hoverIndex !== null && hoverTime !== null && (
-          <div className="pointer-events-none absolute top-4 left-5 flex flex-col gap-1 rounded-xl border border-border bg-surface-elevated/95 p-2.5 text-[11px] font-mono text-foreground shadow-md backdrop-blur-md">
-            <span className="font-bold text-cyan-600 dark:text-cyan-400">t = {hoverTime.toFixed(3)}s</span>
+          <div className="pointer-events-none absolute top-4 left-24 flex flex-col gap-1 rounded-xl border border-border bg-surface-elevated/95 p-2.5 text-[11px] font-mono text-foreground shadow-lg backdrop-blur-md z-20">
+            <span className="font-bold text-cyan-500">t = {hoverTime.toFixed(3)}s</span>
             {lines.map((l) => {
               const val = l.values[hoverIndex]
               if (typeof val !== 'number') return null

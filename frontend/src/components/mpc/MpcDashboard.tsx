@@ -16,6 +16,7 @@ import {
   Coins,
   Workflow,
   Stethoscope,
+  RotateCcw,
 } from 'lucide-react'
 import type {
   DiagnosisApplyPatch,
@@ -38,7 +39,7 @@ import { AdaptiveDiagnosisView } from '../adaptive/AdaptiveDiagnosisView'
 /**
  * Strictly truncates reasoning logs to maximum 7 words followed by '...'
  */
-export function summarizeToSevenWords(text: string, maxWords = 7): string {
+function summarizeToSevenWords(text: string, maxWords = 7): string {
   if (!text) return ''
   const stripped = text
     .replace(/^\[?(Actor|Evaluator|Critic|Juror|Terminator|Agent)\]?[:\s-]*/i, '')
@@ -73,6 +74,100 @@ function resolveMpcDiagnosis(results?: MPCJobResultsResponse | null): MpcDiagnos
   const report = (raw as MpcDiagnosis).report
   if (!report || typeof report !== 'object') return null
   return raw as MpcDiagnosis
+}
+
+interface MpcMatrixDisplayProps {
+  title: string
+  matrixSymbol: 'Q' | 'R'
+  values: unknown
+  dimLabel: string
+  names?: string[]
+  accent: 'purple' | 'cyan'
+}
+
+function MpcMatrixDisplay({
+  title,
+  matrixSymbol,
+  values,
+  dimLabel,
+  names = [],
+  accent,
+}: MpcMatrixDisplayProps) {
+  const items = useMemo(() => {
+    if (!Array.isArray(values)) return []
+    return values.map((v, i) => {
+      const num = typeof v === 'number' ? v : Number(v) || 0
+      const varName = names[i] || (matrixSymbol === 'Q' ? `x${i + 1}` : `u${i + 1}`)
+      return { idx: i, val: num, name: varName }
+    })
+  }, [values, names, matrixSymbol])
+
+  const maxVal = useMemo(() => {
+    if (!items.length) return 1
+    return Math.max(...items.map((it) => Math.abs(it.val)), 1e-6)
+  }, [items])
+
+  const isPurple = accent === 'purple'
+  const textAccent = isPurple ? 'text-purple-600 dark:text-purple-300' : 'text-cyan-600 dark:text-cyan-300'
+  const bgAccent = isPurple ? 'bg-purple-500/15' : 'bg-cyan-500/15'
+  const borderAccent = isPurple ? 'border-purple-500/30' : 'border-cyan-500/30'
+  const barGradient = isPurple
+    ? 'from-purple-500 to-indigo-500'
+    : 'from-cyan-500 to-blue-500'
+
+  return (
+    <div className="rounded-xl border border-border bg-surface p-3 space-y-2">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1.5">
+          <span className={`flex size-5 items-center justify-center rounded font-mono text-[10px] font-bold ${bgAccent} ${textAccent} border ${borderAccent}`}>
+            {matrixSymbol}
+          </span>
+          <div className="text-xs font-bold text-foreground flex items-center gap-1.5">
+            <span>{title}</span>
+            <span className="text-[10px] text-muted-text font-mono font-normal">
+              ({dimLabel})
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Visual Chips Content */}
+      {items.length === 0 ? (
+        <div className="font-mono text-[11px] text-muted-text bg-surface-muted/60 rounded-lg p-2 text-center">
+          {String(values || 'Not specified')}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-[140px] overflow-y-auto pr-0.5">
+          {items.map((it) => {
+            const pct = Math.max(12, Math.min(100, Math.round((Math.abs(it.val) / maxVal) * 100)))
+            return (
+              <div
+                key={it.idx}
+                className="relative overflow-hidden rounded-lg border border-border/80 bg-surface-muted/40 p-1.5 flex flex-col justify-between"
+              >
+                <div className="flex items-center justify-between text-[10px]">
+                  <span className="font-mono font-semibold text-muted-text">
+                    {it.name}
+                  </span>
+                  <span className={`font-mono font-bold text-foreground ${textAccent}`}>
+                    {it.val >= 100 ? it.val.toFixed(1) : it.val.toFixed(matrixSymbol === 'Q' ? 2 : 3)}
+                  </span>
+                </div>
+                {/* Visual magnitude bar */}
+                <div className="mt-1 h-1 w-full rounded-full bg-border/40 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full bg-gradient-to-r ${barGradient} transition-all`}
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
 }
 
 export function MpcDashboard({
@@ -123,6 +218,19 @@ export function MpcDashboard({
   }, [currentDiagnosisInputs])
 
 
+  // Dynamic channel names
+  const stateNames = useMemo<string[]>(() => {
+    const raw = (results?.series?.names || job?.series?.names) as string[] | undefined
+    if (Array.isArray(raw) && raw.length > 0) return raw
+    return ['x₁', 'x₂', 'x₃', 'x₄']
+  }, [results?.series?.names, job?.series?.names])
+
+  const inputNames = useMemo<string[]>(() => {
+    const raw = (results?.series?.input_names || job?.series?.input_names) as string[] | undefined
+    if (Array.isArray(raw) && raw.length > 0) return raw
+    return ['u₁']
+  }, [results?.series?.input_names, job?.series?.input_names])
+
   // Sandbox interactive state
   const [sandboxNp, setSandboxNp] = useState(12)
   const [sandboxNc, setSandboxNc] = useState(4)
@@ -130,6 +238,10 @@ export function MpcDashboard({
   const [sandboxSimTime, setSandboxSimTime] = useState(3.0)
   const [sandboxTrajectoryMode, setSandboxTrajectoryMode] = useState('reg')
   const [sandboxNoise, setSandboxNoise] = useState(0.0)
+  const [sandboxQ, setSandboxQ] = useState<number[]>([])
+  const [sandboxR, setSandboxR] = useState<number[]>([])
+  const [sandboxQText, setSandboxQText] = useState('')
+  const [sandboxRText, setSandboxRText] = useState('')
   const [sandboxRunning, setSandboxRunning] = useState(false)
   const [sandboxResult, setSandboxResult] = useState<MPCSimulateResponse | null>(null)
   const [sandboxError, setSandboxError] = useState<string | null>(null)
@@ -248,16 +360,104 @@ print(f"MPC Controller initialized: Np={Np}, Nc={Nc}, dt={dt}")
     URL.revokeObjectURL(url)
   }
 
+  // Pre-fill Sandbox from candidateParams on load
+  useEffect(() => {
+    if (Array.isArray(candidateParams.q) && candidateParams.q.length > 0 && sandboxQ.length === 0) {
+      const qArr = candidateParams.q.map(Number)
+      setSandboxQ(qArr)
+      setSandboxQText(qArr.map((v) => Number(v).toFixed(2)).join(', '))
+    }
+    if (Array.isArray(candidateParams.r) && candidateParams.r.length > 0 && sandboxR.length === 0) {
+      const rArr = candidateParams.r.map(Number)
+      setSandboxR(rArr)
+      setSandboxRText(rArr.map((v) => Number(v).toFixed(3)).join(', '))
+    }
+  }, [candidateParams, sandboxQ.length, sandboxR.length])
+
+  // Fallback defaults for Sandbox if candidateParams not yet available
+  useEffect(() => {
+    if (sandboxQ.length === 0 && stateNames.length > 0) {
+      const qArr = Array(stateNames.length).fill(10.0)
+      setSandboxQ(qArr)
+      setSandboxQText(qArr.map((v) => Number(v).toFixed(2)).join(', '))
+    }
+    if (sandboxR.length === 0 && inputNames.length > 0) {
+      const rArr = Array(inputNames.length).fill(0.1)
+      setSandboxR(rArr)
+      setSandboxRText(rArr.map((v) => Number(v).toFixed(3)).join(', '))
+    }
+  }, [stateNames.length, inputNames.length, sandboxQ.length, sandboxR.length])
+
+  const handleResetToBest = () => {
+    setSandboxNp(candidateParams.np)
+    setSandboxNc(candidateParams.nc)
+    setSandboxDt(candidateParams.dt)
+    if (Array.isArray(candidateParams.q) && candidateParams.q.length > 0) {
+      const qArr = candidateParams.q.map(Number)
+      setSandboxQ(qArr)
+      setSandboxQText(qArr.map((v) => Number(v).toFixed(2)).join(', '))
+    }
+    if (Array.isArray(candidateParams.r) && candidateParams.r.length > 0) {
+      const rArr = candidateParams.r.map(Number)
+      setSandboxR(rArr)
+      setSandboxRText(rArr.map((v) => Number(v).toFixed(3)).join(', '))
+    }
+  }
+
+  const handleUpdateQItem = (idx: number, newVal: number) => {
+    const updated = [...sandboxQ]
+    updated[idx] = Math.max(1e-5, newVal)
+    setSandboxQ(updated)
+    setSandboxQText(updated.map((v) => Number(v).toFixed(2)).join(', '))
+  }
+
+  const handleUpdateRItem = (idx: number, newVal: number) => {
+    const updated = [...sandboxR]
+    updated[idx] = Math.max(1e-5, newVal)
+    setSandboxR(updated)
+    setSandboxRText(updated.map((v) => Number(v).toFixed(3)).join(', '))
+  }
+
+  const handleQTextChange = (text: string) => {
+    setSandboxQText(text)
+    const nums = text
+      .split(',')
+      .map((s) => parseFloat(s.trim()))
+      .filter((n) => Number.isFinite(n) && n > 0)
+    if (nums.length === stateNames.length || nums.length > 0) {
+      setSandboxQ(nums)
+    }
+  }
+
+  const handleRTextChange = (text: string) => {
+    setSandboxRText(text)
+    const nums = text
+      .split(',')
+      .map((s) => parseFloat(s.trim()))
+      .filter((n) => Number.isFinite(n) && n > 0)
+    if (nums.length === inputNames.length || nums.length > 0) {
+      setSandboxR(nums)
+    }
+  }
+
+  const handleScaleQ = (factor: number) => {
+    const updated = sandboxQ.map((v) => Math.max(1e-5, Number((v * factor).toFixed(3))))
+    setSandboxQ(updated)
+    setSandboxQText(updated.map((v) => Number(v).toFixed(2)).join(', '))
+  }
+
+  const handleScaleR = (factor: number) => {
+    const updated = sandboxR.map((v) => Math.max(1e-5, Number((v * factor).toFixed(4))))
+    setSandboxR(updated)
+    setSandboxRText(updated.map((v) => Number(v).toFixed(3)).join(', '))
+  }
+
   const handleRunSandbox = async () => {
     setSandboxRunning(true)
     setSandboxError(null)
     try {
-      const qVal = Array.isArray(candidateParams.q)
-        ? (candidateParams.q as number[])
-        : job?.options?.q_weights
-      const rVal = Array.isArray(candidateParams.r)
-        ? (candidateParams.r as number[])
-        : job?.options?.r_weights
+      const qVal = sandboxQ.length > 0 ? sandboxQ : (Array.isArray(candidateParams.q) ? (candidateParams.q as number[]) : undefined)
+      const rVal = sandboxR.length > 0 ? sandboxR : (Array.isArray(candidateParams.r) ? (candidateParams.r as number[]) : undefined)
 
       const res = await mpcApi.simulate({
         job_id: job?.job_id,
@@ -637,35 +837,24 @@ print(f"MPC Controller initialized: Np={Np}, Nc={Nc}, dt={dt}")
                   </div>
                 </div>
 
-                {/* Side-by-Side Matrices Q and R */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <div className="rounded-xl border border-border bg-surface p-2.5">
-                    <div className="flex items-center justify-between text-xs font-semibold text-purple-600 dark:text-purple-300 mb-1">
-                      <span>State Weights Q</span>
-                      <span className="text-[10px] text-muted font-mono">
-                        diag ({Array.isArray(candidateParams.q) ? candidateParams.q.length : 1}x{Array.isArray(candidateParams.q) ? candidateParams.q.length : 1})
-                      </span>
-                    </div>
-                    <pre className="font-mono text-[11px] text-foreground bg-surface-muted/60 rounded-lg p-1.5 overflow-x-auto leading-relaxed">
-                      {Array.isArray(candidateParams.q)
-                        ? `diag([${candidateParams.q.map((v: number) => Number(v).toFixed(2)).join(', ')}])`
-                        : String(candidateParams.q)}
-                    </pre>
-                  </div>
-
-                  <div className="rounded-xl border border-border bg-surface p-2.5">
-                    <div className="flex items-center justify-between text-xs font-semibold text-cyan-600 dark:text-cyan-300 mb-1">
-                      <span>Actuator Penalties R</span>
-                      <span className="text-[10px] text-muted font-mono">
-                        diag ({Array.isArray(candidateParams.r) ? candidateParams.r.length : 1}x{Array.isArray(candidateParams.r) ? candidateParams.r.length : 1})
-                      </span>
-                    </div>
-                    <pre className="font-mono text-[11px] text-foreground bg-surface-muted/60 rounded-lg p-1.5 overflow-x-auto leading-relaxed">
-                      {Array.isArray(candidateParams.r)
-                        ? `diag([${candidateParams.r.map((v: number) => Number(v).toFixed(3)).join(', ')}])`
-                        : String(candidateParams.r)}
-                    </pre>
-                  </div>
+                {/* Side-by-Side Graphical Matrices Q and R */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <MpcMatrixDisplay
+                    title="State Weights"
+                    matrixSymbol="Q"
+                    values={candidateParams.q}
+                    dimLabel={`diag ${Array.isArray(candidateParams.q) ? candidateParams.q.length : 1}×${Array.isArray(candidateParams.q) ? candidateParams.q.length : 1}`}
+                    names={stateNames}
+                    accent="purple"
+                  />
+                  <MpcMatrixDisplay
+                    title="Actuator Penalties"
+                    matrixSymbol="R"
+                    values={candidateParams.r}
+                    dimLabel={`diag ${Array.isArray(candidateParams.r) ? candidateParams.r.length : 1}×${Array.isArray(candidateParams.r) ? candidateParams.r.length : 1}`}
+                    names={inputNames}
+                    accent="cyan"
+                  />
                 </div>
               </div>
             </div>
@@ -874,16 +1063,17 @@ print(f"MPC Controller initialized: Np={Np}, Nc={Nc}, dt={dt}")
 
       {/* SEPARATE TAB: Manual Simulation Sandbox */}
       {activeTab === 'sandbox' && (
-        <div className="space-y-4">
-          <div className="rounded-2xl border border-border bg-surface-elevated p-5 shadow-sm">
-            <div className="flex items-center justify-between border-b border-border pb-3 mb-4">
+        <div className="space-y-6">
+          {/* Card 1: Simulation Scenario & Horizon Settings */}
+          <div className="rounded-2xl border border-border bg-surface-elevated p-5 shadow-sm space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
               <div>
                 <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
                   <Play className="size-4 text-purple-500" />
                   Interactive Manual MPC Simulation Sandbox
                 </h3>
                 <p className="text-xs text-muted-text">
-                  Tweak parameters manually to test transient response sensitivity without launching an LLM agent tuning run
+                  Tweak horizons, sampling duration, trajectory shape, and sensor noise to test response dynamics
                 </p>
               </div>
 
@@ -891,7 +1081,7 @@ print(f"MPC Controller initialized: Np={Np}, Nc={Nc}, dt={dt}")
                 type="button"
                 onClick={handleRunSandbox}
                 disabled={sandboxRunning}
-                className={`${btnPrimary} flex items-center gap-1.5 text-xs`}
+                className={`${btnPrimary} flex items-center gap-1.5 text-xs shadow-sm`}
               >
                 {sandboxRunning ? (
                   <>
@@ -917,7 +1107,11 @@ print(f"MPC Controller initialized: Np={Np}, Nc={Nc}, dt={dt}")
                   min={4}
                   max={50}
                   value={sandboxNp}
-                  onChange={(e) => setSandboxNp(Number(e.target.value))}
+                  onChange={(e) => {
+                    const newNp = Number(e.target.value)
+                    setSandboxNp(newNp)
+                    if (sandboxNc > newNp) setSandboxNc(newNp)
+                  }}
                   className="w-full accent-purple-500"
                 />
               </div>
@@ -930,8 +1124,8 @@ print(f"MPC Controller initialized: Np={Np}, Nc={Nc}, dt={dt}")
                 <input
                   type="range"
                   min={1}
-                  max={20}
-                  value={sandboxNc}
+                  max={sandboxNp}
+                  value={Math.min(sandboxNc, sandboxNp)}
                   onChange={(e) => setSandboxNc(Number(e.target.value))}
                   className="w-full accent-purple-500"
                 />
@@ -1001,13 +1195,240 @@ print(f"MPC Controller initialized: Np={Np}, Nc={Nc}, dt={dt}")
                 />
               </div>
             </div>
+          </div>
+
+          {/* Card 2: Dedicated Controller Penalty Matrices Tuning (Q & R) */}
+          <div className="rounded-2xl border border-border bg-surface-elevated p-5 shadow-sm space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
+              <div>
+                <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+                  <Sliders className="size-4 text-purple-500" />
+                  Controller Penalty Matrices Tuning (Q &amp; R)
+                </h3>
+                <p className="text-xs text-muted-text">
+                  Adjust diagonal cost weights to balance aggressive state error tracking versus actuator effort smoothness
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleResetToBest}
+                  className="rounded-lg border border-purple-500/30 bg-purple-500/10 px-3 py-1.5 text-xs font-mono font-medium text-purple-600 dark:text-purple-300 hover:bg-purple-500/20 transition-all flex items-center gap-1.5 shadow-sm"
+                >
+                  <RotateCcw className="size-3.5" /> Pre-fill from Agent Best
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              {/* State Weights Q Panel */}
+              <div className="rounded-xl border border-border bg-surface p-4 space-y-3.5 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="flex size-6 items-center justify-center rounded-lg bg-purple-500/15 text-purple-600 dark:text-purple-300 border border-purple-500/30 text-xs font-bold font-mono">
+                      Q
+                    </span>
+                    <div>
+                      <span className="text-xs font-bold text-foreground block">
+                        State Penalty Weights
+                      </span>
+                      <span className="text-[10px] text-muted-text font-mono">
+                        diag ({sandboxQ.length}×{sandboxQ.length})
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1 text-[10.5px]">
+                    <span className="text-muted-text mr-0.5 font-mono text-[10px]">Scale:</span>
+                    {[0.1, 0.5, 2, 10].map((f) => (
+                      <button
+                        key={f}
+                        type="button"
+                        onClick={() => handleScaleQ(f)}
+                        className="rounded border border-border bg-surface-muted/50 px-2 py-0.5 font-mono text-xs hover:bg-surface-elevated text-muted-text hover:text-foreground transition-colors"
+                      >
+                        ×{f}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Comma-separated quick edit */}
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-[11px] text-muted-text">
+                    <span className="font-medium">Vector Format (comma-separated):</span>
+                    <span className="text-[10.5px] text-purple-600 dark:text-purple-400 font-mono font-semibold">
+                      {sandboxQ.length} states
+                    </span>
+                  </div>
+                  <input
+                    type="text"
+                    value={sandboxQText}
+                    onChange={(e) => handleQTextChange(e.target.value)}
+                    placeholder="e.g. 210.0, 13.5, 190.0, 22.0"
+                    className="w-full rounded-lg border border-border bg-surface-muted/30 px-3 py-2 font-mono text-xs text-foreground focus:border-purple-500 focus:outline-none transition-colors"
+                  />
+                </div>
+
+                {/* Individual State Channels Grid */}
+                <div className="space-y-2 pt-1">
+                  <div className="flex items-center justify-between text-[11px] text-muted-text">
+                    <span className="font-semibold">Individual Diagonal Elements (qᵢ):</span>
+                    <span className="text-[10px] text-muted-text/80 font-mono">qᵢ &gt; 0</span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 max-h-[220px] overflow-y-auto pr-1">
+                    {sandboxQ.map((qVal, idx) => {
+                      const sName = stateNames[idx] || `x${idx + 1}`
+                      return (
+                        <div
+                          key={idx}
+                          className="rounded-lg border border-border/80 bg-surface-muted/40 p-2.5 space-y-1.5 hover:border-purple-500/40 transition-colors"
+                        >
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="font-mono font-bold text-foreground">{sName}</span>
+                            <span className="text-[10px] text-purple-600 dark:text-purple-400 font-mono font-semibold bg-purple-500/10 px-1 rounded">q_{idx + 1}</span>
+                          </div>
+                          <input
+                            type="number"
+                            step="any"
+                            min="0.0001"
+                            value={qVal}
+                            onChange={(e) => handleUpdateQItem(idx, parseFloat(e.target.value) || 0.001)}
+                            className="w-full rounded border border-border bg-surface px-2 py-1 text-xs font-mono font-semibold text-foreground focus:border-purple-500 focus:outline-none"
+                          />
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Actuator Penalties R Panel */}
+              <div className="rounded-xl border border-border bg-surface p-4 space-y-3.5 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="flex size-6 items-center justify-center rounded-lg bg-cyan-500/15 text-cyan-600 dark:text-cyan-300 border border-cyan-500/30 text-xs font-bold font-mono">
+                      R
+                    </span>
+                    <div>
+                      <span className="text-xs font-bold text-foreground block">
+                        Actuator Penalty Weights
+                      </span>
+                      <span className="text-[10px] text-muted-text font-mono">
+                        diag ({sandboxR.length}×{sandboxR.length})
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1 text-[10.5px]">
+                    <span className="text-muted-text mr-0.5 font-mono text-[10px]">Scale:</span>
+                    {[0.1, 0.5, 2, 10].map((f) => (
+                      <button
+                        key={f}
+                        type="button"
+                        onClick={() => handleScaleR(f)}
+                        className="rounded border border-border bg-surface-muted/50 px-2 py-0.5 font-mono text-xs hover:bg-surface-elevated text-muted-text hover:text-foreground transition-colors"
+                      >
+                        ×{f}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Comma-separated quick edit */}
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-[11px] text-muted-text">
+                    <span className="font-medium">Vector Format (comma-separated):</span>
+                    <span className="text-[10.5px] text-cyan-600 dark:text-cyan-400 font-mono font-semibold">
+                      {sandboxR.length} inputs
+                    </span>
+                  </div>
+                  <input
+                    type="text"
+                    value={sandboxRText}
+                    onChange={(e) => handleRTextChange(e.target.value)}
+                    placeholder="e.g. 0.25, 0.32, 0.25"
+                    className="w-full rounded-lg border border-border bg-surface-muted/30 px-3 py-2 font-mono text-xs text-foreground focus:border-cyan-500 focus:outline-none transition-colors"
+                  />
+                </div>
+
+                {/* Individual Input Channels Grid */}
+                <div className="space-y-2 pt-1">
+                  <div className="flex items-center justify-between text-[11px] text-muted-text">
+                    <span className="font-semibold">Individual Diagonal Elements (rⱼ):</span>
+                    <span className="text-[10px] text-muted-text/80 font-mono">rⱼ &gt; 0</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 max-h-[220px] overflow-y-auto pr-1">
+                    {sandboxR.map((rVal, idx) => {
+                      const uName = inputNames[idx] || `u${idx + 1}`
+                      return (
+                        <div
+                          key={idx}
+                          className="rounded-lg border border-border/80 bg-surface-muted/40 p-2.5 space-y-1.5 hover:border-cyan-500/40 transition-colors"
+                        >
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="font-mono font-bold text-foreground">{uName}</span>
+                            <span className="text-[10px] text-cyan-600 dark:text-cyan-400 font-mono font-semibold bg-cyan-500/10 px-1 rounded">r_{idx + 1}</span>
+                          </div>
+                          <input
+                            type="number"
+                            step="any"
+                            min="0.0001"
+                            value={rVal}
+                            onChange={(e) => handleUpdateRItem(idx, parseFloat(e.target.value) || 0.001)}
+                            className="w-full rounded border border-border bg-surface px-2 py-1 text-xs font-mono font-semibold text-foreground focus:border-cyan-500 focus:outline-none"
+                          />
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
 
             {sandboxError && (
-              <div className="mt-4 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-600 dark:text-rose-300">
+              <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-600 dark:text-rose-300">
                 {sandboxError}
               </div>
             )}
           </div>
+
+          {/* Sandbox Performance Telemetry Cards */}
+          {sandboxResult && sandboxResult.metrics && (
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 font-mono text-xs">
+              <div className="rounded-xl border border-border bg-surface-elevated p-3 text-center">
+                <span className="text-[10.5px] text-muted-text block">Simulated MSE</span>
+                <span className="text-sm font-bold text-purple-600 dark:text-purple-300">
+                  {typeof sandboxResult.metrics.mse === 'number' ? sandboxResult.metrics.mse.toFixed(5) : '—'}
+                </span>
+              </div>
+              <div className="rounded-xl border border-border bg-surface-elevated p-3 text-center">
+                <span className="text-[10.5px] text-muted-text block">Max Overshoot</span>
+                <span className="text-sm font-bold text-foreground">
+                  {typeof sandboxResult.metrics.overshoot === 'number' ? `${sandboxResult.metrics.overshoot.toFixed(2)}%` : '0.00%'}
+                </span>
+              </div>
+              <div className="rounded-xl border border-border bg-surface-elevated p-3 text-center">
+                <span className="text-[10.5px] text-muted-text block">Settling Time</span>
+                <span className="text-sm font-bold text-foreground">
+                  {typeof sandboxResult.metrics.settling_time === 'number' ? `${sandboxResult.metrics.settling_time.toFixed(3)}s` : '—'}
+                </span>
+              </div>
+              <div className="rounded-xl border border-border bg-surface-elevated p-3 text-center">
+                <span className="text-[10.5px] text-muted-text block">Control Effort</span>
+                <span className="text-sm font-bold text-cyan-600 dark:text-cyan-300">
+                  {typeof sandboxResult.metrics.control_effort === 'number' ? sandboxResult.metrics.control_effort.toFixed(2) : '—'}
+                </span>
+              </div>
+              <div className="rounded-xl border border-border bg-surface-elevated p-3 text-center">
+                <span className="text-[10.5px] text-muted-text block">QP Solve Time</span>
+                <span className="text-sm font-bold text-emerald-600 dark:text-emerald-300">
+                  {sandboxResult.solve_time_ms ? `${sandboxResult.solve_time_ms.toFixed(1)}ms` : '—'}
+                </span>
+              </div>
+            </div>
+          )}
 
           {/* Sandbox Plot Output */}
           {sandboxResult && (
