@@ -125,6 +125,8 @@ class AdaptiveJobResultsResponse(BaseModel):
     success: bool | None = None
     design_grade: dict[str, Any] | None = None
     session_metadata: dict[str, Any] | None = None
+    control_law: str | None = None
+    stability_proof: str | None = None
 
 
 class AdaptiveDiagnosisChatRequest(BaseModel):

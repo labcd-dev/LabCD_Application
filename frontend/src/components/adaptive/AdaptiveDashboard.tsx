@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Activity,
+  AlertTriangle,
   ArrowRight,
   CheckCircle2,
   Download,
@@ -30,6 +31,7 @@ import { AdaptiveDiagnosisModal } from './AdaptiveDiagnosisModal'
 import { AdaptiveDiagnosisView } from './AdaptiveDiagnosisView'
 import { ControlBlockDiagram } from '../common/ControlBlockDiagram'
 import { ScoreReportBadge } from '../ScoreReportBadge'
+import { MarkdownContent } from '../MarkdownContent'
 
 /**
  * Strictly truncates reasoning logs to maximum 7 words followed by '...'
@@ -237,6 +239,39 @@ export function AdaptiveDashboard({
     }
     return null
   }, [results, bestRms])
+
+  const controlLawText = useMemo(() => {
+    if (results?.control_law) return results.control_law
+    if (results?.report) {
+      const match = results.report.match(/##\s+Control Law\b([\s\S]*?)(?=\n##\s+|$)/i)
+      if (match) return match[1].trim()
+    }
+    return null
+  }, [results?.control_law, results?.report])
+
+  const stabilityProofText = useMemo(() => {
+    if (results?.stability_proof) return results.stability_proof
+    if (results?.report) {
+      const match = results.report.match(/##\s+Stability (?:Guarantee|Proof)\b([\s\S]*?)(?=\n##\s+|$)/i)
+      if (match) return match[1].trim()
+    }
+    return null
+  }, [results?.stability_proof, results?.report])
+
+  const activeGains = useMemo(() => {
+    const tuningObj = results?.tuning_best?.tuning as Record<string, unknown> | undefined
+    if (tuningObj && typeof tuningObj === 'object') {
+      return Object.entries(tuningObj).slice(0, 6)
+    }
+    const logObj = results?.tuning_log?.[0] as Record<string, unknown> | undefined
+    if (logObj && typeof logObj === 'object') {
+      const params = (logObj.params || logObj.tuning) as Record<string, unknown> | undefined
+      if (params && typeof params === 'object') {
+        return Object.entries(params).slice(0, 6)
+      }
+    }
+    return []
+  }, [results?.tuning_best?.tuning, results?.tuning_log])
 
   // Parse Series Data
   // Backend series_export.build_series stores matrices as time-major:
@@ -548,7 +583,7 @@ figure('Name', 'Adaptive Control Response', 'Color', 'w');
 plot(t, y_sim, 'LineWidth', 2, 'Color', [0.03, 0.57, 0.7], 'DisplayName', 'Simulated Response');
 hold on;
 if ~isempty(y_ref)
-    plot(t, y_ref, '--', 'LineWidth', 1.5, 'Color', [0.35, 0.4, 0.45], 'DisplayName', 'Target xd(t)');
+    plot(t, y_ref, '--', 'LineWidth', 1.5, 'Color', [0.35, 0.4, 0.45], 'DisplayName', 'Target x_d(t)');
 end
 grid on; xlabel('Time (s)'); ylabel('Amplitude');
 title('LabCD Adaptive Closed-Loop Response'); legend('show', 'Location', 'best');
@@ -586,6 +621,7 @@ title('LabCD Adaptive Closed-Loop Response'); legend('show', 'Location', 'best')
               rating={results?.design_grade?.rating}
               comment={results?.design_grade?.comment}
               sessionMetadata={results?.session_metadata}
+              hideCostTokens={true}
             />
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-text">
@@ -831,9 +867,9 @@ title('LabCD Adaptive Closed-Loop Response'); legend('show', 'Location', 'best')
               />
             </div>
 
-            {/* Right: Adaptive Control Law & Parameters */}
+            {/* Right: Adaptive Control Law */}
             <div className="lg:col-span-5 rounded-2xl border border-border bg-surface-elevated p-4 shadow-sm flex flex-col justify-between">
-              <div>
+              <div className="flex-1 flex flex-col">
                 <div className="flex items-center justify-between mb-2.5">
                   <div className="flex items-center gap-2">
                     <div className="flex size-7 items-center justify-center rounded-lg bg-cyan-500/15 text-cyan-600 dark:text-cyan-300 border border-cyan-500/30">
@@ -841,60 +877,56 @@ title('LabCD Adaptive Closed-Loop Response'); legend('show', 'Location', 'best')
                     </div>
                     <div>
                       <h3 className="text-xs font-bold text-foreground">
-                        Adaptive Control Law &amp; Stability
+                        Adaptive Control Law
                       </h3>
                       <p className="text-[10.5px] text-muted-text">
-                        {results?.method || 'Sliding Mode Control with RBF Neural Weight Tuning'}
+                        {results?.method ? `${results.method} Synthesis` : 'Mathematical Derivation'}
                       </p>
                     </div>
                   </div>
-                  <span className="flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/15 px-2.5 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                    <CheckCircle2 className="size-3.5" /> Lyapunov Certified
-                  </span>
+                  {extractionFailed ? (
+                    <span className="flex items-center gap-1 rounded-full border border-red-500/30 bg-red-500/15 px-2.5 py-0.5 text-xs font-semibold text-red-600 dark:text-red-400">
+                      <AlertTriangle className="size-3.5" /> Synthesis Failed
+                    </span>
+                  ) : results?.success === false ? (
+                    <span className="flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/15 px-2.5 py-0.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
+                      <AlertTriangle className="size-3.5" /> Needs Tuning
+                    </span>
+                  ) : results ? (
+                    <span className="flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/15 px-2.5 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                      <CheckCircle2 className="size-3.5" /> Lyapunov Certified
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1 rounded-full border border-border bg-surface-muted px-2.5 py-0.5 text-xs font-medium text-muted-text">
+                      Standby
+                    </span>
+                  )}
                 </div>
 
-                {/* 4-cell Parameter Stats */}
-                <div className="grid grid-cols-4 gap-2 font-mono mb-2.5">
-                  <div className="rounded-xl border border-border bg-surface p-2 text-center">
-                    <span className="text-[10px] text-muted-text block">Slope (λ)</span>
-                    <span className="text-base font-bold text-cyan-600 dark:text-cyan-300">3.50</span>
+                {activeGains.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mb-2 font-mono text-[10.5px]">
+                    {activeGains.map(([k, v]) => (
+                      <span key={k} className="rounded-md border border-border bg-surface px-2 py-0.5 text-muted-text">
+                        <span className="text-cyan-600 dark:text-cyan-400 font-semibold">{k}:</span>{' '}
+                        {Array.isArray(v) ? `[${v.join(', ')}]` : typeof v === 'number' ? Number(v).toFixed(3) : String(v)}
+                      </span>
+                    ))}
                   </div>
-                  <div className="rounded-xl border border-border bg-surface p-2 text-center">
-                    <span className="text-[10px] text-muted-text block">Learning (Γ)</span>
-                    <span className="text-base font-bold text-teal-600 dark:text-teal-300">12.5</span>
-                  </div>
-                  <div className="rounded-xl border border-border bg-surface p-2 text-center">
-                    <span className="text-[10px] text-muted-text block">Boundary (ϵ)</span>
-                    <span className="text-xs font-bold text-purple-600 dark:text-purple-300">0.015</span>
-                  </div>
-                  <div className="rounded-xl border border-border bg-surface p-2 text-center">
-                    <span className="text-[10px] text-muted-text block">Stability</span>
-                    <span className="text-xs font-bold text-emerald-600 dark:text-emerald-300">Global</span>
-                  </div>
-                </div>
+                )}
 
-                {/* Side-by-Side Mathematical Representations */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <div className="rounded-xl border border-border bg-surface p-2.5">
-                    <div className="flex items-center justify-between text-xs font-semibold text-cyan-600 dark:text-cyan-300 mb-1">
-                      <span>Sliding Surface s(t)</span>
-                      <span className="text-[10px] text-muted font-mono">Manifold</span>
+                {controlLawText ? (
+                  <div className="rounded-xl border border-border bg-surface p-3 max-h-56 overflow-y-auto font-mono text-xs text-foreground space-y-2 flex-1">
+                    <div className="text-[11px] font-semibold text-cyan-600 dark:text-cyan-400 mb-1">
+                      Derived Control Law:
                     </div>
-                    <pre className="font-mono text-[11px] text-foreground bg-surface-muted/60 rounded-lg p-1.5 overflow-x-auto leading-relaxed">
-                      s = e_dot + λ·e (λ = 3.5)
-                    </pre>
+                    <MarkdownContent content={controlLawText} className="text-xs leading-relaxed text-foreground font-mono" />
                   </div>
-
-                  <div className="rounded-xl border border-border bg-surface p-2.5">
-                    <div className="flex items-center justify-between text-xs font-semibold text-teal-600 dark:text-teal-300 mb-1">
-                      <span>Adaptation Law</span>
-                      <span className="text-[10px] text-muted font-mono">dθ̂/dt</span>
-                    </div>
-                    <pre className="font-mono text-[11px] text-foreground bg-surface-muted/60 rounded-lg p-1.5 overflow-x-auto leading-relaxed">
-                      θ̂_dot = Γ·φ(x)·s (Γ = 12.5)
-                    </pre>
+                ) : (
+                  <div className="rounded-xl border border-border bg-surface/50 p-6 text-center text-xs text-muted-text flex-1 flex flex-col items-center justify-center space-y-1">
+                    <p className="font-semibold text-foreground">Awaiting Mathematical Synthesis</p>
+                    <p className="text-[11px]">Launch adaptive controller design to derive the plant-specific symbolic control law.</p>
                   </div>
-                </div>
+                )}
               </div>
             </div>
           </div>
@@ -930,7 +962,7 @@ title('LabCD Adaptive Closed-Loop Response'); legend('show', 'Location', 'best')
                             : 'text-muted-text hover:text-foreground'
                         }`}
                       >
-                        x(t) vs xd(t)
+                        x(t) vs x<sub>d</sub>(t)
                       </button>
                       <button
                         type="button"
@@ -1075,7 +1107,7 @@ title('LabCD Adaptive Closed-Loop Response'); legend('show', 'Location', 'best')
                         {selectedSignal === 'states' && (
                           <span className="flex items-center gap-1.5">
                             <span className="size-2 rounded-xs border border-slate-400 border-dashed" />
-                            Reference xd(t)
+                            Reference x<sub>d</sub>(t)
                           </span>
                         )}
                       </div>
@@ -1306,31 +1338,20 @@ title('LabCD Adaptive Closed-Loop Response'); legend('show', 'Location', 'best')
               </div>
             )}
 
-            {/* LaTeX Mathematical Formulations — only when design succeeded */}
-            {!extractionFailed && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="rounded-xl border border-border bg-surface p-4 space-y-2">
-                  <span className="text-xs font-bold text-cyan-600 dark:text-cyan-400 block">
-                    1. Candidate Lyapunov Function V(s, θ̃)
+            {/* Constructive Lyapunov Stability Proof — data-driven from agent derivation */}
+            {!extractionFailed && stabilityProofText && (
+              <div className="rounded-xl border border-teal-500/30 bg-surface p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-teal-600 dark:text-teal-400 flex items-center gap-1.5">
+                    <CheckCircle2 className="size-4 text-emerald-500" />
+                    Constructive Lyapunov Function &amp; Stability Proof
                   </span>
-                  <p className="text-xs text-muted-text">
-                    A radially unbounded quadratic energy function in terms of sliding surface s(t) and parameter estimation error θ̃ = θ̂ - θ*:
-                  </p>
-                  <div className="rounded-lg bg-surface-muted p-3 font-mono text-xs text-foreground">
-                    V(s, θ̃) = (1/2)·s² + (1/(2·Γ))·θ̃ᵀθ̃
-                  </div>
+                  <span className="rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 font-mono">
+                    Certified Analytical Bounds
+                  </span>
                 </div>
-
-                <div className="rounded-xl border border-border bg-surface p-4 space-y-2">
-                  <span className="text-xs font-bold text-teal-600 dark:text-teal-400 block">
-                    2. Derivative Bound dV/dt &le; 0
-                  </span>
-                  <p className="text-xs text-muted-text">
-                    Differentiating along the system trajectories with the derived adaptive update law yields negative semi-definiteness:
-                  </p>
-                  <div className="rounded-lg bg-surface-muted p-3 font-mono text-xs text-foreground">
-                    dV/dt = s·(u + f(x)) + (1/Γ)·θ̃ᵀ·θ̃_dot &le; -η·|s| + ϵ
-                  </div>
+                <div className="rounded-lg bg-surface-muted p-3.5 text-xs text-foreground max-h-80 overflow-y-auto leading-relaxed">
+                  <MarkdownContent content={stabilityProofText} className="text-xs leading-relaxed" />
                 </div>
               </div>
             )}

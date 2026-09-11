@@ -237,6 +237,8 @@ def _to_results(record: JobRecord) -> AdaptiveJobResultsResponse:
         success=success,
         design_grade=design_grade,
         session_metadata=session_meta or None,
+        control_law=getattr(record, "control_law", None) or session_meta.get("control_law"),
+        stability_proof=getattr(record, "stability_proof", None) or session_meta.get("stability_proof"),
     )
 
 
@@ -441,6 +443,26 @@ def _run_pipeline_thread(job_id: str, store: InMemoryAdaptiveJobStore) -> None:
         diagnosis = result.get("diagnosis") if isinstance(result, dict) else None
 
         report_text = str(report or "")
+        control_law_str = None
+        stability_proof_str = None
+        if isinstance(result, dict):
+            control_law_str = result.get("control_law")
+            stability_proof_str = result.get("stability_proof") or result.get("stability")
+            if not control_law_str and isinstance(result.get("final_components"), dict):
+                control_law_str = result["final_components"].get("control_law")
+                stability_proof_str = stability_proof_str or result["final_components"].get("stability")
+
+        if report_text:
+            import re
+            if not control_law_str:
+                cl_match = re.search(r"##\s+Control Law\b([\s\S]*?)(?=\n##\s+|$)", report_text, re.IGNORECASE)
+                if cl_match:
+                    control_law_str = cl_match.group(1).strip()
+            if not stability_proof_str:
+                stab_match = re.search(r"##\s+Stability (?:Guarantee|Proof)\b([\s\S]*?)(?=\n##\s+|$)", report_text, re.IGNORECASE)
+                if stab_match:
+                    stability_proof_str = stab_match.group(1).strip()
+
         is_failed = False
         fail_msg = "Design execution failed"
         if "EXTRACTION FAILED" in report_text:
@@ -465,6 +487,8 @@ def _run_pipeline_thread(job_id: str, store: InMemoryAdaptiveJobStore) -> None:
                 report=report,
                 abstract=abstract,
                 method=method,
+                control_law=control_law_str,
+                stability_proof=stability_proof_str,
                 final_metrics=final_metrics,
                 tuning_log=_enrich_tuning_log_for_ui(list(tuning_log or []), final_metrics),
                 tuning_best=tuning_best,
@@ -503,11 +527,14 @@ def _run_pipeline_thread(job_id: str, store: InMemoryAdaptiveJobStore) -> None:
         completion_tokens = int(tot_usage.get("completion_tokens") or tot_usage.get("output_tokens") or 0)
         total_tokens = int(tot_usage.get("total_tokens") or (prompt_tokens + completion_tokens))
 
-        model_name = str(options.get("model") or "gpt-4o")
-        if "mini" in model_name.lower():
-            cost_usd = round((prompt_tokens * 0.15 + completion_tokens * 0.60) / 1_000_000, 5)
+        if norm_usage.get("total_cost") is not None:
+            cost_usd = round(float(norm_usage["total_cost"]), 4)
         else:
-            cost_usd = round((prompt_tokens * 2.50 + completion_tokens * 10.00) / 1_000_000, 5)
+            model_name = str(options.get("model") or "gpt-4o")
+            if "mini" in model_name.lower():
+                cost_usd = round((prompt_tokens * 0.15 + completion_tokens * 0.60) / 1_000_000, 5)
+            else:
+                cost_usd = round((prompt_tokens * 2.50 + completion_tokens * 10.00) / 1_000_000, 5)
 
         # Score (0.0 to 1.0) and success boolean
         success_bool = bool(final_metrics.get("success", True)) if isinstance(final_metrics, dict) else True
@@ -539,6 +566,8 @@ def _run_pipeline_thread(job_id: str, store: InMemoryAdaptiveJobStore) -> None:
             "wall_clock_time_seconds": wall_clock_time,
             "score": score_val,
             "success": success_bool,
+            "control_law": control_law_str,
+            "stability_proof": stability_proof_str,
         }
 
         store.update(
@@ -549,13 +578,15 @@ def _run_pipeline_thread(job_id: str, store: InMemoryAdaptiveJobStore) -> None:
             report=report,
             abstract=abstract,
             method=method,
+            control_law=control_law_str,
+            stability_proof=stability_proof_str,
             final_metrics=final_metrics,
             tuning_log=_enrich_tuning_log_for_ui(list(tuning_log or []), final_metrics),
             tuning_best=tuning_best,
             usage=norm_usage,
             system_spec=spec,
             series=series if isinstance(series, dict) else None,
-                diagnosis=diagnosis if isinstance(diagnosis, dict) else None,
+            diagnosis=diagnosis if isinstance(diagnosis, dict) else None,
             score=score_val,
             success=success_bool,
             session_metadata=session_meta,
