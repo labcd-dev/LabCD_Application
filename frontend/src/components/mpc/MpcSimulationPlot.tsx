@@ -268,7 +268,7 @@ export function MpcSimulationPlot({
             <p className="text-xs text-muted-text leading-relaxed mb-3">
               {currentIteration > 0
                 ? `The Evaluator agent is running the closed-loop simulation on the plant dynamics for iteration ${currentIteration}. Real state waveforms will stream here directly upon step resolution.`
-                : 'Launch autonomous tuning or test dynamics to populate real-time time-domain trajectories. No mock data is presented.'}
+                : 'Launch autonomous tuning or test dynamics to populate real-time time-domain trajectories.'}
             </p>
 
             {currentIteration > 0 && (

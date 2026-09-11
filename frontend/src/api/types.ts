@@ -1115,6 +1115,8 @@ export interface MPCJobStatusResponse {
   best_mse?: number | null
   mse_history?: Array<number | null>
   params_history?: Array<Record<string, unknown>>
+  session_metadata?: Record<string, unknown> | null
+  usage?: Record<string, unknown> | null
 }
 
 export interface MPCJobResultsResponse {

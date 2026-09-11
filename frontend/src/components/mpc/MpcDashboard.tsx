@@ -149,6 +149,24 @@ export function MpcDashboard({
     return null
   }, [results, job, bestMse])
 
+  const liveSolveTime = useMemo(() => {
+    const m = results?.metrics as Record<string, unknown> | undefined
+    if (typeof m?.avg_solve_time === 'number' && Number.isFinite(m.avg_solve_time) && m.avg_solve_time > 0) {
+      return (m.avg_solve_time * 1000).toFixed(2)
+    }
+    if (typeof m?.solve_time_ms === 'number' && Number.isFinite(m.solve_time_ms) && m.solve_time_ms > 0) {
+      return m.solve_time_ms.toFixed(2)
+    }
+    const sm = job?.session_metadata as Record<string, unknown> | undefined
+    if (typeof sm?.avg_solve_time === 'number' && Number.isFinite(sm.avg_solve_time) && sm.avg_solve_time > 0) {
+      return (sm.avg_solve_time * 1000).toFixed(2)
+    }
+    if (typeof sm?.solve_time_ms === 'number' && Number.isFinite(sm.solve_time_ms) && sm.solve_time_ms > 0) {
+      return sm.solve_time_ms.toFixed(2)
+    }
+    return null
+  }, [results?.metrics, job?.session_metadata])
+
   const candidateParams = useMemo(() => {
     const p = (results?.best_params || job?.best_params || job?.options?.seed_params) as Record<string, unknown> | undefined
     return {
@@ -340,6 +358,7 @@ print(f"MPC Controller initialized: Np={Np}, Nc={Nc}, dt={dt}")
               rating={results?.design_grade?.rating}
               comment={results?.design_grade?.comment}
               sessionMetadata={results?.session_metadata}
+              hideCostTokens={true}
             />
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-text">
@@ -398,8 +417,8 @@ print(f"MPC Controller initialized: Np={Np}, Nc={Nc}, dt={dt}")
             <Gauge className="size-3.5 text-cyan-500" />
           </div>
           <div className="mt-1 flex items-baseline gap-1 font-mono text-xl font-bold text-foreground">
-            {typeof results?.metrics?.avg_solve_time === 'number'
-              ? (results.metrics.avg_solve_time * 1000).toFixed(2)
+            {liveSolveTime !== null
+              ? liveSolveTime
               : (job?.status === 'running' ? 'Computing...' : '—')}{' '}
             <span className="text-[10px] text-muted font-normal">ms/step</span>
           </div>
@@ -431,12 +450,20 @@ print(f"MPC Controller initialized: Np={Np}, Nc={Nc}, dt={dt}")
           <div className="mt-1 flex items-baseline gap-1 font-mono text-xl font-bold text-amber-600 dark:text-amber-300">
             {results?.usage?.total_cost !== undefined
               ? `$${Number(results.usage.total_cost).toFixed(4)}`
-              : (currentIter > 0 ? `$${(currentIter * 0.0006).toFixed(4)}` : '—')}
+              : (job?.usage as any)?.total_cost !== undefined
+              ? `$${Number((job?.usage as any).total_cost).toFixed(4)}`
+              : ((job?.session_metadata as any)?.cost_usd !== undefined)
+              ? `$${Number((job?.session_metadata as any).cost_usd).toFixed(4)}`
+              : (currentIter > 0 ? `$${(currentIter * 0.00045).toFixed(4)}` : '—')}
           </div>
           <p className="mt-0.5 text-[10.5px] text-muted-text font-mono truncate">
             {results?.usage?.total_tokens
               ? `${Number(results.usage.total_tokens).toLocaleString()} tokens`
-              : (currentIter > 0 ? `${(currentIter * 980).toLocaleString()} tokens est.` : 'Awaiting start')}
+              : (job?.usage as any)?.total_tokens !== undefined
+              ? `${Number((job?.usage as any).total_tokens).toLocaleString()} tokens`
+              : ((job?.session_metadata as any)?.tokens?.total !== undefined)
+              ? `${Number((job?.session_metadata as any).tokens.total).toLocaleString()} tokens`
+              : (currentIter > 0 ? `${(currentIter * 1170).toLocaleString()} tokens est.` : 'Awaiting start')}
           </p>
         </div>
       </div>

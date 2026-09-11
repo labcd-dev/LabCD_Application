@@ -16,6 +16,7 @@ export interface ScoreReportBadgeProps {
   onGradeSubmitted?: (rating: number, comment?: string | null) => void
   compact?: boolean
   className?: string
+  hideCostTokens?: boolean
 }
 
 export function ScoreReportBadge({
@@ -31,6 +32,7 @@ export function ScoreReportBadge({
   onGradeSubmitted,
   compact = false,
   className = '',
+  hideCostTokens = false,
 }: ScoreReportBadgeProps) {
   const [modalOpen, setModalOpen] = useState(false)
   const [currentRating, setCurrentRating] = useState<number | null | undefined>(initialRating)
@@ -159,13 +161,13 @@ export function ScoreReportBadge({
                 {wallClockTime.toFixed(1)}s
               </span>
             )}
-            {totalTokens !== null && (
+            {!hideCostTokens && totalTokens !== null && (
               <span className="flex items-center gap-1" title="Total LLM tokens">
                 <Flame className="size-3 text-purple-500" />
                 {totalTokens.toLocaleString()} tok
               </span>
             )}
-            {costUsd !== null && (
+            {!hideCostTokens && costUsd !== null && (
               <span className="flex items-center gap-1 text-purple-600 dark:text-purple-300 font-semibold" title="LLM cost">
                 <Coins className="size-3 text-purple-500" />
                 ${costUsd.toFixed(4)}
