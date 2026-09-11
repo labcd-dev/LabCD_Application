@@ -79,6 +79,7 @@ class JobRecord:
     success: bool | None = None
     design_grade: dict[str, Any] | None = None
     session_metadata: dict[str, Any] | None = None
+    avg_solve_time: float | None = None
     created_at: datetime = field(default_factory=_now)
     updated_at: datetime = field(default_factory=_now)
 
@@ -119,6 +120,7 @@ class InMemoryMPCJobStore:
                     "success": record.success,
                     "design_grade": record.design_grade,
                     "session_metadata": record.session_metadata,
+                    "avg_solve_time": record.avg_solve_time,
                 }
                 if row is None:
                     row = DBMPCJob(
@@ -199,6 +201,7 @@ class InMemoryMPCJobStore:
                     success=res.get("success"),
                     design_grade=res.get("design_grade"),
                     session_metadata=res.get("session_metadata"),
+                    avg_solve_time=res.get("avg_solve_time"),
                     created_at=row.created_at or _now(),
                     updated_at=row.updated_at or _now(),
                 )
@@ -259,7 +262,10 @@ class InMemoryMPCJobStore:
                 return None
             for key, value in fields.items():
                 if not hasattr(record, key):
-                    raise AttributeError(f"JobRecord has no field {key!r}")
+                    if record.session_metadata is None:
+                        record.session_metadata = {}
+                    record.session_metadata[key] = value
+                    continue
                 if key == "project_id" and value is not None:
                     value = str(value)
                 setattr(record, key, value)

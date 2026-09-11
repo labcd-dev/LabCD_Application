@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any, Literal, Optional
+import warnings
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_serializer
 
 JobStatus = Literal[
     "queued",
@@ -94,6 +95,15 @@ class AdaptiveJobProgressEvent(BaseModel):
     ts: float | None = None
     extra: dict[str, Any] = Field(default_factory=dict)
 
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    @model_serializer(mode="wrap")
+    def _ser_clean(self, handler: Any, info: Any) -> dict[str, Any]:
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=UserWarning, message=r".*Pydantic serializer warnings.*")
+            warnings.filterwarnings("ignore", category=UserWarning, message=r".*PydanticSerializationUnexpectedValue.*")
+            return handler(self)
+
 
 class AdaptiveJobStatusResponse(BaseModel):
     job_id: str
@@ -118,6 +128,15 @@ class AdaptiveJobStatusResponse(BaseModel):
         return str(v)
     options: AdaptiveJobOptions | None = None
 
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    @model_serializer(mode="wrap")
+    def _ser_clean(self, handler: Any, info: Any) -> dict[str, Any]:
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=UserWarning, message=r".*Pydantic serializer warnings.*")
+            warnings.filterwarnings("ignore", category=UserWarning, message=r".*PydanticSerializationUnexpectedValue.*")
+            return handler(self)
+
 
 class AdaptiveJobResultsResponse(BaseModel):
     job_id: str
@@ -141,6 +160,15 @@ class AdaptiveJobResultsResponse(BaseModel):
     session_metadata: dict[str, Any] | None = None
     control_law: str | None = None
     stability_proof: str | None = None
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    @model_serializer(mode="wrap")
+    def _ser_clean(self, handler: Any, info: Any) -> dict[str, Any]:
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=UserWarning, message=r".*Pydantic serializer warnings.*")
+            warnings.filterwarnings("ignore", category=UserWarning, message=r".*PydanticSerializationUnexpectedValue.*")
+            return handler(self)
 
 
 class AdaptiveDiagnosisChatRequest(BaseModel):

@@ -2,7 +2,20 @@
 
 from contextlib import asynccontextmanager
 import traceback
+import warnings
 from datetime import datetime
+
+# Filter out third-party/SDK Pydantic serializer warnings (e.g. OpenAI/LangChain generic ParsedChatCompletionMessage)
+warnings.filterwarnings(
+    "ignore",
+    category=UserWarning,
+    message=r".*Pydantic serializer warnings.*",
+)
+warnings.filterwarnings(
+    "ignore",
+    category=UserWarning,
+    message=r".*PydanticSerializationUnexpectedValue.*",
+)
 
 from fastapi import FastAPI, Request
 from fastapi.encoders import ENCODERS_BY_TYPE

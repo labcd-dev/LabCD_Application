@@ -15,11 +15,25 @@ via ``configure_llm()``.
 from __future__ import annotations
 
 import threading
+import warnings
 from typing import Any, Dict, Optional
 
 from langchain_core.callbacks import BaseCallbackHandler
 
 from ..utils.logging_utils import get_logger
+
+# Suppress Pydantic serializer warnings regarding 'parsed' in structured outputs
+# (e.g. when langchain-openai / openai SDK dumps ParsedChatCompletionMessage where ContentType defaults to None)
+warnings.filterwarnings(
+    "ignore",
+    category=UserWarning,
+    message=r".*Pydantic serializer warnings.*",
+)
+warnings.filterwarnings(
+    "ignore",
+    category=UserWarning,
+    message=r".*PydanticSerializationUnexpectedValue.*",
+)
 
 log = get_logger(__name__)
 
@@ -260,7 +274,18 @@ def invoke_with_retry(structured_llm, prompt_text: str, max_retries: int = 1, no
 
     for attempt in range(max_retries + 1):
         try:
-            return structured_llm.invoke(current_prompt, **invoke_kwargs)
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore",
+                    category=UserWarning,
+                    message=r".*Pydantic serializer warnings.*",
+                )
+                warnings.filterwarnings(
+                    "ignore",
+                    category=UserWarning,
+                    message=r".*PydanticSerializationUnexpectedValue.*",
+                )
+                return structured_llm.invoke(current_prompt, **invoke_kwargs)
         except Exception as e:  # noqa: BLE001
             last_error = e
             log.warning("[%s] call failed (attempt %d/%d): %s", node_name, attempt + 1, max_retries + 1, e)

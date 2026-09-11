@@ -8,13 +8,30 @@ or the MPC numeric stack. Job state lives in ``job_store``; core calls go to
 
 from __future__ import annotations
 
+import logging
+import math
 import os
 import tempfile
 import threading
 import time
+import warnings
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
+
+log = logging.getLogger(__name__)
+
+# Suppress Pydantic serializer warnings regarding 'parsed' in structured outputs
+warnings.filterwarnings(
+    "ignore",
+    category=UserWarning,
+    message=r".*Pydantic serializer warnings.*",
+)
+warnings.filterwarnings(
+    "ignore",
+    category=UserWarning,
+    message=r".*PydanticSerializationUnexpectedValue.*",
+)
 
 from backend_api.http.services.mpc_job_store import (
     InMemoryMPCJobStore as InMemoryJobStore,
@@ -398,13 +415,18 @@ def _json_safe(value: Any) -> Any:
         return value
     if isinstance(value, dict):
         return {str(k): _json_safe(v) for k, v in value.items()}
-    if isinstance(value, (list, tuple)):
+    if isinstance(value, (list, tuple, set)):
         return [_json_safe(v) for v in value]
-    # pydantic v2 / v1 models (e.g. param blobs in history)
+    # pydantic v2 / v1 models (e.g. param blobs in history, structured agent outputs)
     if hasattr(value, "model_dump") and callable(value.model_dump):
         try:
-            return _json_safe(value.model_dump())
-        except Exception:  # noqa: BLE001
+            return _json_safe(value.model_dump(warnings="none"))
+        except (TypeError, ValueError):
+            try:
+                return _json_safe(value.model_dump(warnings=False))
+            except Exception:
+                pass
+        except Exception:
             pass
     if hasattr(value, "dict") and callable(value.dict):
         try:
@@ -474,7 +496,7 @@ def _to_status_response(record: JobRecord) -> MPCJobStatusResponse:
     progress = []
     for ev in record.progress:
         extra = {
-            k: v
+            str(k): _json_safe(v)
             for k, v in ev.items()
             if k not in ("kind", "stage", "text", "round", "ts")
         }
@@ -509,6 +531,8 @@ def _to_status_response(record: JobRecord) -> MPCJobStatusResponse:
         best_mse=_finite_float(record.best_mse),
         mse_history=_metric_series(record.mse_history),
         params_history=_json_safe(list(record.params_history or [])),
+        session_metadata=_json_safe(record.session_metadata),
+        avg_solve_time=_finite_float(record.avg_solve_time),
     )
 
 
@@ -918,13 +942,13 @@ def _run_tuning_thread(job_id: str, store: InMemoryJobStore) -> None:
                     try:
                         st = float(current_state["avg_solve_time"])
                         if math.isfinite(st) and st > 0:
-                            live_updates["avg_solve_time"] = st
                             rec_cur = store.get(job_id)
                             live_meta = dict(rec_cur.session_metadata or {}) if rec_cur else {}
                             live_meta["avg_solve_time"] = st
                             live_meta["solve_time_ms"] = round(st * 1000.0, 2)
                             live_updates["session_metadata"] = live_meta
-                    except (TypeError, ValueError):
+                            live_updates["avg_solve_time"] = st
+                    except Exception:
                         pass
 
                 if curr_iter > 0:
@@ -1049,12 +1073,13 @@ def _run_tuning_thread(job_id: str, store: InMemoryJobStore) -> None:
         best_p = final_state.get("best_params") or final_state.get("current_params")
         series_data = None
         baseline_series_data = None
+        best_sim = None
 
         from backend_core.AgentMPC.agents.evaluator import run_closed_loop
         if best_p:
             try:
                 best_sim = run_closed_loop(dynamics, cfg, best_p)
-                if not best_sim.get("error"):
+                if isinstance(best_sim, dict) and not best_sim.get("error"):
                     series_data = _format_sim_series(best_sim, dynamics, cfg)
             except Exception:
                 pass
@@ -1066,14 +1091,14 @@ def _run_tuning_thread(job_id: str, store: InMemoryJobStore) -> None:
                 st = float(best_sim["avg_solve_time"])
                 if math.isfinite(st) and st > 0:
                     solve_time_val = st
-            except (TypeError, ValueError):
+            except Exception:
                 pass
         if solve_time_val is None and final_state.get("avg_solve_time") is not None:
             try:
                 st = float(final_state["avg_solve_time"])
                 if math.isfinite(st) and st > 0:
                     solve_time_val = st
-            except (TypeError, ValueError):
+            except Exception:
                 pass
 
         metrics["avg_solve_time"] = solve_time_val
@@ -1644,9 +1669,9 @@ def build_and_store_diagnostics(
         report_dict["error"] = str(error)[:2000]
 
     diagnostics_payload: dict[str, Any] = {
-        "report": report_dict,
-        "evidence": findings or {},
-        "findings": findings or {},
+        "report": _json_safe(report_dict),
+        "evidence": _json_safe(findings or {}),
+        "findings": _json_safe(findings or {}),
         "run_context": run_context,
     }
 
