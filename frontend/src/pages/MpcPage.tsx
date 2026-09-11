@@ -262,6 +262,12 @@ export function MpcPage() {
     }
   }, [setupTab, jobId, results, diagnostics, testingDynamics])
 
+  // Reset auto-probed state if the active plant model or project changes
+  useEffect(() => {
+    hasAutoTestedDynamicsRef.current = false
+    setDiagnostics(null)
+  }, [pipeline.fileContent, pipeline.fileName, pipeline.projectId])
+
   const handleStartJob = async () => {
     setError(null)
     setLoading(true)
@@ -276,6 +282,20 @@ export function MpcPage() {
       .split(',')
       .map((s) => parseFloat(s.trim()))
       .filter((n) => !isNaN(n))
+
+    const finalDrift = showCustomScenario
+      ? customDriftPct
+      : scenarioLevel === 2
+        ? 20
+        : scenarioLevel === 3
+          ? customDriftPct
+          : 0
+
+    const finalDistAmp = showCustomScenario
+      ? disturbanceAmp
+      : scenarioLevel === 3
+        ? 1.0
+        : 0
 
     const options: MPCJobOptions = {
       max_iterations: maxIterations,
@@ -296,8 +316,8 @@ export function MpcPage() {
       r_weights: parsedR.length ? parsedR : undefined,
       model: pipeline.model,
       system_name: pipeline.fileName?.replace('.py', '') || 'Inverted Pendulum Cart-Pole',
-      custom_drift_pct: customDriftPct,
-      disturbance_amplitude: (scenarioLevel === 3 || disturbanceAmp > 0) ? disturbanceAmp : 0,
+      custom_drift_pct: finalDrift,
+      disturbance_amplitude: finalDistAmp,
       disturbance_start: disturbanceStart / 100,
       disturbance_type: disturbanceType,
       target_state_indices: selectedStates,
@@ -749,7 +769,13 @@ export function MpcPage() {
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <button
                       type="button"
-                      onClick={() => setScenarioLevel(1)}
+                      onClick={() => {
+                        setScenarioLevel(1)
+                        if (!showCustomScenario) {
+                          setCustomDriftPct(0)
+                          setDisturbanceAmp(0)
+                        }
+                      }}
                       className={`rounded-xl border p-4 text-left transition-all ${
                         scenarioLevel === 1
                           ? 'border-purple-500 bg-purple-500/10 ring-1 ring-purple-500/30'
@@ -767,7 +793,13 @@ export function MpcPage() {
 
                     <button
                       type="button"
-                      onClick={() => setScenarioLevel(2)}
+                      onClick={() => {
+                        setScenarioLevel(2)
+                        if (!showCustomScenario) {
+                          setCustomDriftPct(20)
+                          setDisturbanceAmp(0)
+                        }
+                      }}
                       className={`rounded-xl border p-4 text-left transition-all ${
                         scenarioLevel === 2
                           ? 'border-purple-500 bg-purple-500/10 ring-1 ring-purple-500/30'
@@ -785,7 +817,12 @@ export function MpcPage() {
 
                     <button
                       type="button"
-                      onClick={() => setScenarioLevel(3)}
+                      onClick={() => {
+                        setScenarioLevel(3)
+                        if (!showCustomScenario) {
+                          setDisturbanceAmp(1.0)
+                        }
+                      }}
                       className={`rounded-xl border p-4 text-left transition-all ${
                         scenarioLevel === 3
                           ? 'border-purple-500 bg-purple-500/10 ring-1 ring-purple-500/30'

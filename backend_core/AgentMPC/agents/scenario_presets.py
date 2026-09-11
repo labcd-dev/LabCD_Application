@@ -218,22 +218,28 @@ def apply_scenario_level(
         # scenario by default.
         new_x0 = nudge_if_starts_at_target(dynamics, base_x0, target)
 
-    elif level == 2:  # Noise
-        base_noise = noise_std_value if noise_std_value is not None else _noise_scale(dynamics)
+    elif level == 2:  # Parameter Drift (UI Level 2)
+        base_noise = noise_std_value if noise_std_value is not None else 0.0
         mask = noise_state_mask if noise_state_mask is not None else np.ones(n_states, dtype=bool)
         cfg.data.noise_std = np.where(mask, base_noise, 0.0)
-        # Same degenerate case Level 1 already guards against.
         new_x0 = nudge_if_starts_at_target(dynamics, base_x0, target)
 
-    else:  # level == 3, Robust
+        perturbed_params = (
+            perturb_physical_parameters(
+                dynamics,
+                max_boost_fraction=(max_param_uncertainty if max_param_uncertainty is not None else 0.2),
+                rng=np.random.default_rng(cfg.random_seed),
+            )
+            if perturb_physical_params else {}
+        )
+
+    else:  # level == 3, Force Step & Disturbance (UI Level 3)
         base_noise = noise_std_value if noise_std_value is not None else _noise_scale(dynamics)
         noise_frac = robust_noise_fraction if robust_noise_fraction is not None else 0.5
         n_mask = noise_state_mask if noise_state_mask is not None else np.ones(n_states, dtype=bool)
         cfg.data.noise_std = np.where(n_mask, base_noise * noise_frac, 0.0)
 
-        # Same initial state as every other level (see the docstring: the
-        # harder starting point is gone; parametric mismatch below is what
-        # makes this level Robust).
+        # Same initial state as every other level
         new_x0 = nudge_if_starts_at_target(dynamics, base_x0, target)
 
         perturbed_params = (
@@ -246,4 +252,4 @@ def apply_scenario_level(
         )
 
     dynamics.config.default_initial_state = new_x0
-    return new_x0, target, perturbed_params if level == 3 else {}
+    return new_x0, target, perturbed_params if level in (2, 3) else {}

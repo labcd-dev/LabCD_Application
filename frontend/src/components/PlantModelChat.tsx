@@ -248,7 +248,9 @@ export function PlantModelChat({
       setSessionState(response.session_state)
       if (response.final_result) {
         setFinalResult(response.final_result)
-      } else if (response.status !== 'complete') {
+      } else if (response.status === 'complete' && draft) {
+        setFinalResult(draft)
+      } else if (response.status !== 'complete' && trimmed !== 'confirm' && trimmed !== 'finish') {
         // Allow revise: clear the locked plant panel until a new complete result arrives.
         setFinalResult(null)
       }
@@ -273,7 +275,8 @@ export function PlantModelChat({
 
   const handleConfirmDraft = async () => {
     if (!draft || loading) return
-    setFinalResult(draft)
+    const confirmedDraft = draft
+    setFinalResult(confirmedDraft)
     await sendMessage('confirm')
   }
 
