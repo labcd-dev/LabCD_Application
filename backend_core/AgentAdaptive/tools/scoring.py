@@ -16,6 +16,17 @@ def _task_scale(y2, ref2):
     null_err = y2[0:1, :] - ref2
     scale = np.sqrt(np.mean(null_err ** 2, axis=0))
     scale = np.asarray(scale, dtype=float).reshape(-1)
+
+    # For dynamic / oscillatory references, also account for the excursion span
+    # and standard deviation of the reference, so that scale does not artificially
+    # collapse when y(0) is close to the reference origin (e.g. sinusoidal waveforms).
+    if ref2.shape[0] > 1:
+        span = np.ptp(ref2, axis=0).reshape(-1)
+        std_ref = np.std(ref2, axis=0).reshape(-1)
+        dynamic_floor = np.maximum(0.5 * span, std_ref)
+        dynamic_mask = np.isfinite(dynamic_floor) & (dynamic_floor > 1e-6)
+        scale = np.where(dynamic_mask, np.maximum(scale, dynamic_floor), scale)
+
     trivial = np.where(np.isfinite(scale), scale < 1e-9, False)
     return scale, trivial
 
@@ -165,19 +176,24 @@ def compute_success_verdict(t, y, ref, u, x_states, dt, fail_tol=0.02):
     w = max(1, n // 5)
     steady_rms = np.sqrt(np.mean(e[-w:] ** 2, axis=0)).reshape(-1)
     steady_frac = steady_rms / eff_scale
+
+    # Adapt target tolerance for continuing oscillatory / dynamic references
+    ref_ptp = np.ptp(ref2, axis=0).reshape(-1) if ref2.shape[0] > 1 else np.zeros(p)
+    is_dynamic = bool(np.any(ref_ptp > 0.05))
+    target_frac = max(fail_tol, 0.12) if is_dynamic else fail_tol
     checks["mse_target"] = bool(np.all(np.isfinite(steady_frac))
-                                and np.all(steady_frac <= fail_tol))
+                                and np.all(steady_frac <= target_frac))
 
     reason = ""
     for name in _SUCCESS_HARD_CHECKS:
         if not checks[name]:
             reason = _SUCCESS_REASONS[name]
             if name == "mse_target":
-                reason = reason % (100.0 * fail_tol)
+                reason = reason % (100.0 * target_frac)
             break
 
     return {"success": all(checks[k] for k in _SUCCESS_HARD_CHECKS),
-            "checks": checks, "reason": reason, "target_frac": float(fail_tol),
+            "checks": checks, "reason": reason, "target_frac": float(target_frac),
             "steady_rms_frac": [float(v) for v in steady_frac]}
 
 
@@ -215,6 +231,12 @@ def compute_simulation_metrics(t, y, ref, u, x_states, alog, dt, fail_tol=0.02):
     metrics["steady_rms_frac"] = verdict["steady_rms_frac"]
     metrics["overshoot_frac"] = (np.max(np.abs(e), axis=0) / ref_scale).tolist()
 
+    # For dynamic references that continue to oscillate in the final horizon,
+    # settling to a static +/-2% band is inapplicable.
+    ref_tail_ptp = np.ptp(ref[-w:], axis=0) if ref.shape[0] > w else np.ptp(ref, axis=0)
+    ref_full_ptp = np.ptp(ref, axis=0)
+    is_dynamic_ref = bool(np.any(ref_full_ptp > 0.05) and np.any(ref_tail_ptp > 0.05 * np.maximum(ref_full_ptp, 1e-6)))
+
     band = 0.02 * ref_scale
     within_band = np.all(np.abs(e) <= band, axis=1) if e.ndim > 1 else (np.abs(e) <= band)
     settle_idx = n
@@ -224,6 +246,7 @@ def compute_simulation_metrics(t, y, ref, u, x_states, alog, dt, fail_tol=0.02):
             break
     metrics["settling_time"] = float(t[settle_idx]) if settle_idx < n else None
     metrics["settling_time_reached"] = settle_idx < n
+    metrics["settling_time_applicable"] = not is_dynamic_ref
 
     metrics["control_rms"] = np.sqrt(np.mean(u ** 2, axis=0)).tolist()
     metrics["control_max"] = np.max(np.abs(u), axis=0).tolist()

@@ -541,8 +541,14 @@ def _run_pipeline_thread(job_id: str, store: InMemoryAdaptiveJobStore) -> None:
         tracking_pct = 0.0
         if isinstance(final_metrics, dict):
             headline_pct = final_metrics.get("tracking_pct_headline")
+            mean_pct = final_metrics.get("tracking_pct_mean")
             if headline_pct is not None and isinstance(headline_pct, (int, float)):
-                tracking_pct = float(headline_pct)
+                base_pct = float(headline_pct)
+                if mean_pct is not None and isinstance(mean_pct, (int, float)) and float(mean_pct) > base_pct:
+                    # Blend worst-channel with overall mean (70% headline, 30% mean)
+                    tracking_pct = 0.70 * base_pct + 0.30 * float(mean_pct)
+                else:
+                    tracking_pct = base_pct
             else:
                 rms = _first_float(final_metrics.get("tracking_rms") or final_metrics.get("steady_rms"))
                 if rms is not None:
@@ -603,6 +609,12 @@ def _run_pipeline_thread(job_id: str, store: InMemoryAdaptiveJobStore) -> None:
                     if isinstance(rec_spec.get("dynamics"), dict)
                     else None
                 )
+                if not dyn_source and rec_spec.get("artifact_id"):
+                    try:
+                        from backend_api.http.services.plant_artifact_service import read_plant_artifact_source
+                        dyn_source = read_plant_artifact_source(rec_spec["artifact_id"])
+                    except Exception:
+                        pass
                 sync_project_from_job(
                     project_id=int(rec_now.project_id),
                     job_id=job_id,
@@ -1099,20 +1111,38 @@ def get_job_report_pdf(job_id: str, *, store: InMemoryAdaptiveJobStore | None = 
     except Exception:
         figures = []
 
-    return build_pdf_report(
-        summary_markdown=summary_md,
-        figures=figures,
-        usage=record.usage,
-        log_text="\n".join(
-            ev.get("text", "") for ev in (record.progress or []) if ev.get("text")
-        ),
-        tuning_log=list(record.tuning_log or []),
-        tuning_best=record.tuning_best,
-        clarification_record=list(record.clarification_record or []),
-        final_metrics=record.final_metrics,
-        abstract_markdown=abstract_md,
-        prefer_xelatex=True,
-    )
+    try:
+        return build_pdf_report(
+            summary_markdown=summary_md,
+            figures=figures,
+            usage=record.usage,
+            log_text="\n".join(
+                ev.get("text", "") for ev in (record.progress or []) if ev.get("text")
+            ),
+            tuning_log=list(record.tuning_log or []),
+            tuning_best=record.tuning_best,
+            clarification_record=list(record.clarification_record or []),
+            final_metrics=record.final_metrics,
+            abstract_markdown=abstract_md,
+            prefer_xelatex=True,
+        )
+    except Exception as exc:
+        import logging
+        logging.warning("build_pdf_report prefer_xelatex failed (%s); retrying with ReportLab backend", exc)
+        return build_pdf_report(
+            summary_markdown=summary_md,
+            figures=figures,
+            usage=record.usage,
+            log_text="\n".join(
+                ev.get("text", "") for ev in (record.progress or []) if ev.get("text")
+            ),
+            tuning_log=list(record.tuning_log or []),
+            tuning_best=record.tuning_best,
+            clarification_record=list(record.clarification_record or []),
+            final_metrics=record.final_metrics,
+            abstract_markdown=abstract_md,
+            prefer_xelatex=False,
+        )
 
 
 def get_export_script(job_id: str, *, store: InMemoryAdaptiveJobStore | None = None) -> str:

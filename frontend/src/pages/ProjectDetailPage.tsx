@@ -365,7 +365,17 @@ export function ProjectDetailPage() {
         <p className="mt-0 mb-3 text-sm text-muted-text">
           {project.file_name || 'Untitled'} ({project.file_type})
         </p>
-        <CodePreview value={project.file_content || '# No file content stored'} readOnly />
+        <CodePreview
+          value={
+            project.file_content ||
+            (project.results as any)?.system_spec?.dynamics?.source ||
+            (project.results as any)?.system_spec?.code ||
+            (project.results as any)?.dynamics_source ||
+            (project.results as any)?.file_content ||
+            '# No file content stored'
+          }
+          readOnly
+        />
       </div>
 
       {showResults && (

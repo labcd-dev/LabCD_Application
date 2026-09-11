@@ -50,11 +50,35 @@ def sanitize_latex_environments(text: str) -> str:
     return _ALIGN_ENV_RE.sub(_fix, text)
 
 
+def sanitize_latex_superscripts(text: str) -> str:
+    """Sanitize TeX formulas against double-superscript errors like `\\bar w_i'^2`.
+
+    In LaTeX, prime (') expands to `^\\prime`, so an unbracketed `w'^2` causes
+    TeX error `! Double superscript.`. Enclosing the base and prime in braces,
+    e.g. `{w'}^2` or `{\\bar w_i'}^2`, compiles cleanly.
+    """
+    if not text:
+        return text
+
+    # Fix prime(s) followed by superscript: e.g. \bar w_i'^2 -> {\bar w_i'}^2, w'^2 -> {w'}^2
+    text = re.sub(
+        r"((?:\\[a-zA-Z]+(?:\s*\{[^}]*\}|\s+)?|[a-zA-Z0-9_\\\}]+)+)('+)\^(\d+|\{[^}]+\}|[a-zA-Z])",
+        r"{\1\2}^{\3}",
+        text,
+    )
+    # Generic fallback for any other word/closing brace ending in prime before ^
+    text = re.sub(r"([a-zA-Z0-9_\\\}]+)('+)\^(\d+|\{[^}]+\}|[a-zA-Z])", r"{\1\2}^{\3}", text)
+    # Fix consecutive unbracketed superscripts: e.g. x^a^b -> x^{a^{b}}
+    text = re.sub(r"\^([a-zA-Z0-9])\^([a-zA-Z0-9])", r"^{\1^{\2}}", text)
+    return text
+
+
 def prepare_summary_markdown(text: str) -> str:
-    """Apply the same LaTeX delimiter + environment sanitization Streamlit uses."""
+    """Apply LaTeX delimiter + environment + superscript sanitization for robust PDF rendering."""
     if not text:
         return text or ""
-    return normalize_latex_delimiters(sanitize_latex_environments(text))
+    sanitized = sanitize_latex_superscripts(sanitize_latex_environments(text))
+    return normalize_latex_delimiters(sanitized)
 
 
 def _pct_cell(value) -> str:
@@ -303,66 +327,61 @@ def build_pdf_report(summary_markdown: str, figures,
                       tuning_best=None, clarification_record=None,
                       final_metrics=None, abstract_markdown=None,
                       prefer_xelatex: bool = True) -> bytes:
-    # Prefer XeLaTeX for real math typesetting (same path as Streamlit).
-    # When prefer_xelatex is True, do NOT silently fall back to ReportLab
-    # (literal $...$); raise a clear error so API/UI can surface it.
+    """Build engineering PDF report with XeLaTeX when available and automatic ReportLab fallback."""
     try:
         from labcd_pdfmaker import xelatex_available
         has_xelatex = bool(xelatex_available())
     except Exception:
         has_xelatex = False
-    if prefer_xelatex:
-        if not has_xelatex:
-            raise RuntimeError(
-                "XeLaTeX is required for Adaptive engineering reports (formulas, "
-                "tables, and plots) but was not found on PATH. Install a LaTeX "
-                "distribution that includes XeLaTeX (e.g. the 'texlive-xetex' "
-                "package on Debian/Ubuntu, or MiKTeX/TeX Live on Windows/macOS), "
-                "then retry the PDF download."
-            )
-        backend = Backend.XELATEX
-    else:
-        backend = Backend.AUTO
-    rb = ReportBuilder(
-        title="Agentic Nonlinear Control Designer: Report",
-        backend=backend,
-        date=datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
+
+    # Ensure robust math sanitization
+    clean_summary = prepare_summary_markdown(summary_markdown or "")
+    clean_abstract = (
+        prepare_summary_markdown(abstract_markdown.strip())
+        if (abstract_markdown and abstract_markdown.strip())
+        else None
     )
 
-    # Abstract goes ahead of the table of contents, same spot it'd take in
-    # any engineering report. Omitted entirely if none was produced.
-    if abstract_markdown and abstract_markdown.strip():
-        rb.add_abstract(abstract_markdown.strip())
+    def _assemble(target_backend: Backend) -> ReportBuilder:
+        b = ReportBuilder(
+            title="Agentic Nonlinear Control Designer: Report",
+            backend=target_backend,
+            date=datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
+        )
+        if clean_abstract:
+            b.add_abstract(clean_abstract)
+        b.add_table_of_contents()
+        _add_run_scores_section(b, final_metrics)
+        b.add_section("Design Summary", clean_summary)
+        _add_clarification_section(b, clarification_record)
+        if tuning_log:
+            b.add_page_break()
+        _add_tuning_section(b, tuning_log, tuning_best)
+        _add_usage_section(b, usage)
+        if figures:
+            b.add_page_break()
+            b.add_section("Plots")
+            for i, fig in enumerate(figures):
+                png_bytes, title = _normalize_figure(fig)
+                caption = ("Figure %d. %s" % (i + 1, title)) if title else ("Figure %d." % (i + 1))
+                b.add_figure(png_bytes, caption=caption)
+        if log_text:
+            b.add_page_break()
+            b.add_section("Appendix: Full Console Log")
+            b.add_verbatim(log_text, fontsize="scriptsize")
+        return b
 
-    rb.add_table_of_contents()
-
-    # Run verdict goes right after the contents, ahead of the design
-    # summary, since whether it worked at all is the reader's entry point.
-    _add_run_scores_section(rb, final_metrics)
-
-    rb.add_section("Design Summary", summary_markdown or "")
-
-    # Clarifications sit right after the summary, since they're what the
-    # summary was derived from.
-    _add_clarification_section(rb, clarification_record)
-
-    if tuning_log:
-        rb.add_page_break()
-    _add_tuning_section(rb, tuning_log, tuning_best)
-
-    _add_usage_section(rb, usage)
-
-    if figures:
-        rb.add_page_break()
-        rb.add_section("Plots")
-        for i, fig in enumerate(figures):
-            png_bytes, title = _normalize_figure(fig)
-            caption = ("Figure %d. %s" % (i + 1, title)) if title else ("Figure %d." % (i + 1))
-            rb.add_figure(png_bytes, caption=caption)
-
-    if log_text:
-        rb.add_page_break()
-        rb.add_section("Appendix: Full Console Log")
-        rb.add_verbatim(log_text, fontsize="scriptsize")
-
-    return rb.build()
+    if prefer_xelatex and has_xelatex:
+        rb = _assemble(Backend.XELATEX)
+        try:
+            return rb.build()
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).warning(
+                "XeLaTeX build failed (%s); automatically falling back to ReportLab backend", exc
+            )
+            rb_fallback = _assemble(Backend.REPORTLAB)
+            return rb_fallback.build()
+    else:
+        rb = _assemble(Backend.AUTO if not prefer_xelatex else Backend.REPORTLAB)
+        return rb.build()

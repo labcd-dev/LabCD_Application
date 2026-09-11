@@ -7,6 +7,7 @@ import {
   Download,
   FileText,
   Gauge,
+  Info,
   Search,
   ShieldCheck,
   Stethoscope,
@@ -686,10 +687,16 @@ title('LabCD Adaptive Closed-Loop Response'); legend('show', 'Location', 'best')
         </div>
 
         {/* KPI 3: Settling Time */}
-        <div className="relative overflow-hidden rounded-xl border border-border bg-surface-elevated p-2.5 shadow-sm">
+        <div
+          className="relative overflow-hidden rounded-xl border border-border bg-surface-elevated p-2.5 shadow-sm group cursor-help"
+          title="Settling time (Ts) evaluates when tracking error permanently enters and remains within a 2% envelope of the reference. For continuous periodic or dynamic waveforms, convergence is tracked against the dynamic envelope."
+        >
           <div className="absolute top-0 inset-x-0 h-1 bg-teal-500" />
           <div className="flex items-center justify-between text-xs text-muted-text font-semibold">
-            <span>Settling Time (Ts)</span>
+            <span className="flex items-center gap-1">
+              Settling Time (Ts)
+              <Info className="size-3 text-muted-text/70 group-hover:text-teal-500 transition-colors" />
+            </span>
             <Gauge className="size-3.5 text-teal-500" />
           </div>
           <div className="mt-1 flex items-baseline gap-1 font-mono text-xl font-bold text-foreground">
@@ -699,11 +706,13 @@ title('LabCD Adaptive Closed-Loop Response'); legend('show', 'Location', 'best')
           <p className="mt-0.5 text-[10.5px] text-teal-600 dark:text-teal-300 font-medium">
             {typeof settlingTime === 'number'
               ? (settlingReached ? '2% band settling time' : 'From tuning log')
-              : metrics.settling_time_reached === false
-                ? 'Did not settle in horizon'
-                : hasRealMetrics
+              : (metrics as any)?.settling_time_applicable === false
+                ? 'Dynamic tracking envelope'
+                : metrics.settling_time_reached === false
                   ? 'Did not settle in horizon'
-                  : 'No metric yet'}
+                  : hasRealMetrics
+                    ? 'Did not settle in horizon'
+                    : 'No metric yet'}
           </p>
         </div>
 

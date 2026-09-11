@@ -8,6 +8,7 @@ import {
   ChevronUp,
   Cpu,
   Crosshair,
+  Info,
   RotateCcw,
   ShieldAlert,
   Sliders,
@@ -259,6 +260,20 @@ export function AdaptiveTuningPriorities({
       {/* Expanded Content Area */}
       {isOpen && (
         <div className="border-t border-border p-4 space-y-4 bg-surface/40 animate-in fade-in-50 duration-150">
+          {/* Tuner Engine Transparency Callout (FR17) */}
+          <div className="rounded-lg border border-cyan-500/25 bg-cyan-500/5 p-3 text-xs text-muted-text space-y-1">
+            <div className="flex items-center gap-1.5 font-semibold text-cyan-600 dark:text-cyan-400">
+              <Info className="size-3.5" />
+              <span>How Priority Weights Guide the Tuner Engine</span>
+            </div>
+            <p className="text-[11.5px] leading-relaxed text-muted-text">
+              Assigned weights (1 to 5) configure the Tuner Agent’s badness objective function{' '}
+              <code className="px-1.5 py-0.5 rounded bg-surface border border-border font-mono text-foreground text-[10.5px]">
+                J = &sum; w_i &times; badness_i
+              </code>. High weights steer the optimizer to dynamically calibrate Lyapunov boundary layer width (&phi;), adaptation learning rate (&Gamma;), and sliding surface slope (&lambda;) to prioritize chosen tracking and actuator metrics.
+            </p>
+          </div>
+
           {/* Presets Bar */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">

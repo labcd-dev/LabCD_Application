@@ -239,7 +239,17 @@ export function AdminProjectDetailPage() {
             </a>
           ) : null}
         </div>
-        <CodePreview value={project.file_content || '# No file content'} readOnly />
+        <CodePreview
+          value={
+            project.file_content ||
+            (project.results as any)?.system_spec?.dynamics?.source ||
+            (project.results as any)?.system_spec?.code ||
+            (project.results as any)?.dynamics_source ||
+            (project.results as any)?.file_content ||
+            '# No file content'
+          }
+          readOnly
+        />
       </div>
 
       <div className={cardPanel}>

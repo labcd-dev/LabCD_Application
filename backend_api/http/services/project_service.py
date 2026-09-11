@@ -105,9 +105,12 @@ def update_project_results_grade(
 
 def project_to_detail(project: Project, *, include_owner: bool = False) -> dict[str, Any]:
     data = project_to_summary(project, include_owner=include_owner)
+    fc = project.file_content or ""
+    if not fc.strip():
+        fc = _try_recover_file_content(project)
     data.update(
         {
-            "file_content": project.file_content or "",
+            "file_content": fc,
             "control_objective": project.control_objective,
             "results": project.results,
         }
@@ -184,8 +187,55 @@ def create_project(
 
 
 def _try_recover_file_content(project: Project) -> str:
-    """Attempt to recover dynamics source code from disk, artifacts, or job stores."""
-    # 1. From file_url if set
+    """Attempt to recover dynamics source code from disk, artifacts, results, or job stores."""
+    import re
+
+    # 1. Directly from project.results (persisted spec, dynamics, or artifact)
+    if isinstance(project.results, dict):
+        res = project.results
+        # Check direct fields
+        for field in ("file_content", "dynamics_source", "dynamics_code", "source_code", "python_code"):
+            val = res.get(field)
+            if isinstance(val, str) and val.strip():
+                return val.strip()
+
+        # Check plant dict
+        plant = res.get("plant")
+        if isinstance(plant, dict):
+            pcode = plant.get("python_code") or plant.get("source")
+            if isinstance(pcode, str) and pcode.strip():
+                return pcode.strip()
+
+        # Check system_spec
+        spec = res.get("system_spec")
+        if isinstance(spec, dict):
+            dyn = spec.get("dynamics")
+            if isinstance(dyn, dict) and dyn.get("source"):
+                return str(dyn["source"]).strip()
+            if isinstance(dyn, str) and dyn.strip():
+                return dyn.strip()
+            for k in ("code", "source", "python_code", "dynamics_code"):
+                s_val = spec.get(k)
+                if isinstance(s_val, str) and s_val.strip():
+                    return s_val.strip()
+            art_id = spec.get("artifact_id")
+            if art_id:
+                try:
+                    from backend_api.http.services.plant_artifact_service import get_artifact_store
+                    store = get_artifact_store()
+                    clean_id = str(art_id).removesuffix(".py").strip()
+                    art = store.load(clean_id)
+                    if isinstance(art, dict):
+                        p_code = art.get("plant", {}).get("python_code") or art.get("python_code")
+                        if p_code and str(p_code).strip():
+                            return str(p_code).strip()
+                    p_path = store.load_plugin_path(clean_id)
+                    if Path(p_path).is_file():
+                        return Path(p_path).read_text(encoding="utf-8")
+                except Exception:
+                    pass
+
+    # 2. From file_url if set
     if project.file_url:
         try:
             rel = project.file_url.removeprefix("/api/dynamics/files/")
@@ -195,7 +245,7 @@ def _try_recover_file_content(project: Project) -> str:
         except Exception:
             pass
 
-    # 2. From job_id via MPC or Adaptive in-memory stores
+    # 3. From job_id via MPC or Adaptive in-memory stores
     if project.job_id:
         try:
             from backend_api.http.services.mpc_job_store import get_mpc_store
@@ -205,7 +255,16 @@ def _try_recover_file_content(project: Project) -> str:
                 if plugin_id:
                     stem = plugin_id.removesuffix(".py")
                     from backend_api.http.services.plant_artifact_service import get_artifact_store
-                    art_path = get_artifact_store().load_plugin_path(stem)
+                    store = get_artifact_store()
+                    try:
+                        art = store.load(stem)
+                        if isinstance(art, dict):
+                            p_code = art.get("plant", {}).get("python_code") or art.get("python_code")
+                            if p_code and str(p_code).strip():
+                                return str(p_code).strip()
+                    except Exception:
+                        pass
+                    art_path = store.load_plugin_path(stem)
                     if Path(art_path).is_file():
                         return Path(art_path).read_text(encoding="utf-8")
         except Exception:
@@ -217,35 +276,61 @@ def _try_recover_file_content(project: Project) -> str:
             if rec and isinstance(rec.system_spec, dict):
                 dyn = rec.system_spec.get("dynamics")
                 if isinstance(dyn, dict) and dyn.get("source"):
-                    return str(dyn["source"])
+                    return str(dyn["source"]).strip()
                 art_id = rec.system_spec.get("artifact_id")
                 if art_id:
                     from backend_api.http.services.plant_artifact_service import get_artifact_store
-                    art = get_artifact_store().load(str(art_id).removesuffix(".py"))
-                    if art and art.get("python_code"):
-                        return str(art["python_code"])
+                    store = get_artifact_store()
+                    clean_id = str(art_id).removesuffix(".py")
+                    try:
+                        art = store.load(clean_id)
+                        if isinstance(art, dict):
+                            p_code = art.get("plant", {}).get("python_code") or art.get("python_code")
+                            if p_code and str(p_code).strip():
+                                return str(p_code).strip()
+                    except Exception:
+                        pass
+                    p_path = store.load_plugin_path(clean_id)
+                    if Path(p_path).is_file():
+                        return Path(p_path).read_text(encoding="utf-8")
         except Exception:
             pass
 
-    # 3. From artifacts matching file_name / title
+    # 4. From artifacts matching file_name / title (with slug/punctuation normalization)
     if project.file_name or project.title:
         candidate_stem = (project.file_name or "").removesuffix(".py").strip()
         if not candidate_stem and project.title:
             candidate_stem = project.title.replace("MPC:", "").replace("Adaptive:", "").strip()
         if candidate_stem:
-            try:
-                from backend_api.http.services.plant_artifact_service import get_artifact_store
-                store = get_artifact_store()
-                for art_summary in store.list_artifacts():
-                    aid = art_summary.artifact_id if hasattr(art_summary, "artifact_id") else art_summary.get("artifact_id", "")
-                    if aid and (candidate_stem.lower() in aid.lower() or aid.lower() in candidate_stem.lower()):
-                        p_path = store.load_plugin_path(aid)
-                        if Path(p_path).is_file():
-                            return Path(p_path).read_text(encoding="utf-8")
-            except Exception:
-                pass
+            norm_cand = re.sub(r"[\W_]+", "", candidate_stem).lower()
+            if norm_cand:
+                try:
+                    from backend_api.http.services.plant_artifact_service import get_artifact_store
+                    store = get_artifact_store()
+                    for art_summary in store.list_artifacts():
+                        aid = art_summary.artifact_id if hasattr(art_summary, "artifact_id") else art_summary.get("artifact_id", "")
+                        if aid:
+                            norm_aid = re.sub(r"[\W_]+", "", aid).lower()
+                            sys_name = art_summary.system_name if hasattr(art_summary, "system_name") else art_summary.get("system_name", "")
+                            norm_sys = re.sub(r"[\W_]+", "", sys_name).lower() if sys_name else ""
+                            if (norm_cand in norm_aid or norm_aid in norm_cand) or (norm_sys and (norm_cand in norm_sys or norm_sys in norm_cand)):
+                                try:
+                                    art = store.load(aid)
+                                    p_code = art.get("plant", {}).get("python_code") or art.get("python_code")
+                                    if p_code and str(p_code).strip():
+                                        return str(p_code).strip()
+                                except Exception:
+                                    pass
+                                try:
+                                    p_path = store.load_plugin_path(aid)
+                                    if Path(p_path).is_file():
+                                        return Path(p_path).read_text(encoding="utf-8")
+                                except Exception:
+                                    pass
+                except Exception:
+                    pass
 
-    # 4. From case studies directory
+    # 5. From case studies directory
     if project.file_name:
         case_py = Path(__file__).resolve().parents[3] / "case_studies" / "py" / project.file_name
         if case_py.is_file():
