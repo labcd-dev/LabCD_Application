@@ -236,6 +236,8 @@ def _ref_from_expr(expr_text):
     # y_d(t) can be anything sympy can parse and differentiate -- not just a
     # sin/cos/step menu. Anything this can't make sense of raises instead of
     # quietly falling back to a zero reference.
+    # Prefer parse_expr with implicit_multiplication so residual forms like
+    # "10sin(0.5t)" still parse when Clarifier-normalized refs are unavailable.
     text = (expr_text or "").strip()
     if not text:
         raise ValueError("no reference expression was given")
@@ -245,10 +247,20 @@ def _ref_from_expr(expr_text):
             "reference %r uses unrecognized name(s) %s -- only 't' and %s "
             "are allowed" % (text, ", ".join(unknown), ", ".join(sorted(ALLOWED_FUNCS))))
     try:
-        return sp.expand(sp.sympify(text, locals=_REF_LOCALS))
-    except (sp.SympifyError, TypeError, ValueError, AttributeError) as e:
-        raise ValueError("reference %r could not be parsed as a math expression: %s"
-                          % (text, e))
+        from sympy.parsing.sympy_parser import (
+            parse_expr,
+            standard_transformations,
+            implicit_multiplication_application,
+        )
+        transformations = standard_transformations + (implicit_multiplication_application,)
+        parsed = parse_expr(text, local_dict=_REF_LOCALS, transformations=transformations)
+        return sp.expand(parsed)
+    except Exception:
+        try:
+            return sp.expand(sp.sympify(text, locals=_REF_LOCALS))
+        except (sp.SympifyError, TypeError, ValueError, AttributeError) as e:
+            raise ValueError("reference %r could not be parsed as a math expression: %s"
+                              % (text, e))
 
 
 def _build_structure_from_spec(spec):

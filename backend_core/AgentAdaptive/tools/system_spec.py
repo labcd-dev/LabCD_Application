@@ -572,7 +572,11 @@ def fold_simulation_into_dynamics(spec, options=None):
     if x0 is not None:
         dyn["x0"] = _float_list(x0)
 
-    refs = _pick("references", opts, sim, dyn)
+    # Prefer dynamics/sim references over raw options.references.
+    # After clarify, dyn holds Clarifier-normalized + validated exprs; letting
+    # opts win reintroduced English / implicit-multiplication strings and
+    # caused EXTRACTION FAILED in the Designer (FR18).
+    refs = _pick("references", dyn, sim, opts)
     if refs is not None:
         dyn["references"] = refs
 
