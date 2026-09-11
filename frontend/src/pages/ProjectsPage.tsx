@@ -35,7 +35,7 @@ import { pipelineBadgeClass, pipelineLabel, statusBadgeClass } from '../lib/proj
 import { canRetryProject, retryProject } from '../lib/retryProject'
 import { formatDateTime, parseApiDate } from '../lib/formatDateTime'
 
-type CaseStatusFilter = 'all' | 'tuned' | 'untuned'
+type CaseStatusFilter = 'all' | 'controlled' | 'uncontrolled'
 type ProjPipelineFilter = 'all' | ProjectPipelineType
 
 interface ModuleFilterOption {
@@ -129,6 +129,13 @@ function relativeUpdatedAt(value: string): string {
 
 function displayName(row: PlantModelConversationSummary): string {
   return row.system_name?.trim() || row.title || 'Untitled system'
+}
+
+function normalizeName(str: string): string {
+  return str
+    .toLowerCase()
+    .replace(/\.py$/i, '')
+    .replace(/[^a-z0-9]/g, '')
 }
 
 export function ProjectsPage({
@@ -329,17 +336,43 @@ export function ProjectsPage({
     }
   }
 
+  // Set of case study IDs that have at least one completed/successful control project run
+  const controlledCaseIds = useMemo(() => {
+    const set = new Set<number>()
+    if (!projects.length || !caseRows.length) return set
+
+    for (const row of caseRows) {
+      const normCase = normalizeName(displayName(row))
+      if (!normCase) continue
+
+      const hasCompletedProject = projects.some((p) => {
+        const normTitle = normalizeName(p.title || '')
+        const normFile = normalizeName(p.file_name || '')
+        const matches =
+          (normTitle && (normTitle.includes(normCase) || normCase.includes(normTitle))) ||
+          (normFile && (normFile.includes(normCase) || normCase.includes(normFile)))
+        return matches && (p.has_results || p.status === 'completed')
+      })
+
+      if (hasCompletedProject) {
+        set.add(row.id)
+      }
+    }
+    return set
+  }, [caseRows, projects])
+
   // Filtered case studies
   const filteredCases = useMemo(() => {
     const q = caseQuery.trim().toLowerCase()
     return caseRows.filter((row) => {
-      if (caseFilter === 'tuned' && row.status !== 'complete') return false
-      if (caseFilter === 'untuned' && row.status !== 'active') return false
+      const isControlled = controlledCaseIds.has(row.id)
+      if (caseFilter === 'controlled' && !isControlled) return false
+      if (caseFilter === 'uncontrolled' && isControlled) return false
       if (!q) return true
       const name = displayName(row).toLowerCase()
       return name.includes(q) || row.title.toLowerCase().includes(q)
     })
-  }, [caseRows, caseQuery, caseFilter])
+  }, [caseRows, caseQuery, caseFilter, controlledCaseIds])
 
   // Dynamic counts per module for project filters
   const moduleCounts = useMemo(() => {
@@ -496,8 +529,8 @@ export function ProjectsPage({
             {(
               [
                 ['all', 'All Systems'],
-                ['tuned', 'Tuned'],
-                ['untuned', 'In Progress'],
+                ['controlled', 'Controlled'],
+                ['uncontrolled', 'Not Controlled'],
               ] as const
             ).map(([val, lbl]) => (
               <button
@@ -545,6 +578,7 @@ export function ProjectsPage({
               const name = displayName(row)
               const isComplete = row.status === 'complete'
               const canLaunch = isComplete || Boolean(row.system_name?.trim())
+              const isControlled = controlledCaseIds.has(row.id)
               const highlight = newId === row.id && !bannerDismissed
               return (
                 <article
@@ -574,9 +608,9 @@ export function ProjectsPage({
                           />
                           {isComplete ? 'model verified' : 'in progress'}
                         </span>
-                        {isComplete && (
+                        {isControlled && (
                           <span className="inline-flex items-center gap-1 rounded-md border border-[color-mix(in_srgb,var(--app-status-success-text)_28%,transparent)] bg-[color-mix(in_srgb,var(--app-status-success-text)_10%,transparent)] px-2 py-0.5 text-[10.5px] font-semibold text-[var(--app-status-success-text)] shadow-[0_0_10px_rgba(34,211,167,0.12)]">
-                            <Check className="size-2.5" strokeWidth={3} /> tuned
+                            <Check className="size-2.5" strokeWidth={3} /> Controlled
                           </span>
                         )}
                       </div>
@@ -651,7 +685,11 @@ export function ProjectsPage({
                       {relativeUpdatedAt(row.updated_at)}
                     </span>
                     <span className={canLaunch ? 'text-primary font-medium' : 'text-slate-400'}>
-                      {canLaunch ? 'Ready to tune' : 'Not tuned yet'}
+                      {isControlled
+                        ? 'Controlled'
+                        : canLaunch
+                          ? 'Ready to control'
+                          : 'Model in progress'}
                     </span>
                   </div>
 
@@ -668,12 +706,14 @@ export function ProjectsPage({
                       disabled={!canLaunch}
                       title={
                         canLaunch
-                          ? 'Choose a controller engine and launch'
+                          ? isControlled
+                            ? 'Re-run or re-configure controller for this system'
+                            : 'Choose a controller engine and launch'
                           : 'Finish the plant model in chat first'
                       }
                       onClick={() => setLaunchTarget(row)}
                     >
-                      {isComplete ? 'Re-tune' : 'Configure & launch'}
+                      {isControlled ? 'Re-control' : 'Control'}
                     </button>
                   </div>
                 </article>
