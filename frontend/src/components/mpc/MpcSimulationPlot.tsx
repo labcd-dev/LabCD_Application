@@ -551,7 +551,7 @@ export function MpcSimulationPlot({
             y={PAD_TOP}
             width={plotW}
             height={plotH}
-            fill="rgba(15, 23, 42, 0.25)"
+            fill="var(--app-surface)"
             stroke="var(--app-border)"
             strokeWidth="1"
             rx="4"
