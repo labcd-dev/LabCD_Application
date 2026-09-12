@@ -853,7 +853,7 @@ title('LabCD Adaptive Closed-Loop Response'); legend('show', 'Location', 'best')
             className={`${btnBase} ${btnCompact} flex items-center gap-1.5 text-xs text-foreground border border-border hover:bg-surface-hover`}
             title="Download executable Python adaptive controller (.py)"
           >
-            <Download className="size-3.5 text-cyan-500" /> Download .py
+            <Download className="size-3.5 text-cyan-500" /> PY
           </button>
 
           <button
@@ -863,7 +863,7 @@ title('LabCD Adaptive Closed-Loop Response'); legend('show', 'Location', 'best')
             className={`${btnBase} ${btnCompact} flex items-center gap-1.5 text-xs text-muted-text hover:text-foreground border border-border hover:bg-surface-hover disabled:opacity-40`}
             title="Download time series data as CSV (.csv)"
           >
-            <Download className="size-3.5 text-teal-500" /> Export CSV
+            <Download className="size-3.5 text-teal-500" /> CSV
           </button>
 
           {onDownloadReport && (
@@ -873,7 +873,7 @@ title('LabCD Adaptive Closed-Loop Response'); legend('show', 'Location', 'best')
               className={`${btnBase} ${btnCompact} flex items-center gap-1.5 text-xs text-muted-text hover:text-foreground border border-border hover:bg-surface-hover`}
               title="Download authenticated engineering PDF report (.pdf)"
             >
-              <FileText className="size-3.5" /> PDF Report
+              <FileText className="size-3.5" /> PDF
             </button>
           )}
         </div>
