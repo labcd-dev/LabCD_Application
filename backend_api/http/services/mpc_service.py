@@ -1078,11 +1078,30 @@ def _run_tuning_thread(job_id: str, store: InMemoryJobStore) -> None:
         from backend_core.AgentMPC.agents.evaluator import run_closed_loop
         if best_p:
             try:
+                # Ensure dt_mpc on cfg is safely bounded and matches best_p or default_dt
+                sim_time = float(cfg.data.simulation_time)
+                np_val = int(best_p.get("Np") or 20)
+                max_feasible_dt = min(0.2, (sim_time * 0.8) / max(np_val, 1))
+                cand_dt = float(best_p.get("dt") or default_dt or cfg.data.dt_mpc or 0.02)
+                cfg.data.dt_mpc = min(cand_dt, max_feasible_dt)
+                if cfg.data.dt_mpc <= 1e-5:
+                    cfg.data.dt_mpc = 0.002 if "boost" in str(getattr(dynamics, "name", "")).lower() else 0.02
+                best_p["dt"] = cfg.data.dt_mpc
+
                 best_sim = run_closed_loop(dynamics, cfg, best_p)
                 if isinstance(best_sim, dict) and not best_sim.get("error"):
                     series_data = _format_sim_series(best_sim, dynamics, cfg)
             except Exception:
                 pass
+
+        # CRITICAL SAFEGUARD: Never overwrite previously saved live series with None!
+        rec_cur = store.get(job_id)
+        if series_data is None and rec_cur and rec_cur.series:
+            series_data = rec_cur.series
+        if baseline_series_data is None and rec_cur and rec_cur.baseline_series:
+            baseline_series_data = rec_cur.baseline_series
+        if series_data is None and baseline_series_data is not None:
+            series_data = baseline_series_data
 
         # Collect avg_solve_time from best_sim or final_state
         solve_time_val = None
@@ -1237,6 +1256,10 @@ def _run_tuning_thread(job_id: str, store: InMemoryJobStore) -> None:
         }
 
         # Only pass JobRecord fields that exist (older stores may lack series attrs)
+        rec_cur = store.get(job_id)
+        final_series = series_data if series_data is not None else (rec_cur.series if rec_cur else None)
+        final_baseline = baseline_series_data if baseline_series_data is not None else (rec_cur.baseline_series if rec_cur else None)
+
         fields = {
             "status": "completed",
             "stage": "done",
@@ -1251,8 +1274,8 @@ def _run_tuning_thread(job_id: str, store: InMemoryJobStore) -> None:
             "params_history": params_h,
             "history": history,
             "metrics": _json_safe(metrics),
-            "series": series_data,
-            "baseline_series": baseline_series_data,
+            "series": final_series,
+            "baseline_series": final_baseline,
             "export_script": export_script_code,
             "usage": usage_data,
             "score": score_val,
@@ -1847,10 +1870,60 @@ def submit_job(
     )
 
 
+def _ensure_record_series(record: JobRecord, *, store: Any) -> None:
+    """If a completed job has no simulation series, recover it on-the-fly using best_params."""
+    if getattr(record, "status", None) != "completed" or record.series is not None:
+        return
+    if not record.best_params or not record.dynamics_ref:
+        return
+    try:
+        from backend_core.AgentMPC.dynamics.loader import DynamicLoader
+        from backend_core.AgentMPC.mpc.config import Config
+        from backend_core.AgentMPC.agents.evaluator import run_closed_loop
+
+        dyn_ref = record.dynamics_ref or {}
+        plugin_path = _resolve_plugin_path(MPCDynamicsInput(**dyn_ref) if dyn_ref else None)
+        plugin = DynamicLoader.load_from_path(plugin_path)
+        dynamics = plugin.create_dynamics()
+
+        opts = record.options or {}
+        cfg = Config()
+        sim_time = float(opts.get("simulation_time") or 3.0)
+        cfg.data.simulation_time = sim_time
+
+        best_p = dict(record.best_params)
+        np_val = int(best_p.get("Np") or 20)
+        raw_dt = float(best_p.get("dt") or opts.get("dt_mpc") or 0.02)
+        max_feasible_dt = min(0.2, (sim_time * 0.8) / max(np_val, 1))
+        safe_dt = min(raw_dt, max_feasible_dt)
+        if safe_dt <= 1e-5:
+            safe_dt = 0.002 if "boost" in str(getattr(dynamics, "name", "")).lower() else 0.02
+        cfg.data.dt_mpc = safe_dt
+        best_p["dt"] = safe_dt
+
+        cfg.data.trajectory_mode = _normalize_trajectory_mode(opts.get("trajectory_mode") or "reg")
+        cfg.data.trajectory_amplitude = float(opts.get("trajectory_amplitude") or 1.0)
+        cfg.data.trajectory_frequency = float(opts.get("trajectory_frequency") or 1.0)
+        cfg.data.trajectory_pulse_start = float(opts.get("trajectory_pulse_start") or 0.2)
+        cfg.data.trajectory_pulse_end = float(opts.get("trajectory_pulse_end") or 0.6)
+        cfg.data.noise_std = float(opts.get("noise_std") or 0.0)
+
+        sim_res = run_closed_loop(dynamics, cfg, best_p)
+        if isinstance(sim_res, dict) and not sim_res.get("error"):
+            s_data = _format_sim_series(sim_res, dynamics, cfg)
+            if s_data:
+                record.series = s_data
+                store.update(record.job_id, series=s_data)
+    except Exception as exc:
+        log.warning("[MPC] Failed to recover series for job %s: %s", record.job_id, exc)
+
+
 def get_job(job_id: str, *, store: InMemoryJobStore | None = None) -> MPCJobStatusResponse:
-    record = _store(store).get(job_id)
+    s = _store(store)
+    record = s.get(job_id)
     if record is None:
         raise KeyError(job_id)
+    _ensure_record_series(record, store=s)
     return _to_status_response(record)
 
 
@@ -1941,10 +2014,12 @@ def cancel_job(job_id: str, *, store: InMemoryJobStore | None = None) -> MPCJobS
 
 
 def get_results(job_id: str, *, store: InMemoryJobStore | None = None) -> MPCJobResultsResponse:
-    record = _store(store).get(job_id)
+    s = _store(store)
+    record = s.get(job_id)
     if record is None:
         raise KeyError(job_id)
     try:
+        _ensure_record_series(record, store=s)
         return _to_results(record)
     except Exception as exc:  # noqa: BLE001
         return MPCJobResultsResponse(

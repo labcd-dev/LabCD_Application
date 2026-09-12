@@ -119,6 +119,12 @@ export function MpcPage() {
     return coords.map((pt, i) => `${i === 0 ? 'M' : 'L'} ${pt.x.toFixed(1)} ${pt.y.toFixed(1)}`).join(' ')
   }, [trajectoryMode, trajectoryAmplitude, trajectoryFrequency, trajectoryPulseStart, trajectoryPulseEnd])
 
+  const hasSeriesData = (s: unknown): boolean => {
+    if (!s || typeof s !== 'object') return false
+    const t = (s as { t?: unknown }).t
+    return Array.isArray(t) && t.length > 0
+  }
+
   useEffect(() => {
     if (!jobId) return
 
@@ -126,8 +132,29 @@ export function MpcPage() {
 
     const fetchFinalResults = async () => {
       try {
-        const res = await mpcApi.getResults(jobId)
-        if (isSubscribed) setResults(res)
+        const [res, currentJob] = await Promise.all([
+          mpcApi.getResults(jobId),
+          mpcApi.getJob(jobId).catch(() => null),
+        ])
+        if (!isSubscribed) return
+        if (res) setResults(res)
+        if (currentJob) {
+          setJob((prev) => {
+            const finalSeries = hasSeriesData(res?.series)
+              ? res?.series
+              : hasSeriesData(currentJob.series)
+                ? currentJob.series
+                : prev?.series || null
+            return {
+              ...prev,
+              ...currentJob,
+              series: finalSeries,
+              baseline_series: res?.baseline_series || currentJob.baseline_series || prev?.baseline_series || null,
+            }
+          })
+        } else if (res?.series) {
+          setJob((prev) => (prev ? { ...prev, series: res.series, baseline_series: res.baseline_series || prev.baseline_series } : prev))
+        }
       } catch (err) {
         console.error('Failed to get final mpc results:', err)
       }
@@ -137,7 +164,17 @@ export function MpcPage() {
       try {
         const currentJob = await mpcApi.getJob(jobId)
         if (!isSubscribed) return
-        setJob(currentJob)
+        setJob((prev) => {
+          const preservedSeries = hasSeriesData(currentJob.series)
+            ? currentJob.series
+            : prev?.series || null
+          return {
+            ...prev,
+            ...currentJob,
+            series: preservedSeries,
+            baseline_series: currentJob.baseline_series || prev?.baseline_series || null,
+          }
+        })
 
         if (currentJob.status === 'completed') {
           void fetchFinalResults()
@@ -161,7 +198,19 @@ export function MpcPage() {
         if (event === 'progress') {
           setJob((prev) => (prev ? { ...prev, progress: [...(prev.progress || []), data] } : prev))
         } else if (event === 'status') {
-          setJob((prev) => (prev ? { ...prev, ...data } : prev))
+          setJob((prev) => {
+            if (!prev) return data
+            const incomingSeries = hasSeriesData(data.series)
+              ? data.series
+              : prev.series
+            const incomingBaseline = data.baseline_series || prev.baseline_series
+            return {
+              ...prev,
+              ...data,
+              series: incomingSeries,
+              baseline_series: incomingBaseline,
+            }
+          })
           if (data.status === 'completed') {
             void fetchFinalResults()
           }

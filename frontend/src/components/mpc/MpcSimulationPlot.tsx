@@ -35,6 +35,7 @@ interface MpcSimulationPlotProps {
   baselineSeries?: SimSeriesData | null
   currentIteration: number
   bestMse?: number | null
+  isCompleted?: boolean
 }
 
 const PALETTE = [
@@ -88,6 +89,7 @@ export function MpcSimulationPlot({
   series,
   baselineSeries,
   currentIteration,
+  isCompleted = false,
 }: MpcSimulationPlotProps) {
   const [activeTab, setActiveTab] = useState<'all_states' | 'single_state' | 'controls' | 'errors'>('all_states')
   const [selectedStateIdx, setSelectedStateIdx] = useState<number>(0)
@@ -291,16 +293,28 @@ export function MpcSimulationPlot({
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
           <div>
             <div className="flex items-center gap-2">
-              <span className={`flex size-2 rounded-full ${currentIteration > 0 ? 'bg-cyan-500 shadow-[0_0_8px_#06b6d4] animate-pulse' : 'bg-muted shadow-none'}`} />
+              <span className={`flex size-2 rounded-full ${
+                !isCompleted && currentIteration > 0
+                  ? 'bg-cyan-500 shadow-[0_0_8px_#06b6d4] animate-pulse'
+                  : isCompleted
+                    ? 'bg-emerald-500/80'
+                    : 'bg-muted shadow-none'
+              }`} />
               <h3 className="text-sm font-bold text-foreground tracking-wide">
                 Time-Domain Closed-Loop Oscilloscope
               </h3>
               <span className={`rounded-md border px-2 py-0.5 text-[10.5px] font-mono ${
-                currentIteration > 0
+                !isCompleted && currentIteration > 0
                   ? 'border-cyan-500/30 bg-cyan-500/10 text-cyan-600 dark:text-cyan-300'
-                  : 'border-border bg-surface-muted text-muted-text'
+                  : isCompleted
+                    ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                    : 'border-border bg-surface-muted text-muted-text'
               }`}>
-                {currentIteration > 0 ? `Simulating Iteration ${currentIteration}...` : 'Live Telemetry Standby'}
+                {isCompleted
+                  ? 'Optimization Concluded'
+                  : currentIteration > 0
+                    ? `Simulating Iteration ${currentIteration}...`
+                    : 'Live Telemetry Standby'}
               </span>
             </div>
             <p className="mt-1 text-xs text-muted-text">
@@ -315,23 +329,29 @@ export function MpcSimulationPlot({
           
           <div className="relative z-10 flex flex-col items-center max-w-md">
             <div className={`flex size-12 items-center justify-center rounded-2xl border shadow-lg mb-3.5 transition-all ${
-              currentIteration > 0
+              !isCompleted && currentIteration > 0
                 ? 'bg-purple-500/15 text-purple-400 border-purple-500/30 shadow-purple-500/10 animate-pulse'
                 : 'bg-surface-muted text-muted-text border-border'
             }`}>
-              <Activity className={`size-6 ${currentIteration > 0 ? 'animate-spin' : ''}`} />
+              <Activity className={`size-6 ${!isCompleted && currentIteration > 0 ? 'animate-spin' : ''}`} />
             </div>
 
             <h4 className="text-sm font-bold text-foreground mb-1">
-              {currentIteration > 0 ? 'Simulating Dynamic Response...' : 'Awaiting Live MPC Simulation'}
+              {isCompleted
+                ? 'Waveform Telemetry Standby'
+                : currentIteration > 0
+                  ? 'Simulating Dynamic Response...'
+                  : 'Awaiting Live MPC Simulation'}
             </h4>
             <p className="text-xs text-muted-text leading-relaxed mb-3">
-              {currentIteration > 0
-                ? `The Evaluator agent is running the closed-loop simulation on the plant dynamics for iteration ${currentIteration}. Real state waveforms will stream here directly upon step resolution.`
-                : 'Launch autonomous tuning or test dynamics to populate real-time time-domain trajectories.'}
+              {isCompleted
+                ? 'Tuning optimization has completed. Click "Test Dynamics" or re-run autonomous tuning to generate and inspect real-time waveforms.'
+                : currentIteration > 0
+                  ? `The Evaluator agent is running the closed-loop simulation on the plant dynamics for iteration ${currentIteration}. Real state waveforms will stream here directly upon step resolution.`
+                  : 'Launch autonomous tuning or test dynamics to populate real-time time-domain trajectories.'}
             </p>
 
-            {currentIteration > 0 && (
+            {!isCompleted && currentIteration > 0 && (
               <div className="flex items-center gap-2 px-3 py-1 rounded-full border border-purple-500/30 bg-purple-500/10 text-[11px] font-mono text-purple-400">
                 <span className="size-1.5 rounded-full bg-purple-400 animate-ping" />
                 Live solver telemetry active
