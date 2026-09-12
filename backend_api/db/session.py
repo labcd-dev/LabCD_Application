@@ -268,7 +268,7 @@ def _migrate_analytics_module_width() -> None:
 
 
 def _migrate_feedback_survey_pipeline() -> None:
-    """Ensure pipeline_type exists and drop per-user/pipeline uniqueness (unlimited submits)."""
+    """Ensure pipeline_type and WS04 tracing columns exist and drop uniqueness constraints."""
     from sqlalchemy import inspect
 
     inspector = inspect(engine)
@@ -284,6 +284,33 @@ def _migrate_feedback_survey_pipeline() -> None:
                     "ADD COLUMN pipeline_type VARCHAR(40) NOT NULL DEFAULT 'siloDesign'"
                 )
             )
+        if "job_id" not in columns:
+            conn.execute(text("ALTER TABLE feedback_survey_responses ADD COLUMN job_id VARCHAR(64)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_feedback_survey_job_id ON feedback_survey_responses (job_id)"))
+        if "project_id" not in columns:
+            conn.execute(text("ALTER TABLE feedback_survey_responses ADD COLUMN project_id INTEGER"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_feedback_survey_project_id ON feedback_survey_responses (project_id)"))
+        if "plant_name" not in columns:
+            conn.execute(text("ALTER TABLE feedback_survey_responses ADD COLUMN plant_name VARCHAR(200)"))
+        if "score" not in columns:
+            conn.execute(text("ALTER TABLE feedback_survey_responses ADD COLUMN score FLOAT"))
+        if "success" not in columns:
+            conn.execute(text("ALTER TABLE feedback_survey_responses ADD COLUMN success BOOLEAN"))
+        if "technical_usefulness" not in columns:
+            conn.execute(text("ALTER TABLE feedback_survey_responses ADD COLUMN technical_usefulness INTEGER"))
+        if "technical_usefulness_na" not in columns:
+            conn.execute(text("ALTER TABLE feedback_survey_responses ADD COLUMN technical_usefulness_na BOOLEAN NOT NULL DEFAULT FALSE"))
+        if "trust" not in columns:
+            conn.execute(text("ALTER TABLE feedback_survey_responses ADD COLUMN trust INTEGER"))
+        if "trust_na" not in columns:
+            conn.execute(text("ALTER TABLE feedback_survey_responses ADD COLUMN trust_na BOOLEAN NOT NULL DEFAULT FALSE"))
+        if "nps" not in columns:
+            conn.execute(text("ALTER TABLE feedback_survey_responses ADD COLUMN nps INTEGER"))
+        if "is_bug" not in columns:
+            conn.execute(text("ALTER TABLE feedback_survey_responses ADD COLUMN is_bug BOOLEAN NOT NULL DEFAULT FALSE"))
+        if "extra_data" not in columns:
+            conn.execute(text("ALTER TABLE feedback_survey_responses ADD COLUMN extra_data JSONB"))
+
         conn.execute(
             text(
                 "ALTER TABLE feedback_survey_responses "

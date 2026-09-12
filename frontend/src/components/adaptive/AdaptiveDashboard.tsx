@@ -623,6 +623,8 @@ title('LabCD Adaptive Closed-Loop Response'); legend('show', 'Location', 'best')
               comment={results?.design_grade?.comment}
               sessionMetadata={results?.session_metadata}
               hideCostTokens={true}
+              plantName={(job as any)?.plant_name || (job as any)?.plant_id || (results as any)?.plant_name || 'Adaptive Plant'}
+              pipelineType="adaptiveDesign"
             />
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-text">

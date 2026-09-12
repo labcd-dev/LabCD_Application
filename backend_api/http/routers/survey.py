@@ -10,6 +10,8 @@ from backend_api.db.session import get_db
 from backend_api.http.dependencies import get_current_user, require_action
 from backend_api.http.schemas.auth import UserOut
 from backend_api.http.schemas.survey import (
+    BeforeTestSurveyRequest,
+    BeforeTestSurveyResponseOut,
     FeedbackSurveyRequest,
     FeedbackSurveyResponseOut,
     ProfileSurveyRequest,
@@ -23,6 +25,7 @@ from backend_api.http.schemas.survey import (
 )
 from backend_api.http.services import audit_service, survey_service
 from backend_api.http.services.admin_csv_service import (
+    export_before_test_survey_csv,
     export_feedback_survey_csv,
     export_profile_survey_csv,
 )
@@ -76,16 +79,56 @@ def submit_feedback_survey(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return FeedbackSurveyResponseOut(
+        id=row.id,
         user_id=user.id,
         email=user.email,
         pipeline_type=row.pipeline_type,  # type: ignore[arg-type]
+        job_id=row.job_id,
+        project_id=row.project_id,
+        plant_name=row.plant_name,
+        score=row.score,
+        success=row.success,
+        technical_usefulness=row.technical_usefulness,
+        technical_usefulness_na=row.technical_usefulness_na,
+        trust=row.trust,
+        trust_na=row.trust_na,
         satisfaction=row.satisfaction,
         ease_of_use=row.ease_of_use,
         product_value=row.product_value,
         confidence=row.confidence,
         reuse_intention=row.reuse_intention,
         willingness_to_pay=row.willingness_to_pay,
+        nps=row.nps,
         main_problems=row.main_problems,
+        is_bug=row.is_bug,
+        created_at=row.created_at,
+    )
+
+
+@router.post("/survey/before-test", response_model=BeforeTestSurveyResponseOut)
+def submit_before_test_survey(
+    request: BeforeTestSurveyRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> BeforeTestSurveyResponseOut:
+    try:
+        row = survey_service.submit_before_test(db, user, request)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return BeforeTestSurveyResponseOut(
+        id=row.id,
+        user_id=user.id,
+        email=user.email,
+        q1_last_worked=row.q1_last_worked,
+        q2_time_spent=row.q2_time_spent,
+        q3_knowledge_gaps=row.q3_knowledge_gaps,
+        q4_difficult_parts=row.q4_difficult_parts or [],
+        q5_biggest_problem=row.q5_biggest_problem or "",
+        q6_help_sources=row.q6_help_sources or [],
+        q7_considered_paying=row.q7_considered_paying,
+        q8a_amount_hired=row.q8a_amount_hired,
+        q8b_amount_paid_to_user=row.q8b_amount_paid_to_user,
+        q9_impact=row.q9_impact or [],
         created_at=row.created_at,
     )
 
@@ -144,6 +187,7 @@ def list_survey_responses(
 ) -> SurveyResponsesOut:
     profile_users = survey_service.list_profile_responses(db)
     feedback_rows = survey_service.list_feedback_responses(db)
+    before_test_rows = survey_service.list_before_test_responses(db)
     return SurveyResponsesOut(
         profile=[
             ProfileSurveyResponseOut(
@@ -160,19 +204,50 @@ def list_survey_responses(
         ],
         feedback=[
             FeedbackSurveyResponseOut(
+                id=row.id,
                 user_id=u.id,
                 email=u.email,
                 pipeline_type=row.pipeline_type,  # type: ignore[arg-type]
+                job_id=row.job_id,
+                project_id=row.project_id,
+                plant_name=row.plant_name,
+                score=row.score,
+                success=row.success,
+                technical_usefulness=row.technical_usefulness,
+                technical_usefulness_na=row.technical_usefulness_na,
+                trust=row.trust,
+                trust_na=row.trust_na,
                 satisfaction=row.satisfaction,
                 ease_of_use=row.ease_of_use,
                 product_value=row.product_value,
                 confidence=row.confidence,
                 reuse_intention=row.reuse_intention,
                 willingness_to_pay=row.willingness_to_pay,
+                nps=row.nps,
                 main_problems=row.main_problems,
+                is_bug=row.is_bug,
                 created_at=row.created_at,
             )
             for row, u in feedback_rows
+        ],
+        before_test=[
+            BeforeTestSurveyResponseOut(
+                id=row.id,
+                user_id=u.id,
+                email=u.email,
+                q1_last_worked=row.q1_last_worked,
+                q2_time_spent=row.q2_time_spent,
+                q3_knowledge_gaps=row.q3_knowledge_gaps,
+                q4_difficult_parts=row.q4_difficult_parts or [],
+                q5_biggest_problem=row.q5_biggest_problem or "",
+                q6_help_sources=row.q6_help_sources or [],
+                q7_considered_paying=row.q7_considered_paying,
+                q8a_amount_hired=row.q8a_amount_hired,
+                q8b_amount_paid_to_user=row.q8b_amount_paid_to_user,
+                q9_impact=row.q9_impact or [],
+                created_at=row.created_at,
+            )
+            for row, u in before_test_rows
         ],
     )
 
@@ -183,6 +258,14 @@ def export_profile_survey_csv_endpoint(
     db: Session = Depends(get_db),
 ) -> StreamingResponse:
     return csv_response(export_profile_survey_csv(db), "profile_survey_responses.csv")
+
+
+@router.get("/admin/survey/responses/before-test/export.csv")
+def export_before_test_survey_csv_endpoint(
+    _: User = Depends(require_action("admin:survey")),
+    db: Session = Depends(get_db),
+) -> StreamingResponse:
+    return csv_response(export_before_test_survey_csv(db), "before_test_survey_responses.csv")
 
 
 @router.get("/admin/survey/responses/feedback/export.csv")

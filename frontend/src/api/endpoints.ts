@@ -12,6 +12,8 @@ import type {
   ErrorEvent,
   ErrorTrackingSettings,
   AuditLogEntry,
+  BeforeTestSurveyPayload,
+  BeforeTestSurveyResponseRow,
   FeedbackSurveyRequest,
   FeedbackSurveyResponseRow,
   JobResponse,
@@ -24,6 +26,7 @@ import type {
   TelegramAnalyticsTestResult,
   MuloDesignerStateResponse,
   MuloSimulateResponse,
+  OutroSurveyPayload,
   PlanInfo,
   PlantModelChatMessage,
   PlantModelChatResponse,
@@ -485,6 +488,7 @@ export const adminApi = {
   downloadMonitoringCsv: () => downloadAdminCsv('/admin/monitoring/export.csv'),
   downloadOverviewCsv: () => downloadAdminCsv('/admin/overview/export.xlsx'),
   downloadProfileSurveyCsv: () => downloadAdminCsv('/admin/survey/responses/profile/export.csv'),
+  downloadBeforeTestSurveyCsv: () => downloadAdminCsv('/admin/survey/responses/before-test/export.csv'),
   downloadFeedbackSurveyCsv: () => downloadAdminCsv('/admin/survey/responses/feedback/export.csv'),
   getSurveySettings: () => apiFetch<SurveySettings>('/admin/survey/settings'),
   updateSurveySettings: (body: Partial<SurveySettings>) =>
@@ -581,8 +585,13 @@ export const surveyApi = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
-  submitFeedback: (body: FeedbackSurveyRequest) =>
+  submitFeedback: (body: OutroSurveyPayload | FeedbackSurveyRequest) =>
     apiFetch<FeedbackSurveyResponseRow>('/survey/feedback', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  submitBeforeTest: (body: BeforeTestSurveyPayload) =>
+    apiFetch<BeforeTestSurveyResponseRow>('/survey/before-test', {
       method: 'POST',
       body: JSON.stringify(body),
     }),

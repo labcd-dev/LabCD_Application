@@ -559,6 +559,8 @@ print(f"MPC Controller initialized: Np={Np}, Nc={Nc}, dt={dt}")
               comment={results?.design_grade?.comment}
               sessionMetadata={results?.session_metadata}
               hideCostTokens={true}
+              plantName={(job as any)?.plant_name || (job as any)?.plant_id || (results as any)?.plant_name || 'MPC System'}
+              pipelineType="mpcDesign"
             />
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-text">

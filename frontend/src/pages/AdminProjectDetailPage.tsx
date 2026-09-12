@@ -126,7 +126,8 @@ export function AdminProjectDetailPage() {
                 success={project.success}
                 rating={userRating}
                 comment={userComment}
-                sessionMetadata={project.session_metadata}
+                pipelineType={project.pipeline_type as any}
+                plantName={project.title || project.file_name}
                 readOnly={true}
                 compact
               />

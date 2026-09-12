@@ -5,7 +5,12 @@ import { surveyApi } from '../api/endpoints'
 import { useAuth } from '../context/AuthContext'
 import { FeedbackSurveyModal } from './FeedbackSurveyModal'
 
-const ALL_PIPELINES: FeedbackPipelineType[] = ['siloDesign', 'muloDesign']
+const ALL_PIPELINES: FeedbackPipelineType[] = [
+  'siloDesign',
+  'muloDesign',
+  'mpcDesign',
+  'adaptiveDesign',
+]
 
 interface FeedbackSurveyFabProps {
   className?: string

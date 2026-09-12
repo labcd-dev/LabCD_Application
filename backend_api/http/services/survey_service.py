@@ -6,8 +6,9 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
-from backend_api.db.models import FeedbackSurveyResponse, TutorialVideo, User
+from backend_api.db.models import BeforeTestSurveyResponse, FeedbackSurveyResponse, TutorialVideo, User
 from backend_api.http.schemas.survey import (
+    BeforeTestSurveyRequest,
     FeedbackPipelineType,
     FeedbackSurveyRequest,
     ProfileSurveyRequest,
@@ -94,19 +95,130 @@ def submit_profile(db: Session, user: User, request: ProfileSurveyRequest) -> Us
 
 def submit_feedback(db: Session, user: User, request: FeedbackSurveyRequest) -> FeedbackSurveyResponse:
     now = datetime.now(timezone.utc)
-    row = FeedbackSurveyResponse(
+    sat = request.satisfaction if request.satisfaction is not None else (request.technical_usefulness or 5)
+    conf = request.confidence if request.confidence is not None else (request.trust or 4)
+
+    # Check if a row already exists for this job_id or was recently created by submit_grade
+    row = None
+    if request.job_id:
+        row = (
+            db.query(FeedbackSurveyResponse)
+            .filter(
+                FeedbackSurveyResponse.user_id == user.id,
+                FeedbackSurveyResponse.job_id == request.job_id,
+            )
+            .order_by(FeedbackSurveyResponse.created_at.desc())
+            .first()
+        )
+    if not row:
+        from datetime import timedelta
+        recent_cutoff = now - timedelta(seconds=120)
+        row = (
+            db.query(FeedbackSurveyResponse)
+            .filter(
+                FeedbackSurveyResponse.user_id == user.id,
+                FeedbackSurveyResponse.pipeline_type == request.pipeline_type,
+                FeedbackSurveyResponse.created_at >= recent_cutoff,
+                FeedbackSurveyResponse.job_id.is_(None),
+            )
+            .order_by(FeedbackSurveyResponse.created_at.desc())
+            .first()
+        )
+
+    if row:
+        row.pipeline_type = request.pipeline_type
+        row.job_id = request.job_id or row.job_id
+        row.project_id = request.project_id or row.project_id
+        row.plant_name = request.plant_name or row.plant_name
+        row.score = request.score if request.score is not None else row.score
+        row.success = request.success if request.success is not None else row.success
+        row.technical_usefulness = request.technical_usefulness
+        row.technical_usefulness_na = request.technical_usefulness_na
+        row.trust = request.trust
+        row.trust_na = request.trust_na
+        row.satisfaction = sat
+        row.ease_of_use = request.ease_of_use
+        row.product_value = request.product_value
+        row.confidence = conf
+        row.reuse_intention = request.reuse_intention
+        row.willingness_to_pay = request.willingness_to_pay
+        row.nps = request.nps
+        row.main_problems = (request.main_problems or row.main_problems or "").strip()
+        row.is_bug = request.is_bug
+    else:
+        row = FeedbackSurveyResponse(
+            user_id=user.id,
+            pipeline_type=request.pipeline_type,
+            job_id=request.job_id,
+            project_id=request.project_id,
+            plant_name=request.plant_name,
+            score=request.score,
+            success=request.success,
+            technical_usefulness=request.technical_usefulness,
+            technical_usefulness_na=request.technical_usefulness_na,
+            trust=request.trust,
+            trust_na=request.trust_na,
+            satisfaction=sat,
+            ease_of_use=request.ease_of_use,
+            product_value=request.product_value,
+            confidence=conf,
+            reuse_intention=request.reuse_intention,
+            willingness_to_pay=request.willingness_to_pay,
+            nps=request.nps,
+            main_problems=(request.main_problems or "").strip(),
+            is_bug=request.is_bug,
+            created_at=now,
+        )
+        db.add(row)
+
+    user.feedback_survey_completed_at = now
+    db.add(user)
+    db.commit()
+    db.refresh(row)
+    db.refresh(user)
+
+    # Sync design grade to project if project_id or job_id matches
+    target_project_id = request.project_id
+    if not target_project_id and request.job_id:
+        from backend_api.db.models import Project
+        proj = db.query(Project).filter(Project.job_id == request.job_id).first()
+        if proj:
+            target_project_id = proj.id
+
+    if target_project_id:
+        try:
+            from backend_api.http.services.project_service import update_project_results_grade
+            rating_val = request.technical_usefulness or request.trust or sat
+            grade_payload = {
+                "rating": rating_val,
+                "comment": (request.main_problems or "").strip() or None,
+                "nps": request.nps,
+                "created_at": now.isoformat(),
+            }
+            update_project_results_grade(target_project_id, grade_payload, db=db)
+        except Exception as e:
+            pass
+
+    return row
+
+
+def submit_before_test(db: Session, user: User, request: BeforeTestSurveyRequest) -> BeforeTestSurveyResponse:
+    now = datetime.now(timezone.utc)
+    row = BeforeTestSurveyResponse(
         user_id=user.id,
-        pipeline_type=request.pipeline_type,
-        satisfaction=request.satisfaction,
-        ease_of_use=request.ease_of_use,
-        product_value=request.product_value,
-        confidence=request.confidence,
-        reuse_intention=request.reuse_intention,
-        willingness_to_pay=request.willingness_to_pay,
-        main_problems=(request.main_problems or "").strip(),
+        q1_last_worked=request.q1_last_worked.strip(),
+        q2_time_spent=request.q2_time_spent.strip(),
+        q3_knowledge_gaps=request.q3_knowledge_gaps,
+        q4_difficult_parts=request.q4_difficult_parts,
+        q5_biggest_problem=(request.q5_biggest_problem or "").strip(),
+        q6_help_sources=request.q6_help_sources,
+        q7_considered_paying=request.q7_considered_paying.strip(),
+        q8a_amount_hired=request.q8a_amount_hired.strip() if request.q8a_amount_hired else None,
+        q8b_amount_paid_to_user=request.q8b_amount_paid_to_user.strip() if request.q8b_amount_paid_to_user else None,
+        q9_impact=request.q9_impact,
         created_at=now,
     )
-    user.feedback_survey_completed_at = now
+    user.profile_survey_completed_at = now
     db.add(row)
     db.add(user)
     db.commit()
@@ -131,6 +243,16 @@ def list_profile_responses(db: Session) -> list[User]:
         .order_by(User.profile_survey_completed_at.desc())
         .all()
     )
+
+
+def list_before_test_responses(db: Session) -> list[tuple[BeforeTestSurveyResponse, User]]:
+    rows = (
+        db.query(BeforeTestSurveyResponse, User)
+        .join(User, User.id == BeforeTestSurveyResponse.user_id)
+        .order_by(BeforeTestSurveyResponse.created_at.desc())
+        .all()
+    )
+    return list(rows)
 
 
 def list_feedback_responses(db: Session) -> list[tuple[FeedbackSurveyResponse, User]]:

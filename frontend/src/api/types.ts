@@ -369,22 +369,85 @@ export interface ProfileSurveyResponseRow {
 }
 
 export interface FeedbackSurveyResponseRow {
+  id?: number
   user_id: number
   email: string
   pipeline_type: FeedbackPipelineType
-  satisfaction: number
+  job_id?: string | null
+  project_id?: number | null
+  plant_name?: string | null
+  score?: number | null
+  success?: boolean | null
+  technical_usefulness?: number | null
+  technical_usefulness_na?: boolean
+  trust?: number | null
+  trust_na?: boolean
+  satisfaction?: number
   ease_of_use: number
-  product_value: number
-  confidence: number
+  product_value?: number
+  confidence?: number
   reuse_intention: number
-  willingness_to_pay: number
+  willingness_to_pay?: number
+  nps?: number | null
   main_problems: string
+  is_bug?: boolean
+  created_at: string
+}
+
+export interface BeforeTestSurveyResponseRow {
+  id: number
+  user_id: number
+  email: string
+  q1_last_worked: string
+  q2_time_spent: string
+  q3_knowledge_gaps: number
+  q4_difficult_parts: string[]
+  q5_biggest_problem: string
+  q6_help_sources: string[]
+  q7_considered_paying: string
+  q8a_amount_hired?: string | null
+  q8b_amount_paid_to_user?: string | null
+  q9_impact: string[]
   created_at: string
 }
 
 export interface SurveyResponses {
   profile: ProfileSurveyResponseRow[]
   feedback: FeedbackSurveyResponseRow[]
+  before_test?: BeforeTestSurveyResponseRow[]
+}
+
+export interface OutroSurveyPayload {
+  pipeline_type: FeedbackPipelineType
+  job_id?: string | null
+  project_id?: number | null
+  plant_name?: string | null
+  score?: number | null
+  success?: boolean | null
+  technical_usefulness?: number | null
+  technical_usefulness_na?: boolean
+  trust?: number | null
+  trust_na?: boolean
+  ease_of_use: number
+  reuse_intention: number
+  nps?: number | null
+  main_problems?: string
+  is_bug?: boolean
+  satisfaction?: number
+  confidence?: number
+}
+
+export interface BeforeTestSurveyPayload {
+  q1_last_worked: string
+  q2_time_spent: string
+  q3_knowledge_gaps: number
+  q4_difficult_parts: string[]
+  q5_biggest_problem: string
+  q6_help_sources: string[]
+  q7_considered_paying: string
+  q8a_amount_hired?: string | null
+  q8b_amount_paid_to_user?: string | null
+  q9_impact: string[]
 }
 
 export interface ActionInfo {
