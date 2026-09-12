@@ -41,6 +41,9 @@ def _recommender_worker(job_id: str, step: str, graph_input: Optional[Dict[str, 
         if summary.get("success"):
             job.event_queue.put({"type": "done", "step": step, "summary": make_serializable(summary)})
             job.touch(JobStatus.COMPLETED)
+            from backend_api.http.services import credit_service
+
+            credit_service.end_job_usage(job_id=job_id)
         else:
             error = summary.get("error") or summary.get("flag") or "Recommender failed"
             job.error = error
@@ -48,10 +51,16 @@ def _recommender_worker(job_id: str, step: str, graph_input: Optional[Dict[str, 
                 {"type": "error", "content": error, "summary": make_serializable(summary)},
             )
             job.touch(JobStatus.FAILED)
+            from backend_api.http.services import credit_service
+
+            credit_service.end_job_usage(job_id=job_id)
     except Exception as exc:
         job.error = str(exc)
         job.event_queue.put({"type": "error", "content": str(exc)})
         job.touch(JobStatus.FAILED)
+        from backend_api.http.services import credit_service
+
+        credit_service.end_job_usage(job_id=job_id)
 
 
 def _start_worker(job: Any, step: str, graph_input: Optional[Dict[str, Any]]) -> None:
@@ -72,6 +81,10 @@ def start_recommender_job(
     user_id: int | None = None,
     user_prompt: str = "",
 ) -> str:
+    from backend_api.http.services.analytics_service import record_llm_use, record_module_use
+    from backend_api.http.services import credit_service
+
+    credit_service.require_job_credits(user_id)
     job = job_store.create(
         "recommender",
         metadata={
@@ -86,10 +99,10 @@ def start_recommender_job(
         },
         user_id=user_id,
     )
-    from backend_api.http.services.analytics_service import record_llm_use, record_module_use
 
     record_module_use(user_id, "recommender")
     record_llm_use(user_id, model)
+    credit_service.begin_job_usage(user_id, "recommender", job_id=job.id, check_balance=False)
     job.metadata["graph_config"] = {"configurable": {"thread_id": job.id}}
 
     graph_input = (

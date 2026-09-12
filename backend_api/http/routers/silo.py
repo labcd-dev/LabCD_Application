@@ -9,6 +9,7 @@ from backend_api.db.session import get_db
 from backend_api.http.dependencies import assert_job_access, assert_model_allowed, require_action
 from backend_api.http.schemas.common import JobResponse
 from backend_api.http.schemas.silo import SiloSimulateRequest, SiloStartRequest
+from backend_api.http.services.credit_service import InsufficientCreditsError
 from backend_api.http.services import project_service
 from backend_api.http.services.events import sse_response
 from backend_api.http.services.job_store import job_store
@@ -36,12 +37,15 @@ def start_silo(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    job_id = start_silo_job(
-        request.config,
-        request.control_objective or "",
-        user_id=user.id,
-        project_id=request.project_id,
-    )
+    try:
+        job_id = start_silo_job(
+            request.config,
+            request.control_objective or "",
+            user_id=user.id,
+            project_id=request.project_id,
+        )
+    except InsufficientCreditsError as exc:
+        raise HTTPException(status_code=402, detail=str(exc)) from exc
     job = job_store.get(job_id)
     return JobResponse(job_id=job_id, module=job.module, status=job.status.value)
 

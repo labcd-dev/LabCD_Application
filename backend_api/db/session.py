@@ -151,6 +151,7 @@ def _migrate_schema() -> None:
     _migrate_feedback_survey_pipeline()
     _migrate_password_hash_nullable()
     _migrate_analytics_module_width()
+    _migrate_user_credits()
 
 
 def _migrate_password_hash_nullable() -> None:
@@ -408,3 +409,58 @@ def _migrate_legacy_user_actions(db: Session) -> None:
 
     with engine.begin() as conn:
         conn.execute(text("DROP TABLE IF EXISTS user_actions"))
+
+
+def _migrate_user_credits() -> None:
+    """Add referral columns on users; credit tables are created via metadata.create_all."""
+    from sqlalchemy import inspect
+
+    inspector = inspect(engine)
+    if "users" not in inspector.get_table_names():
+        return
+
+    columns = {col["name"] for col in inspector.get_columns("users")}
+    statements: list[str] = []
+    if "referral_code" not in columns:
+        statements.append("ALTER TABLE users ADD COLUMN referral_code VARCHAR(32)")
+    if "referred_by_user_id" not in columns:
+        statements.append("ALTER TABLE users ADD COLUMN referred_by_user_id INTEGER")
+    if "new_user_bonus_granted_at" not in columns:
+        statements.append(
+            "ALTER TABLE users ADD COLUMN new_user_bonus_granted_at TIMESTAMP WITH TIME ZONE"
+        )
+
+    if statements:
+        with engine.begin() as conn:
+            for statement in statements:
+                conn.execute(text(statement))
+
+    # Refresh columns after alters.
+    columns = {col["name"] for col in inspect(engine).get_columns("users")}
+    if "referral_code" in columns:
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_referral_code "
+                    "ON users (referral_code)"
+                )
+            )
+    if "referred_by_user_id" in columns:
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "ALTER TABLE users DROP CONSTRAINT IF EXISTS users_referred_by_user_id_fkey"
+                )
+            )
+            conn.execute(
+                text(
+                    "ALTER TABLE users ADD CONSTRAINT users_referred_by_user_id_fkey "
+                    "FOREIGN KEY (referred_by_user_id) REFERENCES users(id) ON DELETE SET NULL"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_users_referred_by_user_id "
+                    "ON users (referred_by_user_id)"
+                )
+            )

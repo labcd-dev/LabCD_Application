@@ -2,12 +2,12 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Shield, Trash2, UserX } from 'lucide-react'
 import { adminApi } from '../api/endpoints'
-import type { AdminUserDetail } from '../api/types'
+import type { AdminUserCredits, AdminUserDetail } from '../api/types'
 import { AdminPagination } from '../components/admin/AdminPagination'
 import { StatusMessage } from '../components/StatusMessage'
 import { useAuth } from '../context/AuthContext'
 import { useClientPagination } from '../hooks/useClientPagination'
-import { btnBase, btnCompact, cardPanel } from '../lib/classes'
+import { btnBase, btnCompact, btnPrimary, cardPanel, fieldInput, fieldLabel } from '../lib/classes'
 import { pipelineLabel, statusBadgeClass } from '../lib/projectLabels'
 import { formatDateTime } from '../lib/formatDateTime'
 
@@ -39,18 +39,29 @@ export function AdminUserDetailPage() {
   const { userId } = useParams()
   const id = Number(userId)
   const navigate = useNavigate()
-  const { user: currentUser } = useAuth()
+  const { user: currentUser, hasAction } = useAuth()
   const [detail, setDetail] = useState<AdminUserDetail | null>(null)
+  const [credits, setCredits] = useState<AdminUserCredits | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
+  const [adjustAmount, setAdjustAmount] = useState('10')
+  const [adjustNote, setAdjustNote] = useState('')
+  const canCredits = hasAction('admin:credits')
 
   const loadDetail = async (opts?: { quiet?: boolean }) => {
     if (!opts?.quiet) setLoading(true)
     setError(null)
     try {
       setDetail(await adminApi.getUser(id))
+      if (canCredits) {
+        try {
+          setCredits(await adminApi.getUserCredits(id))
+        } catch {
+          setCredits(null)
+        }
+      }
     } catch (err) {
       setDetail(null)
       setError(err instanceof Error ? err.message : 'Failed to load user')
@@ -66,7 +77,7 @@ export function AdminUserDetailPage() {
       return
     }
     void loadDetail()
-  }, [id])
+  }, [id, canCredits])
 
   const projects = detail?.projects ?? []
   const errors = detail?.errors ?? []
@@ -127,6 +138,32 @@ export function AdminUserDetailPage() {
       await loadDetail({ quiet: true })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to revoke session')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleAdjustCredits = async () => {
+    if (!detail || !canCredits) return
+    const amount = Number(adjustAmount)
+    if (!Number.isFinite(amount) || amount === 0) {
+      setError('Enter a non-zero adjust amount')
+      return
+    }
+    setBusy(true)
+    setError(null)
+    setMessage(null)
+    try {
+      setCredits(
+        await adminApi.adjustUserCredits(detail.user.id, {
+          amount,
+          note: adjustNote.trim() || undefined,
+        }),
+      )
+      setMessage(`Credits adjusted by ${amount}`)
+      setAdjustNote('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Credit adjust failed')
     } finally {
       setBusy(false)
     }
@@ -294,6 +331,91 @@ export function AdminUserDetailPage() {
           />
         </dl>
       </div>
+
+      {canCredits && credits && (
+        <div className={cardPanel}>
+          <h2 className="m-0 mb-4 text-lg font-semibold text-foreground">Credits</h2>
+          <dl className="mb-4 space-y-3">
+            <DetailRow label="Spendable" value={String(credits.spendable)} />
+            <DetailRow label="Daily" value={String(credits.daily_balance)} />
+            <DetailRow label="Bonus" value={String(credits.bonus_balance)} />
+            <DetailRow label="Referral code" value={credits.referral_code ?? '—'} />
+            <DetailRow
+              label="Referred by"
+              value={credits.referred_by_user_id != null ? `#${credits.referred_by_user_id}` : '—'}
+            />
+            <DetailRow
+              label="New-user bonus"
+              value={
+                credits.new_user_bonus_granted_at
+                  ? formatDateTime(credits.new_user_bonus_granted_at)
+                  : 'Not granted'
+              }
+            />
+          </dl>
+          <div className="mb-4 flex flex-wrap items-end gap-3">
+            <label className={`${fieldLabel} m-0 min-w-[8rem]`}>
+              <span>Adjust amount</span>
+              <input
+                className={fieldInput}
+                type="number"
+                step="0.01"
+                value={adjustAmount}
+                onChange={(e) => setAdjustAmount(e.target.value)}
+              />
+            </label>
+            <label className={`${fieldLabel} m-0 min-w-[12rem] flex-1`}>
+              <span>Note</span>
+              <input
+                className={fieldInput}
+                type="text"
+                value={adjustNote}
+                onChange={(e) => setAdjustNote(e.target.value)}
+                maxLength={500}
+              />
+            </label>
+            <button
+              type="button"
+              className={btnPrimary}
+              disabled={busy}
+              onClick={() => void handleAdjustCredits()}
+            >
+              Apply
+            </button>
+          </div>
+          <h3 className="m-0 mb-2 text-sm font-semibold text-foreground">
+            Recent ledger ({credits.ledger.length})
+          </h3>
+          {credits.ledger.length === 0 ? (
+            <p className="m-0 text-sm text-muted-text">No ledger entries.</p>
+          ) : (
+            <ul className="m-0 list-none space-y-2 p-0">
+              {credits.ledger.slice(0, 10).map((row) => (
+                <li key={row.id} className="text-sm text-foreground">
+                  {Number(row.amount) > 0 ? '+' : ''}
+                  {String(row.amount)} · {row.entry_type} · bal {String(row.balance_after)} ·{' '}
+                  {formatDateTime(row.created_at)}
+                </li>
+              ))}
+            </ul>
+          )}
+          <h3 className="mt-4 mb-2 text-sm font-semibold text-foreground">
+            Usage sessions ({credits.sessions.length})
+          </h3>
+          {credits.sessions.length === 0 ? (
+            <p className="m-0 text-sm text-muted-text">No usage sessions.</p>
+          ) : (
+            <ul className="m-0 list-none space-y-2 p-0">
+              {credits.sessions.slice(0, 10).map((row) => (
+                <li key={row.id} className="text-sm text-foreground">
+                  {row.module} · {row.status} · {row.duration_seconds}s · charged{' '}
+                  {String(row.credits_charged)}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       <div className={cardPanel}>
         <h2 className="m-0 mb-4 text-lg font-semibold text-foreground">

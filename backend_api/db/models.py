@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import (
     Boolean,
     Column,
+    Date,
     DateTime,
     ForeignKey,
     Index,
@@ -155,6 +156,21 @@ class User(Base):
         default=False,
         nullable=False,
     )
+    referral_code: Mapped[str | None] = mapped_column(
+        String(32),
+        unique=True,
+        nullable=True,
+        index=True,
+    )
+    referred_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    new_user_bonus_granted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
@@ -165,6 +181,19 @@ class User(Base):
         "Plan",
         back_populates="users",
         lazy="selectin",
+    )
+    referred_by: Mapped[User | None] = relationship(
+        "User",
+        remote_side="User.id",
+        foreign_keys=[referred_by_user_id],
+        lazy="noload",
+    )
+    credit_account: Mapped[UserCreditAccount | None] = relationship(
+        "UserCreditAccount",
+        back_populates="user",
+        uselist=False,
+        cascade="all, delete-orphan",
+        lazy="noload",
     )
     role: Mapped[Role | None] = relationship(
         "Role",
@@ -853,4 +882,117 @@ class MPCJobRecord(Base):
     )
 
     user: Mapped[User | None] = relationship("User", lazy="noload")
+
+
+class UserCreditAccount(Base):
+    """Per-user credit balances: persisting bonus + non-rollover daily allotment."""
+
+    __tablename__ = "user_credit_accounts"
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    bonus_balance: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2),
+        default=Decimal("0.00"),
+        nullable=False,
+    )
+    daily_balance: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2),
+        default=Decimal("0.00"),
+        nullable=False,
+    )
+    daily_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    user: Mapped[User] = relationship("User", back_populates="credit_account")
+
+
+class CreditUsageSession(Base):
+    """Live per-job usage meter (time + tokens → credits)."""
+
+    __tablename__ = "credit_usage_sessions"
+    __table_args__ = (
+        Index("ix_credit_usage_sessions_user_started", "user_id", "started_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    module: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    job_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    status: Mapped[str] = mapped_column(String(20), default="open", nullable=False, index=True)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    duration_seconds: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    prompt_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    completion_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    credits_charged: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2),
+        default=Decimal("0.00"),
+        nullable=False,
+    )
+    live_credits_estimate: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2),
+        default=Decimal("0.00"),
+        nullable=False,
+    )
+
+    user: Mapped[User] = relationship("User", lazy="noload")
+    ledger_entries: Mapped[list[CreditLedgerEntry]] = relationship(
+        "CreditLedgerEntry",
+        back_populates="usage_session",
+        lazy="noload",
+    )
+
+
+class CreditLedgerEntry(Base):
+    """Immutable credit ledger (grants, daily resets, usage debits, admin adjusts)."""
+
+    __tablename__ = "credit_ledger_entries"
+    __table_args__ = (
+        Index("ix_credit_ledger_user_created", "user_id", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    balance_after: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    entry_type: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    usage_session_id: Mapped[int | None] = mapped_column(
+        ForeignKey("credit_usage_sessions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    note: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+        index=True,
+    )
+
+    user: Mapped[User] = relationship("User", lazy="noload")
+    usage_session: Mapped[CreditUsageSession | None] = relationship(
+        "CreditUsageSession",
+        back_populates="ledger_entries",
+        lazy="noload",
+    )
 

@@ -144,6 +144,7 @@ LabCD-Phase-1-31/
 | Regularize / recommend / trim / SILO / MULO | `backend_api/{Regularizer,Recommender,Trimmer,SiloDesigner,MuloDesigner}/` | Core algorithms, LangGraph graphs, GA, simulation |
 | Shared serialization | `backend_api/common/` | Cross-module helpers |
 | UI only | `frontend/src/` | Rendering, forms, streaming display |
+| Credits / usage metering | `backend_api/http/services/credit_service.py` | Balances, bonuses, daily reset, job metering (not React) |
 | Legacy reference | `backend_core/`, `frontend_streamlit/` | Prefer `backend_api` + `frontend` for new work |
 
 ### Pipelines
@@ -211,6 +212,7 @@ Never commit `.env` (ignored). Commit only `.env.example`.
 |-----|--------|
 | [docs/DEPLOY.md](./docs/DEPLOY.md) | Production deploy on Ubuntu |
 | [docs/TELEGRAM_ANALYTICS.md](./docs/TELEGRAM_ANALYTICS.md) | Daily Telegram analytics digest |
+| [docs/CREDITS.md](./docs/CREDITS.md) | Credit balances, bonuses, usage metering, admin checklist |
 
 ### Tests
 

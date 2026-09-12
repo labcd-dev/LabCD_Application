@@ -40,15 +40,22 @@ def start_trimmer(
         project_service.assert_project_llm_model(db, request.project_id, request.model)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    job_id = start_trimmer_job(
-        request.file_content,
-        request.file_name,
-        request.model,
-        request.trimming_params,
-        user_id=user.id,
-        project_id=request.project_id,
-        recommender_job_id=request.recommender_job_id,
-    )
+    try:
+        job_id = start_trimmer_job(
+            request.file_content,
+            request.file_name,
+            request.model,
+            request.trimming_params,
+            user_id=user.id,
+            project_id=request.project_id,
+            recommender_job_id=request.recommender_job_id,
+        )
+    except Exception as exc:
+        from backend_api.http.services.credit_service import InsufficientCreditsError
+
+        if isinstance(exc, InsufficientCreditsError):
+            raise HTTPException(status_code=402, detail=str(exc)) from exc
+        raise
     job = job_store.get(job_id)
     return JobResponse(job_id=job_id, module=job.module, status=job.status.value)
 

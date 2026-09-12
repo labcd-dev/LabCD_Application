@@ -1270,6 +1270,14 @@ def _run_tuning_thread(job_id: str, store: InMemoryJobStore) -> None:
                 fields[key] = val
         store.update(job_id, **fields)
 
+        from backend_api.http.services import credit_service
+
+        credit_service.end_job_usage(
+            job_id=job_id,
+            prompt_tokens=int(usage_data.get("prompt_tokens") or 0),
+            completion_tokens=int(usage_data.get("completion_tokens") or 0),
+        )
+
         # AgentMPC diagnostics: scan findings OR poor score / unsuccessful completion
         try:
             fs = dict(final_state or {})
@@ -1319,6 +1327,10 @@ def _run_tuning_thread(job_id: str, store: InMemoryJobStore) -> None:
             message="Tuning failed",
             error=err_text,
         )
+
+        from backend_api.http.services import credit_service
+
+        credit_service.end_job_usage(job_id=job_id)
 
         try:
             build_and_store_diagnostics(
@@ -1789,6 +1801,9 @@ def submit_job(
                 source_code = f.read()
         except Exception:
             pass
+    from backend_api.http.services import credit_service
+
+    credit_service.require_job_credits(request.user_id)
     record = job_store.create(
         dynamics_ref=dynamics_ref,
         options=options,
@@ -1797,6 +1812,7 @@ def submit_job(
         system_name=str(system_name),
     )
     job_id = record.job_id
+    credit_service.begin_job_usage(request.user_id, "mpc", job_id=job_id, check_balance=False)
     # Automatically link or create in Project database so it appears in Projects history
     try:
         from backend_api.http.services.project_service import link_or_create_for_job

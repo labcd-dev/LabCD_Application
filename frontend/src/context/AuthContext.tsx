@@ -18,7 +18,11 @@ interface AuthContextValue {
   sessionError: boolean
   login: (email: string, password: string) => Promise<void>
   loginWithToken: (accessToken: string) => Promise<void>
-  register: (email: string, password: string) => Promise<MessageResponse>
+  register: (
+    email: string,
+    password: string,
+    referralCode?: string | null,
+  ) => Promise<MessageResponse>
   logout: () => Promise<void>
   hasAction: (code: string) => boolean
   canUsePipeline: (pipeline: 'siloDesign' | 'muloDesign') => boolean
@@ -122,9 +126,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [applyToken],
   )
 
-  const register = useCallback(async (email: string, password: string) => {
-    return authApi.register({ email, password })
-  }, [])
+  const register = useCallback(
+    async (email: string, password: string, referralCode?: string | null) => {
+      return authApi.register({
+        email,
+        password,
+        ...(referralCode ? { referral_code: referralCode } : {}),
+      })
+    },
+    [],
+  )
 
   const logout = useCallback(async () => {
     try {

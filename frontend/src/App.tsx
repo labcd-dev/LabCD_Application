@@ -18,6 +18,7 @@ import { AdminAuditLogPage } from './pages/AdminAuditLogPage'
 import { AdminApiKeysPage } from './pages/AdminApiKeysPage'
 import { AdminSsoPage } from './pages/AdminSsoPage'
 import { AdminPlansPage } from './pages/AdminPlansPage'
+import { AdminCreditsPage } from './pages/AdminCreditsPage'
 import { AdminRolesPage } from './pages/AdminRolesPage'
 import { AdminProjectDetailPage } from './pages/AdminProjectDetailPage'
 import { AdminProjectsPage } from './pages/AdminProjectsPage'
@@ -99,6 +100,7 @@ export default function App() {
                   <Route path="sso" element={<AdminSsoPage />} />
                   <Route path="bug-reports" element={<AdminBugReportsPage />} />
                   <Route path="plans" element={<AdminPlansPage />} />
+                  <Route path="credits" element={<AdminCreditsPage />} />
                   <Route path="roles" element={<AdminRolesPage />} />
                   <Route path="users" element={<AdminUsersPage />} />
                   <Route path="users/:userId" element={<AdminUserDetailPage />} />

@@ -81,6 +81,10 @@ def init_mulo(
             file_type=request.file_type or "python",
         )
     except Exception as exc:
+        from backend_api.http.services.credit_service import InsufficientCreditsError
+
+        if isinstance(exc, InsufficientCreditsError):
+            raise HTTPException(status_code=402, detail=str(exc)) from exc
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return _job_response(job_id)
 
@@ -105,6 +109,10 @@ def start_mulo(
             file_type=request.file_type or "python",
         )
     except Exception as exc:
+        from backend_api.http.services.credit_service import InsufficientCreditsError
+
+        if isinstance(exc, InsufficientCreditsError):
+            raise HTTPException(status_code=402, detail=str(exc)) from exc
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return _job_response(job_id)
 
@@ -135,6 +143,12 @@ def run_mulo(
         run_mulo_optimization(job_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Job not found") from exc
+    except Exception as exc:
+        from backend_api.http.services.credit_service import InsufficientCreditsError
+
+        if isinstance(exc, InsufficientCreditsError):
+            raise HTTPException(status_code=402, detail=str(exc)) from exc
+        raise
     return _job_response(job_id)
 
 
