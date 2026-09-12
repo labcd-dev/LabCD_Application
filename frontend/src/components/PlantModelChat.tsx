@@ -25,35 +25,41 @@ import { StatusMessage } from './StatusMessage'
 const SYSTEM_ARCHETYPES = [
   {
     id: 'power',
-    category: 'Power Electronics',
-    title: 'DC-DC Boost Converter',
-    desc: '12V → 48V stepping with inductor ESR and voltage regulation.',
-    prompt: 'Design a DC-DC boost converter stepping 12V up to 48V with inductor ESR and capacitor equivalent resistance, requiring tight voltage regulation under step load transients.',
-    badge: '2nd Order',
+    category: 'Electromechanical',
+    title: 'DC Motor Position Control',
+    desc: 'Armature-controlled DC motor with current, speed and shaft angle states.',
+    prompt: 'Design a DC motor position control system with current, angular velocity, and position states. Control the motor angular position by applying armature voltage, including electrical and mechanical dynamics.',
+    badge: '3rd Order',
   },
   {
-    id: 'uav',
-    category: 'Aerospace & UAV',
-    title: 'Quadrotor Flight Dynamics',
-    desc: '6-DOF altitude hold and attitude dynamics with wind gust damping.',
-    prompt: 'Quadrotor altitude hold and pitch-roll attitude dynamics with rotor motor lag and aerodynamic damping, needing to reject turbulent wind gusts.',
-    badge: 'MIMO',
+    id: 'ballbeam',
+    category: 'Robotics & Mechanics',
+    title: 'Ball and Beam',
+    desc: 'Underactuated ball position control via beam tilt angle.',
+    prompt: 'Design a ball and beam system where the ball position and velocity are states and the control input is the beam tilt angle. Stabilize the ball at a desired position on the beam.',
+    badge: 'Underactuated',
   },
   {
     id: 'robotics',
     category: 'Robotics & Mechanics',
-    title: 'Inverted Pendulum on Cart',
-    desc: 'Underactuated cart-pole balancing with rail position limits.',
-    prompt: 'Cart-pole inverted pendulum system with cart friction, swing-up stabilization at upright equilibrium, and cart position rail limits.',
+    title: 'Inverted Pendulum',
+    desc: 'Rotary inverted pendulum balancing about the upright equilibrium.',
+    prompt: 'Design a rotary inverted pendulum (not cart-pole) with pendulum angle and angular velocity as states. Stabilize the pendulum at the upright unstable equilibrium using torque at the pivot.',
     badge: 'Nonlinear',
   },
   {
-    id: 'chemical',
-    category: 'Process Engineering',
-    title: 'Exothermic CSTR Reactor',
-    desc: 'Continuous stirred-tank with Arrhenius kinetics and jacket cooling.',
-    prompt: 'Nonlinear continuous stirred-tank reactor (CSTR) with exothermic reaction, jacket cooling temperature control, and Arrhenius thermal lag.',
-    badge: 'Thermal',
+    id: 'auv',
+    category: 'Marine & AUV',
+    title: 'AUV Pitch and Depth',
+    desc: 'Heave-pitch coupled AUV dynamics with stern-plane control.',
+    prompt: `I want to model the pitch and depth dynamics of an underwater vehicle (AUV) with a stern-plane actuator. The vehicle has a rigid-body pitch moment of inertia Iy = 469 kg*m^2, an added-mass pitch moment of -458 kg*m^2, a pitch damping coefficient Mq = 9826.2 kg*m^2/s, a pitch restoring coefficient Mtheta = 13719.6 kg*m^2/s^2, and a stern-plane control moment coefficient Mfs = -1575.9. Depth rate is roughly 20 times the pitch angle.
+
+Use three states: q (pitch rate, rad/s), theta (pitch angle, rad), and z (depth, positive down, in metres). The only control input is fs (stern-plane deflection, rad).
+
+The pitch dynamics follow q_dot = -(Mq*q + Mtheta*theta + Mfs*fs) / (Iy - Mq_added), with theta_dot = q and z_dot = mu1*theta. Regulate pitch and depth back to zero using the stern plane.
+
+I'd also like the equivalent single transfer function from stern-plane deflection to depth, of the form -mu1*Mfs / (s*(I_e*s^2 + Mq*s + Mtheta)), plus the intermediate pitch transfer.`,
+    badge: '3rd Order',
   },
 ]
 

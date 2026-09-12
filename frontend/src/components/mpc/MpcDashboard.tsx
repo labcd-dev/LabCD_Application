@@ -235,7 +235,7 @@ export function MpcDashboard({
   const [sandboxNp, setSandboxNp] = useState(12)
   const [sandboxNc, setSandboxNc] = useState(4)
   const [sandboxDt, setSandboxDt] = useState(0.02)
-  const [sandboxSimTime, setSandboxSimTime] = useState(3.0)
+  const [sandboxSimTime, setSandboxSimTime] = useState(10.0)
   const [sandboxTrajectoryMode, setSandboxTrajectoryMode] = useState('reg')
   const [sandboxNoise, setSandboxNoise] = useState(0.0)
   const [sandboxQ, setSandboxQ] = useState<number[]>([])
@@ -247,7 +247,7 @@ export function MpcDashboard({
   const [sandboxError, setSandboxError] = useState<string | null>(null)
 
   const currentIter = results?.iteration ?? job?.iteration ?? 0
-  const maxIter = job?.max_iterations || job?.options?.max_iterations || 15
+  const maxIter = job?.max_iterations || job?.options?.max_iterations || 8
   const bestMse = results?.best_mse ?? job?.best_mse
 
   // Improvement vs iteration 1 baseline

@@ -40,6 +40,22 @@ function inferNumStates(plant?: PlantPayload | null): number {
   return 2
 }
 
+function getStateNames(plant?: PlantPayload | null, n: number): string[] {
+  const raw = plant?.metadata?.states
+  if (Array.isArray(raw) && raw.length > 0) {
+    return raw.map((s, i) => (typeof s === 'string' && s.trim() ? s : `x${i + 1}`))
+  }
+  return Array.from({ length: n }, (_, i) => `x${i + 1}`)
+}
+
+function getInputNames(plant?: PlantPayload | null): string[] {
+  const raw = plant?.metadata?.inputs
+  if (Array.isArray(raw) && raw.length > 0) {
+    return raw.map((s, i) => (typeof s === 'string' && s.trim() ? s : `u${i + 1}`))
+  }
+  return []
+}
+
 export function PreLaunchModal({
   isOpen,
   onClose,
@@ -54,86 +70,64 @@ export function PreLaunchModal({
   const [dt, setDt] = useState(initialConfig?.solver_sample_time ?? 0.01)
 
   const detectedStates = useMemo(() => inferNumStates(plant), [plant])
+  const stateNames = useMemo(
+    () => getStateNames(plant, detectedStates),
+    [plant, detectedStates],
+  )
+  const inputNames = useMemo(() => getInputNames(plant), [plant])
 
-  // Default initial states & target
-  const defaultStatesStr = useMemo(() => {
-    if (initialConfig?.initial_state?.length) {
-      return initialConfig.initial_state.join(', ')
+  const defaultX0 = useMemo(() => {
+    if (initialConfig?.initial_state?.length === detectedStates) {
+      return initialConfig.initial_state.map(Number)
     }
-    return new Array(detectedStates).fill(0).join(', ')
+    return new Array(detectedStates).fill(0) as number[]
   }, [initialConfig, detectedStates])
 
-  const defaultTargetStr = useMemo(() => {
-    if (initialConfig?.default_target?.length) {
-      return initialConfig.default_target.join(', ')
-    }
-    return new Array(detectedStates).fill(0).join(', ')
-  }, [initialConfig, detectedStates])
-
-  const [x0Str, setX0Str] = useState(defaultStatesStr)
-  const [targetStr, setTargetStr] = useState(defaultTargetStr)
+  const [x0Values, setX0Values] = useState<number[]>(defaultX0)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [warnings, setWarnings] = useState<string[]>([])
 
   useEffect(() => {
     if (isOpen) {
-      setX0Str(defaultStatesStr)
-      setTargetStr(defaultTargetStr)
+      setX0Values(defaultX0)
       setError(null)
       setWarnings([])
     }
-  }, [isOpen, defaultStatesStr, defaultTargetStr])
-
-  // Parse arrays
-  const parseVector = (str: string): number[] => {
-    return str
-      .split(/[\s,]+/)
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0)
-      .map(Number)
-  }
+  }, [isOpen, defaultX0])
 
   if (!isOpen) return null
+
+  const updateX0At = (index: number, raw: string) => {
+    const n = Number(raw)
+    setX0Values((prev) => {
+      const next = [...prev]
+      next[index] = Number.isFinite(n) ? n : 0
+      return next
+    })
+  }
 
   const handleSave = async () => {
     setError(null)
     setWarnings([])
-    let parsedX0 = parseVector(x0Str)
-    let parsedTarget = parseVector(targetStr)
 
-    if (parsedX0.some(isNaN)) {
-      setError('Initial state contains non-numeric values')
-      return
-    }
-    if (parsedTarget.some(isNaN)) {
-      setError('Target contains non-numeric values')
-      return
-    }
-
-    if (parsedX0.length === 0) {
-      parsedX0 = new Array(detectedStates).fill(0)
-    } else if (parsedX0.length !== detectedStates && parsedX0.every((v) => v === 0)) {
-      parsedX0 = new Array(detectedStates).fill(0)
-    } else if (parsedX0.length !== detectedStates) {
-      setError(`Initial state must have ${detectedStates} elements (currently has ${parsedX0.length})`)
-      return
+    let parsedX0 = x0Values.map((v) => (Number.isFinite(v) ? v : 0))
+    if (parsedX0.length !== detectedStates) {
+      if (parsedX0.length === 0 || parsedX0.every((v) => v === 0)) {
+        parsedX0 = new Array(detectedStates).fill(0)
+      } else {
+        setError(`Initial state must have ${detectedStates} elements (currently has ${parsedX0.length})`)
+        return
+      }
     }
 
-    if (parsedTarget.length === 0) {
-      parsedTarget = new Array(detectedStates).fill(0)
-    } else if (parsedTarget.length !== detectedStates && parsedTarget.every((v) => v === 0)) {
-      parsedTarget = new Array(detectedStates).fill(0)
-    } else if (parsedTarget.length !== detectedStates) {
-      setError(`Default target must have ${detectedStates} elements (currently has ${parsedTarget.length})`)
-      return
-    }
-
+    // Downstream modules set their own targets from the reference trajectory.
+    // Do not collect or require a target on the pre-launch form.
     const preLaunch: PreLaunchConfig = {
       total_simulation_time: Number(tSim),
       solver_sample_time: Number(dt),
       initial_state: parsedX0,
-      default_target: parsedTarget,
+      default_target: [],
     }
 
     setSubmitting(true)
@@ -200,81 +194,71 @@ export function PreLaunchModal({
               <span>{error}</span>
             </div>
           )}
-
           {warnings.length > 0 && (
-            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-600 dark:text-amber-300 space-y-1">
-              <div className="font-semibold flex items-center gap-1.5">
-                <AlertCircle className="size-3.5" /> Compiler warnings:
-              </div>
-              {warnings.map((w, idx) => (
-                <div key={idx}>• {w}</div>
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300 space-y-1">
+              {warnings.map((w, i) => (
+                <div key={i}>{w}</div>
               ))}
             </div>
           )}
 
-          {/* Grid fields */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
+            <div className="space-y-1">
               <label className={fieldLabel}>Total Simulation Time (s)</label>
               <input
                 type="number"
-                min="0.1"
-                step="0.5"
+                min={0.1}
+                step={0.1}
                 value={tSim}
-                onChange={(e) => setTSim(parseFloat(e.target.value) || 0)}
+                onChange={(e) => setTSim(Number(e.target.value))}
                 className={fieldInput}
               />
-              <span className="text-[11px] text-muted">Horizon for closed-loop evaluation</span>
+              <span className="text-[11px] text-muted">Horizon length for closed-loop simulation</span>
             </div>
-
-            <div>
+            <div className="space-y-1">
               <label className={fieldLabel}>Solver Sample Time dt (s)</label>
               <input
                 type="number"
-                min="0.0001"
-                step="0.005"
+                min={0.0001}
+                step={0.001}
                 value={dt}
-                onChange={(e) => setDt(parseFloat(e.target.value) || 0)}
+                onChange={(e) => setDt(Number(e.target.value))}
                 className={fieldInput}
               />
               <span className="text-[11px] text-muted">Step size for RK4 / OSQP solver</span>
             </div>
 
-            <div className="sm:col-span-2 space-y-1">
+            <div className="sm:col-span-2 space-y-2">
               <div className="flex items-center justify-between">
-                <label className={fieldLabel}>Initial State Vector x0 (comma-separated)</label>
+                <label className={fieldLabel}>Initial State x0</label>
                 <span className="text-[11px] font-mono text-cyan-600 dark:text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded-md border border-cyan-500/20">
-                  {detectedStates} states required
+                  {detectedStates} states
                 </span>
               </div>
-              <input
-                type="text"
-                value={x0Str}
-                onChange={(e) => setX0Str(e.target.value)}
-                placeholder={defaultStatesStr}
-                className={`${fieldInput} font-mono text-xs`}
-              />
-              <span className="text-[11px] text-muted">
-                Initial condition for simulation states at t=0 (e.g. {defaultStatesStr})
-              </span>
-            </div>
-
-            <div className="sm:col-span-2 space-y-1">
-              <div className="flex items-center justify-between">
-                <label className={fieldLabel}>Default Target Vector (comma-separated)</label>
-                <span className="text-[11px] font-mono text-cyan-600 dark:text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded-md border border-cyan-500/20">
-                  {detectedStates} states required
-                </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {stateNames.map((name, i) => (
+                  <div key={`${name}-${i}`} className="space-y-1">
+                    <label className="text-[11px] font-medium text-muted">
+                      {name}
+                      {Array.isArray(plant?.metadata?.state_meanings) &&
+                      typeof plant.metadata.state_meanings[i] === 'string' &&
+                      plant.metadata.state_meanings[i]
+                        ? ` — ${plant.metadata.state_meanings[i]}`
+                        : ''}
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      value={x0Values[i] ?? 0}
+                      onChange={(e) => updateX0At(i, e.target.value)}
+                      className={`${fieldInput} font-mono text-xs`}
+                    />
+                  </div>
+                ))}
               </div>
-              <input
-                type="text"
-                value={targetStr}
-                onChange={(e) => setTargetStr(e.target.value)}
-                placeholder={defaultTargetStr}
-                className={`${fieldInput} font-mono text-xs`}
-              />
               <span className="text-[11px] text-muted">
-                Setpoint destination for state regulation (e.g. {defaultTargetStr})
+                Initial condition for each state at t=0
+                {inputNames.length > 0 ? ` · Inputs: ${inputNames.join(', ')}` : ''}
               </span>
             </div>
           </div>
