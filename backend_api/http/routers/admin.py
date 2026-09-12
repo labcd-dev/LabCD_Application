@@ -23,7 +23,7 @@ from backend_api.http.schemas.auth import (
     UpdateUserRequest,
     UserOut,
 )
-from backend_api.http.services import admin_user_service
+from backend_api.http.services import admin_user_service, journey_service
 from backend_api.common.csv_utils import csv_response, xlsx_response
 from backend_api.http.services.admin_csv_service import (
     export_monitoring_csv,
@@ -45,6 +45,7 @@ from backend_api.http.schemas.error_tracking import (
     ErrorTrackingSettingsUpdate,
 )
 from backend_api.http.schemas.audit import AuditLogOut
+from backend_api.http.schemas.journey import UserJourneyOut
 from backend_api.http.schemas.credits import (
     AdminUserCreditsOut,
     CreditAdjustRequest,
@@ -764,6 +765,18 @@ def get_user_detail(
     if detail is None:
         raise HTTPException(status_code=404, detail="User not found")
     return AdminUserDetailOut(**detail)
+
+
+@router.get("/users/{user_id}/journey", response_model=UserJourneyOut)
+def get_user_journey(
+    user_id: int,
+    _: User = Depends(require_action("admin:users")),
+    db: Session = Depends(get_db),
+) -> UserJourneyOut:
+    journey = journey_service.get_user_journey(db, user_id)
+    if journey is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    return UserJourneyOut(**journey)
 
 
 @router.post("/users", response_model=UserOut, status_code=status.HTTP_201_CREATED)
