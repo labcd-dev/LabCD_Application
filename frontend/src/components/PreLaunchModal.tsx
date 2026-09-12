@@ -40,7 +40,7 @@ function inferNumStates(plant?: PlantPayload | null): number {
   return 2
 }
 
-function getStateNames(plant?: PlantPayload | null, n: number): string[] {
+function getStateNames(plant: PlantPayload | null | undefined, n: number): string[] {
   const raw = plant?.metadata?.states
   if (Array.isArray(raw) && raw.length > 0) {
     return raw.map((s, i) => (typeof s === 'string' && s.trim() ? s : `x${i + 1}`))
