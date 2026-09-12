@@ -14,12 +14,19 @@ Browser → https://app.labcd.ai
             └─ /api/      → proxy → api:8000 (FastAPI)
                               │
                               └─ db (Postgres, Docker network only)
+
+Browser → https://logs.labcd.ai
+            │
+         Caddy (:443)
+            │
+         dozzle:8080  (login required; Docker network only)
 ```
 
 | File | Role |
 |------|------|
-| `docker-compose.prod.yml` | Production services (db, api, frontend, caddy) |
-| `deploy/Caddyfile` | TLS + reverse proxy for `app.labcd.ai` |
+| `docker-compose.prod.yml` | Production services (db, api, frontend, caddy, dozzle) |
+| `deploy/Caddyfile` | TLS + reverse proxy for `app.labcd.ai` and `logs.labcd.ai` |
+| `deploy/setup-dozzle.sh` | One-time Dozzle login file (`users.yml`) on the server |
 | `deploy/env.production.example` | Template for server `.env` |
 | `deploy/deploy.sh` | Pull latest `master` and rebuild stack |
 | `.github/workflows/deploy.yml` | SSH deploy on push to `master` |
@@ -57,7 +64,7 @@ sudo ufw enable
 sudo ufw status
 ```
 
-Do **not** open `5432`, `8000`, or `5173` publicly.
+Do **not** open `5432`, `8000`, `5173`, or `8080` publicly.
 
 ### App directory
 
@@ -119,14 +126,16 @@ Point the domain at the server (A records):
 | Type | Name | Value |
 |------|------|--------|
 | A | `app` | server public IP |
+| A | `logs` | server public IP |
 
 Verify:
 
 ```bash
 dig +short app.labcd.ai
+dig +short logs.labcd.ai
 ```
 
-Both must resolve to the server. Ports **80** and **443** must reach the host (cloud security group + UFW).
+Both must resolve to the server. Ports **80** and **443** must reach the host (cloud security group + UFW). Do **not** open Dozzle’s internal port `8080`.
 
 ---
 
@@ -165,6 +174,14 @@ docker compose -f docker-compose.prod.yml --env-file .env up -d --build
 
 Wait 1–2 minutes for images and Let's Encrypt.
 
+Create the Dozzle login (once). `users.yml` is gitignored and lives only on the server:
+
+```bash
+chmod +x deploy/setup-dozzle.sh
+bash deploy/setup-dozzle.sh
+docker compose -f docker-compose.prod.yml --env-file .env up -d --force-recreate dozzle
+```
+
 ### Verify
 
 ```bash
@@ -173,6 +190,7 @@ docker compose -f docker-compose.prod.yml logs -f caddy
 
 curl -I https://app.labcd.ai
 curl https://app.labcd.ai/api/v1/health
+curl -I https://logs.labcd.ai
 ```
 
 In the browser:
@@ -180,6 +198,21 @@ In the browser:
 1. Open https://app.labcd.ai — landing page loads.
 2. Log in with `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
 3. Run a short design job and confirm streaming still works.
+4. Open https://logs.labcd.ai — log in with the Dozzle user from `setup-dozzle.sh`.
+
+### Dozzle on an existing server
+
+DNS `logs.labcd.ai` must already point at this VPS. Then:
+
+```bash
+cd /opt/labcd
+git pull
+chmod +x deploy/setup-dozzle.sh
+bash deploy/setup-dozzle.sh
+docker compose -f docker-compose.prod.yml --env-file .env up -d --force-recreate dozzle caddy
+```
+
+Open https://logs.labcd.ai. Username is `admin` unless you set `DOZZLE_USERNAME`. Dozzle is not published on host port 8080; Caddy reaches it on the Docker network.
 
 ---
 
@@ -295,6 +328,10 @@ docker compose -f docker-compose.prod.yml ps
 docker compose -f docker-compose.prod.yml logs -f api
 docker compose -f docker-compose.prod.yml logs -f caddy
 
+# log panel (https://logs.labcd.ai) — rotate password
+bash deploy/setup-dozzle.sh --force
+docker compose -f docker-compose.prod.yml --env-file .env up -d --force-recreate dozzle
+
 # redeploy manually
 bash deploy/deploy.sh
 
@@ -321,7 +358,8 @@ Also back up `uploads/` and `results/`.
 
 | Symptom | Fix |
 |---------|-----|
-| HTTPS / cert fails | Open ports 80+443; confirm DNS with `dig`; check `caddy` logs |
+| HTTPS / cert fails | Open ports 80+443; confirm DNS with `dig` for `app` and `logs`; check `caddy` logs |
+| `logs.labcd.ai` 502 or login missing | Generate `deploy/dozzle/users.yml` with `bash deploy/setup-dozzle.sh`, then recreate `dozzle`. Confirm DNS for `logs.labcd.ai`. |
 | `Bind for 0.0.0.0:80 failed: port is already allocated` | Something else owns host :80. On the server: `docker ps --filter publish=80` and `sudo ss -tlnp \| grep ':80 '`. Stop the other container, or disable host nginx/apache (`sudo systemctl disable --now nginx`). Then re-run `bash deploy/deploy.sh`. |
 | `502` Bad Gateway | `docker compose ... ps` and logs for `frontend` / `api` |
 | CORS / login errors | Set `CORS_ORIGINS` to production HTTPS URLs; recreate `api` |
@@ -341,6 +379,7 @@ Also back up `uploads/` and `results/`.
 2. Clone repo to `/opt/labcd`.  
 3. Copy `deploy/env.production.example` → `.env` and fill secrets (including SMTP + `APP_PUBLIC_URL`).  
 4. `docker compose -f docker-compose.prod.yml --env-file .env up -d --build`.  
-5. Confirm https://app.labcd.ai and `/api/v1/health`.  
-6. Trigger a register / password-reset and confirm the email arrives.  
-7. Add GitHub deploy secrets; push to `master` for auto-deploy.
+5. Run `bash deploy/setup-dozzle.sh` and recreate `dozzle`.  
+6. Confirm https://app.labcd.ai, `/api/v1/health`, and https://logs.labcd.ai.  
+7. Trigger a register / password-reset and confirm the email arrives.  
+8. Add GitHub deploy secrets; push to `master` for auto-deploy.
