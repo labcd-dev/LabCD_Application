@@ -338,19 +338,19 @@ export function MpcPage() {
       .map((s) => parseFloat(s.trim()))
       .filter((n) => !isNaN(n))
 
-    const finalDrift = showCustomScenario
-      ? customDriftPct
-      : scenarioLevel === 2
-        ? 20
-        : scenarioLevel === 3
-          ? customDriftPct
-          : 0
+    const finalDrift =
+      scenarioLevel === 1
+        ? 0
+        : scenarioLevel === 2
+          ? (showCustomScenario ? customDriftPct : 20)
+          : (showCustomScenario ? customDriftPct : 20)
 
-    const finalDistAmp = showCustomScenario
-      ? disturbanceAmp
-      : scenarioLevel === 3
-        ? 1.0
-        : 0
+    const finalDistAmp =
+      scenarioLevel === 1
+        ? 0
+        : scenarioLevel === 2
+          ? 0
+          : (showCustomScenario ? disturbanceAmp : 1.0)
 
     const options: MPCJobOptions = {
       max_iterations: maxIterations,
@@ -373,8 +373,8 @@ export function MpcPage() {
       system_name: pipeline.fileName?.replace('.py', '') || 'Inverted Pendulum Cart-Pole',
       custom_drift_pct: finalDrift,
       disturbance_amplitude: finalDistAmp,
-      disturbance_start: disturbanceStart / 100,
-      disturbance_type: disturbanceType,
+      disturbance_start: scenarioLevel === 3 ? disturbanceStart / 100 : undefined,
+      disturbance_type: scenarioLevel === 3 ? disturbanceType : 'none',
       target_state_indices: selectedStates,
     }
 
@@ -871,10 +871,8 @@ export function MpcPage() {
                       type="button"
                       onClick={() => {
                         setScenarioLevel(1)
-                        if (!showCustomScenario) {
-                          setCustomDriftPct(0)
-                          setDisturbanceAmp(0)
-                        }
+                        setCustomDriftPct(0)
+                        setDisturbanceAmp(0)
                       }}
                       className={`rounded-xl border p-4 text-left transition-all ${
                         scenarioLevel === 1
@@ -895,10 +893,8 @@ export function MpcPage() {
                       type="button"
                       onClick={() => {
                         setScenarioLevel(2)
-                        if (!showCustomScenario) {
-                          setCustomDriftPct(20)
-                          setDisturbanceAmp(0)
-                        }
+                        setCustomDriftPct((prev) => (prev === 0 ? 20 : prev))
+                        setDisturbanceAmp(0)
                       }}
                       className={`rounded-xl border p-4 text-left transition-all ${
                         scenarioLevel === 2
@@ -919,9 +915,8 @@ export function MpcPage() {
                       type="button"
                       onClick={() => {
                         setScenarioLevel(3)
-                        if (!showCustomScenario) {
-                          setDisturbanceAmp(1.0)
-                        }
+                        setCustomDriftPct((prev) => (prev === 0 ? 20 : prev))
+                        setDisturbanceAmp((prev) => (prev === 0 ? 1.0 : prev))
                       }}
                       className={`rounded-xl border p-4 text-left transition-all ${
                         scenarioLevel === 3
@@ -967,6 +962,8 @@ export function MpcPage() {
                             } else {
                               setCustomDriftPct(20)
                               setDisturbanceAmp(1.0)
+                              setDisturbanceStart(25)
+                              setDisturbanceType('step')
                             }
                           }}
                           className="text-[10.5px] font-mono text-muted hover:text-foreground"
@@ -977,90 +974,203 @@ export function MpcPage() {
                     </div>
 
                     {showCustomScenario && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-border">
-                        {/* Parameter Drift Percentage */}
-                        <div className="space-y-1.5">
-                          <div className="flex justify-between text-xs text-muted-text">
-                            <span>Plant Parameter Drift (&plusmn;%)</span>
-                            <span className="font-mono font-bold text-amber-600 dark:text-amber-300">
-                              &plusmn;{customDriftPct}%
-                            </span>
-                          </div>
-                          <input
-                            type="range"
-                            min={0}
-                            max={50}
-                            step={1}
-                            value={customDriftPct}
-                            onChange={(e) => setCustomDriftPct(Number(e.target.value))}
-                            className="w-full accent-amber-500"
-                          />
-                          <span className="text-[10.5px] text-muted block">
-                            Random physical variance injected into mass, inertia, and damping.
-                          </span>
-                        </div>
-
-                        {/* Force Step Disturbance Amplitude */}
-                        <div className="space-y-1.5">
-                          <div className="flex justify-between text-xs text-muted-text">
-                            <span>Disturbance Amplitude (N / Nm)</span>
-                            <span className="font-mono font-bold text-rose-600 dark:text-rose-300">
-                              {disturbanceAmp.toFixed(1)} N/Nm
-                            </span>
-                          </div>
-                          <input
-                            type="range"
-                            min={0.0}
-                            max={5.0}
-                            step={0.1}
-                            value={disturbanceAmp}
-                            onChange={(e) => setDisturbanceAmp(Number(e.target.value))}
-                            className="w-full accent-rose-500"
-                          />
-                          <span className="text-[10.5px] text-muted block">
-                            External wind-gust or load impulse step magnitude.
-                          </span>
-                        </div>
-
-                        {/* Disturbance Start Time */}
-                        <div className="space-y-1.5">
-                          <div className="flex justify-between text-xs text-muted-text">
-                            <span>Disturbance Start (% time)</span>
-                            <span className="font-mono font-bold text-purple-600 dark:text-purple-300">
-                              {disturbanceStart}%
-                            </span>
-                          </div>
-                          <input
-                            type="range"
-                            min={5}
-                            max={85}
-                            step={5}
-                            value={disturbanceStart}
-                            onChange={(e) => setDisturbanceStart(Number(e.target.value))}
-                            className="w-full accent-purple-500"
-                          />
-                        </div>
-
-                        {/* Disturbance Profile Type */}
-                        <div className="space-y-1.5">
-                          <span className="text-xs text-muted-text block">Disturbance Profile Type</span>
-                          <div className="flex gap-2">
-                            {(['step', 'pulse', 'none'] as const).map((type) => (
+                      <div className="pt-2 border-t border-border">
+                        {/* Level 1: Nominal baseline info */}
+                        {scenarioLevel === 1 && (
+                          <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/5 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div className="flex items-start gap-3">
+                              <div className="size-8 rounded-lg bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center shrink-0 text-emerald-600 dark:text-emerald-400">
+                                <CheckCircle2 className="size-4" />
+                              </div>
+                              <div>
+                                <h5 className="text-xs font-bold text-foreground flex items-center gap-2">
+                                  <span>Level 1 · Nominal Model Baseline</span>
+                                  <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[9.5px] font-mono text-emerald-600 dark:text-emerald-300">Clean Active</span>
+                                </h5>
+                                <p className="text-[11.5px] text-muted-text mt-1 leading-relaxed">
+                                  Evaluation runs strictly against textbook nominal plant dynamics. Plant parameter drift is locked to <strong>0%</strong> and disturbance injection is <strong>disabled</strong> (0.0 N/Nm).
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
                               <button
-                                key={type}
                                 type="button"
-                                onClick={() => setDisturbanceType(type)}
-                                className={`flex-1 rounded-lg py-1.5 text-xs font-semibold uppercase tracking-wider transition-all border ${
-                                  disturbanceType === type
-                                    ? 'border-purple-500 bg-purple-500/15 text-purple-600 dark:text-purple-300'
-                                    : 'border-border bg-surface-muted text-muted-text hover:bg-surface-hover'
-                                }`}
+                                onClick={() => {
+                                  setScenarioLevel(2)
+                                  setCustomDriftPct(20)
+                                  setDisturbanceAmp(0)
+                                }}
+                                className="text-xs font-semibold text-amber-600 dark:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 px-3 py-1.5 rounded-lg transition-all"
                               >
-                                {type}
+                                Enable Drift (Level 2)
                               </button>
-                            ))}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setScenarioLevel(3)
+                                  setCustomDriftPct(20)
+                                  setDisturbanceAmp(1.0)
+                                }}
+                                className="text-xs font-semibold text-rose-600 dark:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 px-3 py-1.5 rounded-lg transition-all"
+                              >
+                                Enable Disturbance (Level 3)
+                              </button>
+                            </div>
                           </div>
-                        </div>
+                        )}
+
+                        {/* Level 2: Parameter Drift Only */}
+                        {scenarioLevel === 2 && (
+                          <div className="space-y-4">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[11px] font-mono text-amber-600 dark:text-amber-300 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded">
+                                Level 2 Knobs: Parametric Uncertainty Only
+                              </span>
+                              <span className="text-[11px] text-muted font-mono">External Disturbance: Inactive (0.0 N/Nm)</span>
+                            </div>
+
+                            <div className="space-y-2 max-w-xl">
+                              <div className="flex justify-between text-xs text-muted-text">
+                                <span className="font-medium text-foreground">Plant Parameter Drift (&plusmn;%)</span>
+                                <span className="font-mono font-bold text-amber-600 dark:text-amber-300 text-sm">
+                                  &plusmn;{customDriftPct}%
+                                </span>
+                              </div>
+                              <input
+                                type="range"
+                                min={1}
+                                max={50}
+                                step={1}
+                                value={customDriftPct}
+                                onChange={(e) => setCustomDriftPct(Number(e.target.value))}
+                                className="w-full accent-amber-500"
+                              />
+                              <div className="flex justify-between text-[10.5px] font-mono text-muted">
+                                <span>&plusmn;1% (Mild)</span>
+                                <span>&plusmn;20% (Default)</span>
+                                <span>&plusmn;50% (Extreme)</span>
+                              </div>
+                              <p className="text-[11px] text-muted-text leading-relaxed">
+                                Random variance drawn independently into plant physical parameters (mass, inertia, damping, friction). Simulates physical plant mismatch without external disturbance forces.
+                              </p>
+                            </div>
+
+                            <div className="rounded-lg border border-border/70 bg-surface-muted/30 px-3 py-2 text-[11px] text-muted-text flex items-center justify-between">
+                              <span>Need to inject external wind-gusts or torque impulse steps?</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setScenarioLevel(3)
+                                  setDisturbanceAmp(1.0)
+                                }}
+                                className="text-[11px] font-semibold text-rose-500 hover:text-rose-400 underline underline-offset-2"
+                              >
+                                Switch to Level 3 · Force Step &rarr;
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Level 3: Disturbance Injection + Robust Co-occurring Drift */}
+                        {scenarioLevel === 3 && (
+                          <div className="space-y-4">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[11px] font-mono text-rose-600 dark:text-rose-300 bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded">
+                                Level 3 Knobs: Force Step &amp; Disturbance Injection
+                              </span>
+                              <span className="text-[11px] text-muted font-mono">Combined Robustness Stress Test</span>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              {/* Force Step Disturbance Amplitude */}
+                              <div className="space-y-1.5">
+                                <div className="flex justify-between text-xs text-muted-text">
+                                  <span className="font-medium text-foreground">Disturbance Amplitude (N / Nm)</span>
+                                  <span className="font-mono font-bold text-rose-600 dark:text-rose-300">
+                                    {disturbanceAmp.toFixed(1)} N/Nm
+                                  </span>
+                                </div>
+                                <input
+                                  type="range"
+                                  min={0.1}
+                                  max={5.0}
+                                  step={0.1}
+                                  value={disturbanceAmp}
+                                  onChange={(e) => setDisturbanceAmp(Number(e.target.value))}
+                                  className="w-full accent-rose-500"
+                                />
+                                <span className="text-[10.5px] text-muted block">
+                                  External wind-gust or load impulse step magnitude applied during closed loop.
+                                </span>
+                              </div>
+
+                              {/* Disturbance Start Time */}
+                              <div className="space-y-1.5">
+                                <div className="flex justify-between text-xs text-muted-text">
+                                  <span className="font-medium text-foreground">Disturbance Start (% time)</span>
+                                  <span className="font-mono font-bold text-purple-600 dark:text-purple-300">
+                                    {disturbanceStart}%
+                                  </span>
+                                </div>
+                                <input
+                                  type="range"
+                                  min={5}
+                                  max={85}
+                                  step={5}
+                                  value={disturbanceStart}
+                                  onChange={(e) => setDisturbanceStart(Number(e.target.value))}
+                                  className="w-full accent-purple-500"
+                                />
+                                <span className="text-[10.5px] text-muted block">
+                                  Closed-loop simulation timestamp when external disturbance activates.
+                                </span>
+                              </div>
+
+                              {/* Disturbance Profile Type */}
+                              <div className="space-y-1.5">
+                                <span className="text-xs font-medium text-foreground block">Disturbance Profile Type</span>
+                                <div className="flex gap-2">
+                                  {(['step', 'pulse', 'none'] as const).map((type) => (
+                                    <button
+                                      key={type}
+                                      type="button"
+                                      onClick={() => setDisturbanceType(type)}
+                                      className={`flex-1 rounded-lg py-1.5 text-xs font-semibold uppercase tracking-wider transition-all border ${
+                                        disturbanceType === type
+                                          ? 'border-purple-500 bg-purple-500/15 text-purple-600 dark:text-purple-300 shadow-sm'
+                                          : 'border-border bg-surface-muted text-muted-text hover:bg-surface-hover'
+                                      }`}
+                                    >
+                                      {type}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+
+                              {/* Co-occurring Parameter Drift */}
+                              <div className="space-y-1.5">
+                                <div className="flex justify-between text-xs text-muted-text">
+                                  <span className="font-medium text-foreground">Co-occurring Parameter Drift (&plusmn;%)</span>
+                                  <span className="font-mono font-bold text-amber-600 dark:text-amber-300">
+                                    &plusmn;{customDriftPct}%
+                                  </span>
+                                </div>
+                                <input
+                                  type="range"
+                                  min={0}
+                                  max={50}
+                                  step={1}
+                                  value={customDriftPct}
+                                  onChange={(e) => setCustomDriftPct(Number(e.target.value))}
+                                  className="w-full accent-amber-500"
+                                />
+                                <span className="text-[10.5px] text-muted block">
+                                  Simultaneous physical variance in parameters alongside disturbance.
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
