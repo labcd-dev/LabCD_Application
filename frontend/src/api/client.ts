@@ -47,6 +47,8 @@ async function parseError(response: Response): Promise<string> {
 
 function reportApiFailure(path: string, method: string, status: number, message: string): void {
   if (path.startsWith('/errors')) return
+  // Ignore expected client/business responses (not bugs)
+  if (status === 401 || status === 402 || status === 403 || status === 404 || status === 422) return
   // Lazy import avoids circular dependency with errorTracking → client.
   void import('../lib/errorTracking').then(({ reportFrontendError, shouldReportFrontendErrors }) => {
     if (!shouldReportFrontendErrors()) return

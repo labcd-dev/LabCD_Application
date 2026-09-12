@@ -48,7 +48,8 @@ class ErrorTrackingMiddleware(BaseHTTPMiddleware):
             return response
 
         status_code = response.status_code
-        if status_code < 400 or skip:
+        # Skip successful responses, normal client auth/validation statuses, and ignored paths
+        if status_code < 400 or status_code in {401, 402, 403, 404, 422} or skip:
             return response
 
         error_tracking_service.record_error_best_effort(

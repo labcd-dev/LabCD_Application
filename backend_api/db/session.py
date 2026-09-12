@@ -12,7 +12,7 @@ from backend_api.http.config import (
     DB_POOL_TIMEOUT,
 )
 
-_engine_kwargs: dict = {"pool_pre_ping": True}
+_engine_kwargs: dict = {"pool_pre_ping": True, "pool_recycle": 1800}
 if "sqlite" not in DATABASE_URL.lower():
     _engine_kwargs.update(
         {

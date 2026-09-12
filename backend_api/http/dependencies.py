@@ -141,17 +141,19 @@ def get_current_user_and_session_allow_unverified(
 def get_optional_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     access_token: str | None = Query(default=None),
-    db: Session = Depends(get_db),
 ) -> User | None:
     """Return the current user when a valid token is present; otherwise None."""
     token = _extract_bearer_token(credentials, access_token)
     if not token:
         return None
-    try:
-        user, _session = _load_user_and_session(token, db)
-        return user
-    except HTTPException:
-        return None
+    from backend_api.db.session import SessionLocal
+
+    with SessionLocal() as db:
+        try:
+            user, _session = _load_user_and_session(token, db)
+            return user
+        except HTTPException:
+            return None
 
 
 def require_admin(user: User = Depends(get_current_user)) -> User:

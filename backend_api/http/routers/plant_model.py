@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from backend_api.db.models import User
-from backend_api.db.session import get_db
+from backend_api.db.session import SessionLocal, get_db
 from typing import Any
 
 from backend_api.http.schemas.plant_model import (
@@ -94,18 +94,18 @@ def delete_plant_model_conversation(
 def plant_model_chat(
     request: PlantModelChatRequest,
     user: User = Depends(require_action("module:upload")),
-    db: Session = Depends(get_db),
 ) -> PlantModelChatResponse:
     assert_model_allowed(user, request.model)
 
     if request.conversation_id is not None:
-        existing = get_conversation(db, request.conversation_id)
-        if existing is None:
-            raise HTTPException(status_code=404, detail="Conversation not found")
-        try:
-            assert_conversation_access(existing, user)
-        except ConversationAccessDenied as exc:
-            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        with SessionLocal() as db:
+            existing = get_conversation(db, request.conversation_id)
+            if existing is None:
+                raise HTTPException(status_code=404, detail="Conversation not found")
+            try:
+                assert_conversation_access(existing, user)
+            except ConversationAccessDenied as exc:
+                raise HTTPException(status_code=403, detail=str(exc)) from exc
 
     record_module_use(user.id, "plant_model")
     from backend_api.http.services.credit_service import (
@@ -120,17 +120,18 @@ def plant_model_chat(
         raise HTTPException(status_code=402, detail=str(exc)) from exc
     try:
         response = run_plant_model_chat(request)
-        conversation = persist_turn(
-            db,
-            user_id=user.id,
-            conversation_id=request.conversation_id,
-            user_message=request.user_message.strip(),
-            assistant_reply=response.reply,
-            llm_model=request.model,
-            session_state=response.session_state,
-            final_result=response.final_result,
-        )
-        response.conversation_id = conversation.id
+        with SessionLocal() as db:
+            conversation = persist_turn(
+                db,
+                user_id=user.id,
+                conversation_id=request.conversation_id,
+                user_message=request.user_message.strip(),
+                assistant_reply=response.reply,
+                llm_model=request.model,
+                session_state=response.session_state,
+                final_result=response.final_result,
+            )
+            response.conversation_id = conversation.id
         return response
     finally:
         end_job_usage(session_id=session_id)
