@@ -926,11 +926,11 @@ title('LabCD Adaptive Closed-Loop Response'); legend('show', 'Location', 'best')
                 )}
 
                 {controlLawText ? (
-                  <div className="rounded-xl border border-border bg-surface p-3 max-h-56 overflow-y-auto font-mono text-xs text-foreground space-y-2 flex-1">
-                    <div className="text-[11px] font-semibold text-cyan-600 dark:text-cyan-400 mb-1">
+                  <div className="rounded-xl border border-border bg-surface p-3.5 max-h-72 overflow-y-auto text-xs text-foreground space-y-2 flex-1">
+                    <div className="text-[11.5px] font-bold text-cyan-600 dark:text-cyan-400 mb-1">
                       Derived Control Law:
                     </div>
-                    <MarkdownContent content={controlLawText} className="text-xs leading-relaxed text-foreground font-mono" />
+                    <MarkdownContent content={controlLawText} className="text-xs leading-relaxed text-foreground" />
                   </div>
                 ) : (
                   <div className="rounded-xl border border-border bg-surface/50 p-6 text-center text-xs text-muted-text flex-1 flex flex-col items-center justify-center space-y-1">

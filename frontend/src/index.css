@@ -1684,3 +1684,26 @@
     transition: none;
   }
 }
+
+/* KaTeX Mathematical Formula Styling */
+@import 'katex/dist/katex.min.css';
+
+.math-content .katex {
+  font-size: 1.08em;
+  color: inherit;
+}
+
+.math-content .katex-display {
+  margin: 0.85rem 0;
+  padding: 0.65rem 1rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, var(--app-surface-muted, #1e293b) 45%, transparent);
+  border: 1px solid color-mix(in srgb, var(--app-border, #334155) 50%, transparent);
+}
+
+.dark .math-content .katex {
+  color: #f8fafc;
+}
+
