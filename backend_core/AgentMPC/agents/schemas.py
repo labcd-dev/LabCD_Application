@@ -39,10 +39,10 @@ class MPCParameters(BaseModel):
         "behaviour (see mpc/controller.py) -- unlike in the original version, tuning it is not a no-op.",
     )
     dt: Optional[float] = Field(
-        default=None, gt=0.0, le=2.0,
-        description="MPC sample time in seconds. Optional -- omit to leave it unchanged from the current "
-        "value. Only propose a new one if you have a specific reason (e.g. the system's response looks "
-        "under-sampled or unnecessarily fine); most iterations should leave this alone and focus on Q/R/Np/Nc.",
+        default=None, gt=0.0, le=0.2,
+        description="MPC sample time in seconds. Must be small enough that Np * dt < simulation_time (recommend <= 0.1s). "
+        "Optional -- omit to leave it unchanged from the current value. Only propose a new one if you have a specific reason; "
+        "most iterations should leave this alone and focus on Q/R/Np/Nc.",
     )
 
     @model_validator(mode="after")

@@ -85,6 +85,18 @@ def run_closed_loop(
     import traceback as _traceback
 
     try:
+        # Safely sync dt from params if provided and feasible
+        if params.get("dt"):
+            try:
+                p_dt = float(params["dt"])
+                np_val = int(params.get("Np") or cfg.mpc.prediction_horizon)
+                sim_time = float(cfg.data.simulation_time)
+                max_feasible_dt = min(0.2, (sim_time * 0.8) / max(np_val, 1))
+                if 1e-5 <= p_dt <= max_feasible_dt:
+                    cfg.data.dt_mpc = p_dt
+            except Exception:
+                pass
+
         cfg.mpc.set_from_dict(params)
         controller = GenericMPC(dynamics, cfg)
         simulator = SystemSimulator(dynamics, dt=cfg.data.dt_mpc)
@@ -262,16 +274,32 @@ def evaluator_node(state: Dict[str, Any], *, dynamics: BaseDynamics, cfg: Config
 
     # dt is tunable by the Actor now, exactly like Q/R/Np/Nc (see
     # agents/schemas.py's MPCParameters.dt and agents/actor.py's prompt) --
-    # applied here, right before the simulation actually runs, so every
-    # subsequent evaluation (and the Juror's own dt_mpc readout) reflects
-    # whatever the Actor most recently proposed. Optional: if the Actor's
-    # structured output omits it, the previous dt_mpc is left untouched.
-    if params.get("dt"):
-        cfg.data.dt_mpc = float(params["dt"])
+    # applied here, right before the simulation actually runs.
+    # Enforce hard feasibility (Np * dt < simulation_time) and clamp dt <= 0.2s.
+    orig_dt = cfg.data.dt_mpc if cfg is not None else 0.02
+    if params.get("dt") and cfg is not None:
+        try:
+            p_dt = float(params["dt"])
+            np_val = int(params.get("Np") or 20)
+            sim_time = float(cfg.data.simulation_time)
+            max_feasible_dt = min(0.2, (sim_time * 0.8) / max(np_val, 1))
+            if p_dt > max_feasible_dt or p_dt <= 1e-5:
+                log.warning(
+                    "[Evaluator] Clamping proposed dt=%.4f to safe feasible bound %.4f (Np=%d, sim_time=%.1f)",
+                    p_dt, max_feasible_dt, np_val, sim_time,
+                )
+                p_dt = max(1e-4, max_feasible_dt)
+                params["dt"] = p_dt
+            cfg.data.dt_mpc = p_dt
+        except Exception:
+            cfg.data.dt_mpc = orig_dt
 
     result = run_closed_loop(dynamics, cfg, params, max_steps=state.get("max_steps"))
 
     if "error" in result:
+        # Roll back dt_mpc to avoid contaminating subsequent iterations or final export
+        if cfg is not None:
+            cfg.data.dt_mpc = orig_dt
         history = state.get("history", []) + [f"[Evaluator] FAILED: {result['error']}"]
         return {**state, "eval_error": result["error"], "eval_traceback": result.get("traceback"), "history": history}
 

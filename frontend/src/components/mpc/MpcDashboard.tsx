@@ -871,6 +871,7 @@ print(f"MPC Controller initialized: Np={Np}, Nc={Nc}, dt={dt}")
                 baselineSeries={(results?.baseline_series || job?.baseline_series) as SimSeriesData | null}
                 currentIteration={currentIter}
                 bestMse={bestMse}
+                isCompleted={job?.status === 'completed' || results?.status === 'completed'}
               />
             </div>
 
