@@ -846,7 +846,7 @@ def _run_tuning_thread(job_id: str, store: InMemoryJobStore) -> None:
         dist_start = float(options.get("disturbance_start") or 0.25)
         dist_type = str(options.get("disturbance_type") or "step")
 
-        cfg.data.disturbance_amplitude = dist_amp if (scenario_level >= 3 or dist_amp > 0) else 0.0
+        cfg.data.disturbance_amplitude = dist_amp if scenario_level == 3 else 0.0
         cfg.data.disturbance_start = dist_start
         cfg.data.disturbance_type = dist_type
 
@@ -1914,6 +1914,13 @@ def _ensure_record_series(record: JobRecord, *, store: Any) -> None:
         cfg.data.trajectory_pulse_start = float(opts.get("trajectory_pulse_start") or 0.2)
         cfg.data.trajectory_pulse_end = float(opts.get("trajectory_pulse_end") or 0.6)
         cfg.data.noise_std = float(opts.get("noise_std") or 0.0)
+        scenario_level = int(opts.get("ui_scenario_level") or 1)
+        if scenario_level == 3:
+            cfg.data.disturbance_amplitude = float(opts.get("disturbance_amplitude") or 1.0)
+            cfg.data.disturbance_start = float(opts.get("disturbance_start") or 0.25)
+            cfg.data.disturbance_type = str(opts.get("disturbance_type") or "step")
+        else:
+            cfg.data.disturbance_amplitude = 0.0
 
         sim_res = run_closed_loop(dynamics, cfg, best_p)
         if isinstance(sim_res, dict) and not sim_res.get("error"):
