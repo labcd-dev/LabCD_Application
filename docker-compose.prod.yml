@@ -44,6 +44,23 @@ services:
       - api
     restart: unless-stopped
 
+  dozzle:
+    image: amir20/dozzle:v10.10.0
+    environment:
+      DOZZLE_AUTH_PROVIDER: simple
+      DOZZLE_AUTH_TTL: 48h
+      DOZZLE_NO_ANALYTICS: "true"
+      DOZZLE_HOSTNAME: labcd-vps
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./deploy/dozzle:/data
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   caddy:
     image: caddy:2-alpine
     ports:
@@ -55,6 +72,7 @@ services:
       - caddy_config:/config
     depends_on:
       - frontend
+      - dozzle
     restart: unless-stopped
 
 volumes:

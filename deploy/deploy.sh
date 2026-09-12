@@ -45,6 +45,13 @@ fi
 
 "${COMPOSE[@]}" up -d --build --remove-orphans
 
+if [[ ! -f deploy/dozzle/users.yml ]]; then
+  echo "==> WARNING: deploy/dozzle/users.yml is missing."
+  echo "    https://logs.labcd.ai will not accept logins until you run:"
+  echo "    bash deploy/setup-dozzle.sh"
+  echo "    docker compose -f docker-compose.prod.yml --env-file .env up -d --force-recreate dozzle"
+fi
+
 echo "==> Service status"
 "${COMPOSE[@]}" ps
 
