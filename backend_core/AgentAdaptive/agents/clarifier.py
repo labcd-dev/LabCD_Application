@@ -275,7 +275,7 @@ def _debug(title, **fields):
         pass
 
 
-MAX_CLARIFY_TURNS = 12
+MAX_CLARIFY_TURNS = 6
 
 
 def _plant_context(spec):

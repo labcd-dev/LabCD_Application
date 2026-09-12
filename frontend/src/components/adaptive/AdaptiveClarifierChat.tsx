@@ -48,7 +48,7 @@ export function AdaptiveClarifierChat({
             <div className="flex items-center gap-2">
               <h3 className="text-base font-semibold text-foreground">System Clarifier Agent</h3>
               <span className="rounded-full bg-cyan-500/20 px-2.5 py-0.5 text-[11px] font-bold text-cyan-700 dark:text-cyan-300 border border-cyan-500/30">
-                Round {job.round || 1} of 6
+                Inquiry #{job.round || 1}
               </span>
             </div>
             <p className="text-xs text-muted">

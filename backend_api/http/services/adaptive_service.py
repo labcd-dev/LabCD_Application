@@ -897,7 +897,7 @@ def clarify_job(
         messages.append({"role": "user", "content": user_text})
 
     round_num = record.clarify_round + 1
-    force_finish = bool(request.force_finish) or round_num > clarifier.MAX_CLARIFY_TURNS
+    force_finish = bool(request.force_finish) or round_num >= clarifier.MAX_CLARIFY_TURNS
     on_event = _make_on_event(job_id, job_store)
 
     status, reply, dynamics, usage, error, updated = clarifier.run_clarifier_turn(
