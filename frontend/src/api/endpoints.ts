@@ -55,6 +55,7 @@ import type {
   TutorialDocumentSummary,
   TutorialVideo,
   UploadResponse,
+  UserJourney,
   MediaUploadResponse,
   SiteBrand,
   NavMenuItem,
@@ -321,6 +322,8 @@ export const adminApi = {
     }),
   listUsers: () => apiFetch<AuthUser[]>('/admin/users'),
   getUser: (userId: number) => apiFetch<AdminUserDetail>(`/admin/users/${userId}`),
+  getUserJourney: (userId: number) =>
+    apiFetch<UserJourney>(`/admin/users/${userId}/journey`),
   getUserCredits: (userId: number) =>
     apiFetch<AdminUserCredits>(`/admin/users/${userId}/credits`),
   adjustUserCredits: (userId: number, body: { amount: number; note?: string }) =>

@@ -9,6 +9,7 @@ import {
   FolderKanban,
   Flag,
   Globe,
+  History,
   Key,
   KeyRound,
   LayoutDashboard,
@@ -32,6 +33,7 @@ import { btnBase, btnCompact } from '../../lib/classes'
 const navItems = [
   { to: '/admin', end: true, label: 'Overview', icon: LayoutDashboard, action: 'admin:access' },
   { to: '/admin/users', end: false, label: 'Users', icon: Users, action: 'admin:users' },
+  { to: '/admin/journey', end: false, label: 'User journey', icon: History, action: 'admin:users' },
   { to: '/admin/projects', end: false, label: 'Projects', icon: FolderKanban, action: 'admin:projects' },
   { to: '/admin/plant-model', end: false, label: 'Plant chats', icon: MessagesSquare, action: 'admin:plant_model' },
   { to: '/admin/plans', end: false, label: 'Plans', icon: Package, action: 'admin:plans' },

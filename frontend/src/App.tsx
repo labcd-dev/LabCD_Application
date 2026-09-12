@@ -28,6 +28,7 @@ import { AdminSitePage } from './pages/AdminSitePage'
 import { AdminSurveyPage } from './pages/AdminSurveyPage'
 import { AdminTutorialsPage } from './pages/AdminTutorialsPage'
 import { AdminUserDetailPage } from './pages/AdminUserDetailPage'
+import { AdminUserJourneyPage } from './pages/AdminUserJourneyPage'
 import { AdminUsersPage } from './pages/AdminUsersPage'
 import { BlogListPage } from './pages/BlogListPage'
 import { BlogPostPage } from './pages/BlogPostPage'
@@ -104,6 +105,7 @@ export default function App() {
                   <Route path="roles" element={<AdminRolesPage />} />
                   <Route path="users" element={<AdminUsersPage />} />
                   <Route path="users/:userId" element={<AdminUserDetailPage />} />
+                  <Route path="journey" element={<AdminUserJourneyPage />} />
                   <Route path="projects" element={<AdminProjectsPage />} />
                   <Route path="projects/:projectId" element={<AdminProjectDetailPage />} />
                   <Route path="plant-model" element={<AdminPlantModelChatsPage />} />

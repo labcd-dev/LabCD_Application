@@ -280,6 +280,41 @@ export interface AdminUserDetail {
   sessions?: AuthSessionInfo[]
 }
 
+export type JourneyStepStatus = 'ok' | 'fail' | 'info'
+
+export interface JourneyUser {
+  id: number
+  email: string
+  display_name: string | null
+}
+
+export interface JourneyStep {
+  id: string
+  kind: string
+  title: string
+  timestamp: string
+  status: JourneyStepStatus
+  duration_seconds: number | null
+  detail: string | null
+  error: string | null
+  source_id: string | null
+}
+
+export interface JourneyComment {
+  id: string
+  source: string
+  text: string
+  timestamp: string
+  rating: number | null
+  meta: string | null
+}
+
+export interface UserJourney {
+  user: JourneyUser
+  steps: JourneyStep[]
+  comments: JourneyComment[]
+}
+
 export type ExperienceLevel = 'None' | 'Beginner' | 'Intermediate' | 'Advanced'
 export type DegreeLevel = "Bachelor's" | "Master's" | 'PhD' | 'Other'
 export type FeedbackPipelineType = 'siloDesign' | 'muloDesign' | 'adaptiveDesign' | 'mpcDesign'
