@@ -93,6 +93,28 @@ export function AdaptiveDashboard({
   const [localApplyUsed, setLocalApplyUsed] = useState(false)
   const diagnosisModalShownForJob = useRef<string | null>(null)
   const logScrollRef = useRef<HTMLDivElement>(null)
+  const dagRef = useRef<HTMLDivElement>(null)
+  const [dagHeight, setDagHeight] = useState<number | null>(null)
+
+  useEffect(() => {
+    if (!dagRef.current) return
+    const updateHeight = () => {
+      if (dagRef.current && window.innerWidth >= 1024) {
+        const h = Math.round(dagRef.current.getBoundingClientRect().height)
+        if (h > 0) setDagHeight(h)
+      } else {
+        setDagHeight(null)
+      }
+    }
+    updateHeight()
+    const ro = new ResizeObserver(updateHeight)
+    ro.observe(dagRef.current)
+    window.addEventListener('resize', updateHeight)
+    return () => {
+      ro.disconnect()
+      window.removeEventListener('resize', updateHeight)
+    }
+  }, [])
 
   const hasDiagnosis = Boolean(results?.diagnosis?.report)
   const suggestionCount = Array.isArray(results?.diagnosis?.report?.suggestions)
@@ -863,7 +885,7 @@ title('LabCD Adaptive Closed-Loop Response'); legend('show', 'Location', 'best')
           {/* Row 1: Agent Pipeline DAG (7 cols) + Adaptive Control Law & Parameters (5 cols) */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-stretch">
             {/* Left: Agent Pipeline DAG */}
-            <div className="lg:col-span-7">
+            <div ref={dagRef} className="lg:col-span-7">
               <AdaptiveAgentFlowStrip
                 currentStage={
                   job?.stage ||
@@ -879,9 +901,12 @@ title('LabCD Adaptive Closed-Loop Response'); legend('show', 'Location', 'best')
             </div>
 
             {/* Right: Adaptive Control Law */}
-            <div className="lg:col-span-5 rounded-2xl border border-border bg-surface-elevated p-4 shadow-sm flex flex-col justify-between">
-              <div className="flex-1 flex flex-col">
-                <div className="flex items-center justify-between mb-2.5">
+            <div
+              style={dagHeight ? { maxHeight: `${dagHeight}px`, height: `${dagHeight}px` } : undefined}
+              className="lg:col-span-5 rounded-2xl border border-border bg-surface-elevated p-4 shadow-sm flex flex-col justify-between overflow-hidden"
+            >
+              <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+                <div className="flex items-center justify-between mb-2 shrink-0">
                   <div className="flex items-center gap-2">
                     <div className="flex size-7 items-center justify-center rounded-lg bg-cyan-500/15 text-cyan-600 dark:text-cyan-300 border border-cyan-500/30">
                       <Sliders className="size-4" />
@@ -915,7 +940,7 @@ title('LabCD Adaptive Closed-Loop Response'); legend('show', 'Location', 'best')
                 </div>
 
                 {activeGains.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 mb-2 font-mono text-[10.5px]">
+                  <div className="flex flex-wrap gap-1.5 mb-2 font-mono text-[10.5px] shrink-0">
                     {activeGains.map(([k, v]) => (
                       <span key={k} className="rounded-md border border-border bg-surface px-2 py-0.5 text-muted-text">
                         <span className="text-cyan-600 dark:text-cyan-400 font-semibold">{k}:</span>{' '}
@@ -926,14 +951,14 @@ title('LabCD Adaptive Closed-Loop Response'); legend('show', 'Location', 'best')
                 )}
 
                 {controlLawText ? (
-                  <div className="rounded-xl border border-border bg-surface p-3.5 max-h-72 overflow-y-auto text-xs text-foreground space-y-2 flex-1">
-                    <div className="text-[11.5px] font-bold text-cyan-600 dark:text-cyan-400 mb-1">
+                  <div className="rounded-xl border border-border bg-surface p-3 overflow-y-auto text-xs text-foreground space-y-2 flex-1 min-h-0">
+                    <div className="text-[11px] font-bold text-cyan-600 dark:text-cyan-400 mb-1 sticky top-0 bg-surface/95 backdrop-blur-xs z-10 py-0.5">
                       Derived Control Law:
                     </div>
                     <MarkdownContent content={controlLawText} className="text-xs leading-relaxed text-foreground" />
                   </div>
                 ) : (
-                  <div className="rounded-xl border border-border bg-surface/50 p-6 text-center text-xs text-muted-text flex-1 flex flex-col items-center justify-center space-y-1">
+                  <div className="rounded-xl border border-border bg-surface/50 p-6 text-center text-xs text-muted-text flex-1 min-h-0 flex flex-col items-center justify-center space-y-1">
                     <p className="font-semibold text-foreground">Awaiting Mathematical Synthesis</p>
                     <p className="text-[11px]">Launch adaptive controller design to derive the plant-specific symbolic control law.</p>
                   </div>
