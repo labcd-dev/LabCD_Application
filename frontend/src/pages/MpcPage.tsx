@@ -284,6 +284,9 @@ export function MpcPage() {
         sim_time: 2.0,
       })
       if (res.error) {
+        if (typeof res.error === 'string' && res.error.includes('Unknown plugin_id')) {
+          sessionStorage.removeItem('labcd_last_artifact_id')
+        }
         setError(res.error)
       } else {
         setDiagnostics(res)

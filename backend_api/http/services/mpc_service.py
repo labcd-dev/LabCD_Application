@@ -353,7 +353,14 @@ def _resolve_plugin_path(dynamics: MPCDynamicsInput | dict[str, Any] | None) -> 
                 return str(Path(art_path).resolve())
         except Exception:
             pass
-        raise ValueError(f"Unknown plugin_id: {dynamics.plugin_id!r} (looked for {path} and artifact store)")
+
+        # If dynamics.source is provided, fall through to compile/use source instead of crashing
+        if not dynamics.source:
+            raise ValueError(f"Unknown plugin_id: {dynamics.plugin_id!r} (looked for {path} and artifact store)")
+        log.warning(
+            "[MPC] plugin_id %r not found on disk/artifact store; falling back to compile from dynamics.source",
+            dynamics.plugin_id,
+        )
 
     if dynamics.source:
         # 1. If source is already a complete MPC plugin with create_config, write and return
