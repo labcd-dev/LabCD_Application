@@ -108,13 +108,36 @@ FEEDBACK_SURVEY_CSV_FIELDS = [
     "user_id",
     "email",
     "pipeline_type",
-    "satisfaction",
+    "job_id",
+    "project_id",
+    "plant_name",
+    "score",
+    "success",
+    "technical_usefulness",
+    "technical_usefulness_na",
+    "trust",
+    "trust_na",
     "ease_of_use",
-    "product_value",
-    "confidence",
     "reuse_intention",
-    "willingness_to_pay",
+    "nps",
     "main_problems",
+    "is_bug",
+    "created_at",
+]
+
+BEFORE_TEST_SURVEY_CSV_FIELDS = [
+    "user_id",
+    "email",
+    "q1_last_worked",
+    "q2_time_spent",
+    "q3_knowledge_gaps",
+    "q4_difficult_parts",
+    "q5_biggest_problem",
+    "q6_help_sources",
+    "q7_considered_paying",
+    "q8a_amount_hired",
+    "q8b_amount_paid_to_user",
+    "q9_impact",
     "created_at",
 ]
 
@@ -366,13 +389,41 @@ def _feedback_survey_csv_row(
         "user_id": user.id,
         "email": user.email,
         "pipeline_type": response.pipeline_type,
-        "satisfaction": response.satisfaction,
+        "job_id": response.job_id or "",
+        "project_id": response.project_id if response.project_id is not None else "",
+        "plant_name": response.plant_name or "",
+        "score": response.score if response.score is not None else "",
+        "success": response.success if response.success is not None else "",
+        "technical_usefulness": response.technical_usefulness if response.technical_usefulness is not None else "",
+        "technical_usefulness_na": response.technical_usefulness_na,
+        "trust": response.trust if response.trust is not None else "",
+        "trust_na": response.trust_na,
         "ease_of_use": response.ease_of_use,
-        "product_value": response.product_value,
-        "confidence": response.confidence,
         "reuse_intention": response.reuse_intention,
-        "willingness_to_pay": response.willingness_to_pay,
+        "nps": response.nps if response.nps is not None else "",
         "main_problems": response.main_problems or "",
+        "is_bug": response.is_bug,
+        "created_at": _iso(response.created_at),
+    }
+
+
+def _before_test_survey_csv_row(
+    response: Any,
+    user: User,
+) -> dict[str, Any]:
+    return {
+        "user_id": user.id,
+        "email": user.email,
+        "q1_last_worked": response.q1_last_worked or "",
+        "q2_time_spent": response.q2_time_spent or "",
+        "q3_knowledge_gaps": response.q3_knowledge_gaps,
+        "q4_difficult_parts": "; ".join(response.q4_difficult_parts or []) if isinstance(response.q4_difficult_parts, list) else str(response.q4_difficult_parts or ""),
+        "q5_biggest_problem": response.q5_biggest_problem or "",
+        "q6_help_sources": "; ".join(response.q6_help_sources or []) if isinstance(response.q6_help_sources, list) else str(response.q6_help_sources or ""),
+        "q7_considered_paying": response.q7_considered_paying or "",
+        "q8a_amount_hired": response.q8a_amount_hired or "",
+        "q8b_amount_paid_to_user": response.q8b_amount_paid_to_user or "",
+        "q9_impact": "; ".join(response.q9_impact or []) if isinstance(response.q9_impact, list) else str(response.q9_impact or ""),
         "created_at": _iso(response.created_at),
     }
 
@@ -982,6 +1033,7 @@ def export_overview_xlsx(db: Session) -> bytes:
         ("plans", export_plans_csv(db)),
         ("projects", export_projects_csv(db)),
         ("profile_survey", export_profile_survey_csv(db)),
+        ("before_test_survey", export_before_test_survey_csv(db)),
         ("feedback_survey", export_feedback_survey_csv(db)),
         ("monitoring", export_monitoring_csv()),
     ]
@@ -1000,6 +1052,14 @@ def export_profile_survey_csv(db: Session) -> str:
         for user in survey_service.list_profile_responses(db)
     ]
     return rows_to_csv(rows, PROFILE_SURVEY_CSV_FIELDS)
+
+
+def export_before_test_survey_csv(db: Session) -> str:
+    rows = [
+        _before_test_survey_csv_row(response, user)
+        for response, user in survey_service.list_before_test_responses(db)
+    ]
+    return rows_to_csv(rows, BEFORE_TEST_SURVEY_CSV_FIELDS)
 
 
 def export_feedback_survey_csv(db: Session) -> str:

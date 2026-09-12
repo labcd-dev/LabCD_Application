@@ -11,6 +11,7 @@ from sqlalchemy import (
     Column,
     Date,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -214,6 +215,12 @@ class User(Base):
     )
     feedback_surveys: Mapped[list[FeedbackSurveyResponse]] = relationship(
         "FeedbackSurveyResponse",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+    before_test_surveys: Mapped[list["BeforeTestSurveyResponse"]] = relationship(
+        "BeforeTestSurveyResponse",
         back_populates="user",
         cascade="all, delete-orphan",
         lazy="selectin",
@@ -446,7 +453,7 @@ class PlantModelMessage(Base):
 
 
 class FeedbackSurveyResponse(Base):
-    """Post-use feedback survey answers — any number per user per pipeline (SILO / MULO)."""
+    """Post-use feedback survey answers — per user per pipeline (SILO, MULO, MPC, Adaptive) with full job tracing."""
 
     __tablename__ = "feedback_survey_responses"
 
@@ -461,13 +468,25 @@ class FeedbackSurveyResponse(Base):
         nullable=False,
         index=True,
     )
-    satisfaction: Mapped[int] = mapped_column(Integer, nullable=False)
-    ease_of_use: Mapped[int] = mapped_column(Integer, nullable=False)
-    product_value: Mapped[int] = mapped_column(Integer, nullable=False)
-    confidence: Mapped[int] = mapped_column(Integer, nullable=False)
-    reuse_intention: Mapped[int] = mapped_column(Integer, nullable=False)
-    willingness_to_pay: Mapped[int] = mapped_column(Integer, nullable=False)
+    job_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    project_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    plant_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    success: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    technical_usefulness: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    technical_usefulness_na: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    trust: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    trust_na: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    satisfaction: Mapped[int] = mapped_column(Integer, default=4, nullable=False)
+    ease_of_use: Mapped[int] = mapped_column(Integer, default=4, nullable=False)
+    product_value: Mapped[int] = mapped_column(Integer, default=4, nullable=False)
+    confidence: Mapped[int] = mapped_column(Integer, default=4, nullable=False)
+    reuse_intention: Mapped[int] = mapped_column(Integer, default=4, nullable=False)
+    willingness_to_pay: Mapped[int] = mapped_column(Integer, default=3, nullable=False)
+    nps: Mapped[int | None] = mapped_column(Integer, nullable=True)
     main_problems: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    is_bug: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    extra_data: Mapped[dict[str, Any] | None] = mapped_column(JsonDict, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
@@ -475,6 +494,36 @@ class FeedbackSurveyResponse(Base):
     )
 
     user: Mapped[User] = relationship("User", back_populates="feedback_surveys")
+
+
+class BeforeTestSurveyResponse(Base):
+    """Answers to the WS04 Before-Test / Intro Survey."""
+
+    __tablename__ = "before_test_survey_responses"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    q1_last_worked: Mapped[str] = mapped_column(String(100), nullable=False)
+    q2_time_spent: Mapped[str] = mapped_column(String(100), default="", nullable=False)
+    q3_knowledge_gaps: Mapped[int] = mapped_column(Integer, default=3, nullable=False)
+    q4_difficult_parts: Mapped[list[Any]] = mapped_column(JsonDict, default=list, nullable=False)
+    q5_biggest_problem: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    q6_help_sources: Mapped[list[Any]] = mapped_column(JsonDict, default=list, nullable=False)
+    q7_considered_paying: Mapped[str] = mapped_column(String(100), nullable=False)
+    q8a_amount_hired: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    q8b_amount_paid_to_user: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    q9_impact: Mapped[list[Any]] = mapped_column(JsonDict, default=list, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    user: Mapped[User] = relationship("User", back_populates="before_test_surveys")
 
 
 class TutorialVideo(Base):

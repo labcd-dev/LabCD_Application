@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { CheckCircle2, AlertTriangle, Star, Clock, Coins, Flame } from 'lucide-react'
-import type { SessionMetadata } from '../api/types'
+import type { FeedbackPipelineType, SessionMetadata } from '../api/types'
 import { GradeDesignModal } from './GradeDesignModal'
 
 export interface ScoreReportBadgeProps {
@@ -17,6 +17,8 @@ export interface ScoreReportBadgeProps {
   compact?: boolean
   className?: string
   hideCostTokens?: boolean
+  plantName?: string | null
+  pipelineType?: FeedbackPipelineType
 }
 
 export function ScoreReportBadge({
@@ -33,10 +35,20 @@ export function ScoreReportBadge({
   compact = false,
   className = '',
   hideCostTokens = false,
+  plantName,
+  pipelineType,
 }: ScoreReportBadgeProps) {
   const [modalOpen, setModalOpen] = useState(false)
   const [currentRating, setCurrentRating] = useState<number | null | undefined>(initialRating)
   const [currentComment, setCurrentComment] = useState<string | null | undefined>(initialComment)
+
+  const resolvedPipelineType: FeedbackPipelineType =
+    pipelineType ||
+    (moduleType === 'mpc'
+      ? 'mpcDesign'
+      : moduleType === 'adaptive'
+      ? 'adaptiveDesign'
+      : 'siloDesign')
 
   // Keep internal state aligned if props update
   if (initialRating !== undefined && initialRating !== currentRating) {
@@ -183,12 +195,14 @@ export function ScoreReportBadge({
         )}
       </div>
 
-      {/* Grade Design Modal */}
+      {/* Grade Design & Outro Survey Modal */}
       <GradeDesignModal
         open={modalOpen}
         moduleType={moduleType}
+        pipelineType={resolvedPipelineType}
         jobId={jobId}
         projectId={projectId}
+        plantName={plantName}
         initialRating={currentRating}
         initialComment={currentComment}
         score={score}

@@ -1353,7 +1353,9 @@ export function MpcPage() {
         <GradeDesignModal
           open={gradeModalOpen}
           moduleType="mpc"
+          pipelineType="mpcDesign"
           jobId={jobId}
+          plantName={(job as any)?.plant_name || (job as any)?.plant_id || 'MPC System'}
           score={results.score}
           success={results.success}
           initialRating={results.design_grade?.rating}

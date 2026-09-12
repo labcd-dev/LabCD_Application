@@ -711,7 +711,9 @@ export function AdaptivePage() {
         <GradeDesignModal
           open={gradeModalOpen}
           moduleType="adaptive"
+          pipelineType="adaptiveDesign"
           jobId={jobId}
+          plantName={(job as any)?.plant_name || (job as any)?.plant_id || 'Adaptive Plant'}
           score={results.score}
           success={results.success}
           initialRating={results.design_grade?.rating}
