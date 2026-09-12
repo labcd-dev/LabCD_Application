@@ -37,6 +37,40 @@ export function setErrorTrackingConfig(next: ErrorTrackingSettings): void {
   config = next
 }
 
+const MAX_REPORTS_PER_WINDOW = 5
+const WINDOW_MS = 10_000
+const DEDUP_MS = 5_000
+
+const recentReportTimestamps: number[] = []
+const recentReportHashes = new Map<string, number>()
+
+function isRateLimitedOrDuplicate(message: string, path?: string | null): boolean {
+  const now = Date.now()
+  while (recentReportTimestamps.length > 0 && now - recentReportTimestamps[0] > WINDOW_MS) {
+    recentReportTimestamps.shift()
+  }
+  if (recentReportTimestamps.length >= MAX_REPORTS_PER_WINDOW) {
+    return true
+  }
+
+  const key = `${path ?? ''}::${message}`
+  const lastTime = recentReportHashes.get(key)
+  if (lastTime && now - lastTime < DEDUP_MS) {
+    return true
+  }
+
+  recentReportTimestamps.push(now)
+  recentReportHashes.set(key, now)
+
+  if (recentReportHashes.size > 50) {
+    for (const [k, t] of recentReportHashes.entries()) {
+      if (now - t > DEDUP_MS) recentReportHashes.delete(k)
+    }
+  }
+
+  return false
+}
+
 export function shouldReportFrontendErrors(): boolean {
   return Boolean(config?.enabled && config.frontend)
 }
@@ -51,6 +85,7 @@ export function reportFrontendError(payload: {
   extra?: Record<string, unknown> | null
 }): void {
   if (!shouldReportFrontendErrors()) return
+  if (isRateLimitedOrDuplicate(payload.message, payload.path)) return
 
   const token = getAuthToken()
   void fetch(`${API_BASE}/errors/report`, {

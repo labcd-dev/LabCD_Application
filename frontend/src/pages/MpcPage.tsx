@@ -154,6 +154,10 @@ export function MpcPage() {
       jobId,
       (event, data) => {
         if (!isSubscribed) return
+        if (pollTimerRef.current) {
+          clearInterval(pollTimerRef.current)
+          pollTimerRef.current = null
+        }
         if (event === 'progress') {
           setJob((prev) => (prev ? { ...prev, progress: [...(prev.progress || []), data] } : prev))
         } else if (event === 'status') {
@@ -166,15 +170,15 @@ export function MpcPage() {
         }
       },
       () => {
-        if (!pollTimerRef.current) {
-          poll()
-          pollTimerRef.current = setInterval(poll, 1500)
+        if (!pollTimerRef.current && isSubscribed) {
+          void poll()
+          pollTimerRef.current = setInterval(poll, 2500)
         }
       }
     )
 
-    poll()
-    pollTimerRef.current = setInterval(poll, 1500)
+    // Initial status fetch; interval polling only activates if SSE stream disconnects/fails
+    void poll()
 
     return () => {
       isSubscribed = false

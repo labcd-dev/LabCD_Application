@@ -8,8 +8,10 @@ from fastapi import Depends, HTTPException, Query, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
+from collections.abc import Generator
+
 from backend_api.db.models import AuthSession, User
-from backend_api.db.session import get_db
+from backend_api.db.session import SessionLocal, get_db
 from backend_api.http.services.auth_service import decode_access_token, get_user_by_id
 from backend_api.http.services.job_store import Job
 from backend_api.http.services import session_service
@@ -138,22 +140,38 @@ def get_current_user_and_session_allow_unverified(
     return _load_user_and_session(token, db, require_verified=False)
 
 
+def get_db_if_authenticated(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    access_token: str | None = Query(default=None),
+) -> Generator[Session | None, None, None]:
+    """Acquire a DB session ONLY if an auth token is provided; otherwise yield None without touching the DB pool."""
+    token = _extract_bearer_token(credentials, access_token)
+    if not token:
+        yield None
+        return
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
 def get_optional_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     access_token: str | None = Query(default=None),
+    db: Session | None = Depends(get_db_if_authenticated),
 ) -> User | None:
-    """Return the current user when a valid token is present; otherwise None."""
+    """Return the current user when a valid token is present; otherwise None without touching DB."""
+    if db is None:
+        return None
     token = _extract_bearer_token(credentials, access_token)
     if not token:
         return None
-    from backend_api.db.session import SessionLocal
-
-    with SessionLocal() as db:
-        try:
-            user, _session = _load_user_and_session(token, db)
-            return user
-        except HTTPException:
-            return None
+    try:
+        user, _session = _load_user_and_session(token, db)
+        return user
+    except HTTPException:
+        return None
 
 
 def require_admin(user: User = Depends(get_current_user)) -> User:
