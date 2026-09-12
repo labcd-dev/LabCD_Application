@@ -36,6 +36,7 @@ class SurveySettingsUpdate(BaseModel):
 class SurveyStatusResponse(BaseModel):
     enabled: bool
     needs_profile_survey: bool
+    before_test_completed: bool = False
     feedback_completed: bool
     feedback_completed_silo: bool = False
     feedback_completed_mulo: bool = False

@@ -52,6 +52,7 @@ def get_survey_status(
     return SurveyStatusResponse(
         enabled=enabled,
         needs_profile_survey=survey_service.needs_profile_survey(db, user),
+        before_test_completed=user.profile_survey_completed_at is not None or bool(user.before_test_surveys),
         show_tutorial=survey_service.should_show_tutorial(user, videos),
         videos=[TutorialVideoOut.model_validate(v) for v in videos],
         **_feedback_status_fields(user),

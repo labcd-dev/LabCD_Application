@@ -472,6 +472,7 @@ export interface ControlDesignTemplate {
 export interface SurveyStatus {
   enabled: boolean
   needs_profile_survey: boolean
+  before_test_completed?: boolean
   feedback_completed: boolean
   feedback_completed_silo: boolean
   feedback_completed_mulo: boolean
