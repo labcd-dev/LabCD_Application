@@ -228,6 +228,31 @@ def test_journey_complete_timeline_and_comments(journey_client):
     comment_ts = [c["timestamp"] for c in comments]
     assert comment_ts == sorted(comment_ts, reverse=True)
 
+    dossier = body["dossier"]
+    assert dossier["health"] in {"good", "at_risk", "new"}
+    assert "survey complete" in dossier["tags"]
+    assert "activated" in dossier["tags"]
+    kpis = dossier["kpis"]
+    assert kpis["sessions"] == 1
+    assert kpis["sessions_completed"] == 1
+    assert kpis["success_rate"] == 100.0
+    assert kpis["avg_score"] == 78.0
+    assert kpis["error_count"] == 1
+    assert dossier["persona"] is not None
+    assert "label" in dossier["persona"]
+    assert dossier["profile"] is not None
+    assert len(dossier["recent_sessions"]) == 1
+    assert dossier["recent_sessions"][0]["title"] == "DC motor · SILO"
+    assert dossier["latest_project_id"] is not None
+    mix_names = {m["pipeline_type"] for m in dossier["pipeline_mix"]}
+    assert "siloDesign" in mix_names
+    silo = next(m for m in dossier["pipeline_mix"] if m["pipeline_type"] == "siloDesign")
+    assert silo["count"] == 1
+    assert dossier["flags"]["email_verified"] is True
+    assert dossier["flags"]["profile_survey_complete"] is True
+    assert dossier["usage"]["avg_rating"] == 4.0
+    assert isinstance(dossier["actions"], list) and len(dossier["actions"]) >= 1
+
 
 def test_journey_not_found(journey_client):
     client = journey_client["client"]

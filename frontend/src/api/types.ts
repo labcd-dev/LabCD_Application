@@ -281,6 +281,8 @@ export interface AdminUserDetail {
 }
 
 export type JourneyStepStatus = 'ok' | 'fail' | 'info'
+export type JourneyHealth = 'good' | 'at_risk' | 'new'
+export type JourneyActionPriority = 'high' | 'med' | 'low'
 
 export interface JourneyUser {
   id: number
@@ -309,10 +311,114 @@ export interface JourneyComment {
   meta: string | null
 }
 
+export interface JourneySignal {
+  key: string
+  value: string
+  positive: boolean
+}
+
+export interface JourneyPersonaAlt {
+  label: string
+  score: number
+}
+
+export interface JourneyPersona {
+  label: string
+  score: number
+  signals: JourneySignal[]
+  alts: JourneyPersonaAlt[]
+}
+
+export interface JourneyProfile {
+  university: string | null
+  degree: string | null
+  major: string | null
+  matlab_experience: string | null
+  control_design_experience: string | null
+  completed_at: string | null
+}
+
+export interface JourneyKpis {
+  sessions: number
+  sessions_completed: number
+  sessions_abandoned: number
+  success_rate: number | null
+  avg_score: number | null
+  best_score: number | null
+  worst_score: number | null
+  tokens_total: number
+  credits_charged: number
+  error_count: number
+  error_by_source: Record<string, number>
+  time_seconds: number
+  median_session_seconds: number | null
+}
+
+export interface JourneyPipelineMix {
+  name: string
+  pipeline_type: string
+  count: number
+  pct: number
+}
+
+export interface JourneySession {
+  id: number
+  title: string
+  pipeline: string
+  pipeline_type: string
+  status: string
+  score: number | null
+  duration_seconds: number | null
+  tokens: number | null
+  updated_at: string
+}
+
+export interface JourneyUsage {
+  tokens_total: number
+  credits_charged: number
+  avg_credits_per_success: number | null
+  api_errors: number
+  other_errors: number
+  avg_rating: number | null
+  rating_count: number
+}
+
+export interface JourneyFlags {
+  email_verified: boolean
+  is_active: boolean
+  bug_report_count: number
+  profile_survey_complete: boolean
+}
+
+export interface JourneyAction {
+  priority: JourneyActionPriority
+  title: string
+  detail: string
+}
+
+export interface JourneyDossier {
+  joined_at: string | null
+  last_active_at: string | null
+  plan_name: string | null
+  health: JourneyHealth
+  health_detail: string
+  tags: string[]
+  kpis: JourneyKpis
+  persona: JourneyPersona | null
+  profile: JourneyProfile | null
+  pipeline_mix: JourneyPipelineMix[]
+  recent_sessions: JourneySession[]
+  usage: JourneyUsage
+  flags: JourneyFlags
+  actions: JourneyAction[]
+  latest_project_id: number | null
+}
+
 export interface UserJourney {
   user: JourneyUser
   steps: JourneyStep[]
   comments: JourneyComment[]
+  dossier: JourneyDossier
 }
 
 export type ExperienceLevel = 'None' | 'Beginner' | 'Intermediate' | 'Advanced'

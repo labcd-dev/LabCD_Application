@@ -134,6 +134,406 @@ def _is_mirrored_grade_feedback(row: FeedbackSurveyResponse, grade_texts: set[st
     return len(set(scales)) == 1
 
 
+def _project_score(project: Project) -> float | None:
+    if not isinstance(project.results, dict):
+        return None
+    raw = project.results.get("score")
+    if isinstance(raw, (int, float)):
+        return float(raw)
+    return None
+
+
+def _project_duration_seconds(project: Project) -> int | None:
+    created = _ts(project.created_at)
+    updated = _ts(project.updated_at)
+    if created and updated and updated > created:
+        return int((updated - created).total_seconds())
+    return None
+
+
+def _median(values: list[int]) -> int | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    mid = len(ordered) // 2
+    if len(ordered) % 2:
+        return ordered[mid]
+    return int(round((ordered[mid - 1] + ordered[mid]) / 2))
+
+
+def _email_domain(email: str) -> str:
+    parts = email.rsplit("@", 1)
+    return parts[1].lower() if len(parts) == 2 else ""
+
+
+def _infer_persona(user: Any) -> dict[str, Any]:
+    domain = _email_domain(user.email or "")
+    signals: list[dict[str, Any]] = []
+    academia = 0
+    engineer = 0
+    sme = 0
+
+    if domain.endswith(".edu") or domain.endswith(".ac.ir") or "university" in domain:
+        academia += 40
+        signals.append(
+            {"key": "Email domain", "value": f".edu / academic ({domain})", "positive": True}
+        )
+    elif domain.endswith(".com") or domain.endswith(".io"):
+        engineer += 15
+        sme += 10
+        signals.append({"key": "Email domain", "value": domain or "—", "positive": False})
+    else:
+        signals.append({"key": "Email domain", "value": domain or "—", "positive": False})
+
+    if user.university:
+        academia += 30
+        signals.append(
+            {"key": "University", "value": str(user.university), "positive": True}
+        )
+    if user.degree:
+        academia += 15
+        signals.append({"key": "Degree", "value": str(user.degree), "positive": False})
+    if user.major:
+        major_l = str(user.major).lower()
+        signals.append({"key": "Major", "value": str(user.major), "positive": False})
+        if any(k in major_l for k in ("control", "electrical", "mechatronic", "aerospace")):
+            engineer += 20
+        if any(k in major_l for k in ("business", "mba", "management")):
+            sme += 15
+    if user.matlab_experience:
+        signals.append(
+            {
+                "key": "MATLAB experience",
+                "value": str(user.matlab_experience),
+                "positive": False,
+            }
+        )
+        if user.matlab_experience in {"Intermediate", "Advanced"}:
+            engineer += 10
+            academia += 5
+    if user.control_design_experience:
+        signals.append(
+            {
+                "key": "Control experience",
+                "value": str(user.control_design_experience),
+                "positive": False,
+            }
+        )
+        if user.control_design_experience in {"Intermediate", "Advanced"}:
+            engineer += 15
+
+    scores = {
+        "Academia · researcher": academia,
+        "Control engineer": engineer,
+        "SME": sme,
+    }
+    ordered = sorted(scores.items(), key=lambda kv: kv[1], reverse=True)
+    best_label, best_score = ordered[0]
+    if best_score <= 0:
+        best_label = "Unknown"
+        best_score = 0
+    total = sum(max(0, s) for s in scores.values()) or 1
+    conf = int(round(100 * max(0, best_score) / total)) if best_score > 0 else 0
+    alts = [
+        {"label": label, "score": int(round(100 * max(0, sc) / total))}
+        for label, sc in ordered[1:]
+        if sc > 0
+    ]
+    return {
+        "label": best_label,
+        "score": conf,
+        "signals": signals,
+        "alts": alts,
+    }
+
+
+def _build_actions(
+    *,
+    user: Any,
+    projects: list[Project],
+    error_count: int,
+    persona_label: str,
+    completed: int,
+    abandoned: int,
+) -> list[dict[str, str]]:
+    actions: list[dict[str, str]] = []
+    if user.profile_survey_completed_at is None:
+        actions.append(
+            {
+                "priority": "med",
+                "title": "Prompt profile survey",
+                "detail": "User has not completed the profile survey; onboarding signals are incomplete.",
+            }
+        )
+    if error_count >= 3:
+        actions.append(
+            {
+                "priority": "med",
+                "title": "Review numerical / API errors",
+                "detail": f"{error_count} errors recorded. Prioritize clearer HITL messages on first-pass failures.",
+            }
+        )
+    statuses = [p.status for p in projects]
+    if projects and statuses[0] in {"failed", "cancelled"} and completed >= 1:
+        actions.append(
+            {
+                "priority": "high",
+                "title": "First-session recovery worked",
+                "detail": "Early failure followed by later success. Keep onboarding retry paths visible.",
+            }
+        )
+    if abandoned >= 2 and completed == 0:
+        actions.append(
+            {
+                "priority": "high",
+                "title": "Activation at risk",
+                "detail": "Multiple abandoned sessions with no completed design. Consider outreach or simpler first-run path.",
+            }
+        )
+    if persona_label.startswith("Academia"):
+        actions.append(
+            {
+                "priority": "low",
+                "title": "No aggressive upsell",
+                "detail": "Academic signals dominate. Prefer research plan fit over SME sales motion.",
+            }
+        )
+    if not actions:
+        actions.append(
+            {
+                "priority": "low",
+                "title": "No urgent interventions",
+                "detail": "Usage looks stable; continue monitoring timeline and feedback.",
+            }
+        )
+    return actions
+
+
+def _build_dossier(
+    *,
+    user: Any,
+    projects: list[Project],
+    credit_rows: list[CreditUsageSession],
+    error_rows: list[ErrorEvent],
+    bug_rows: list[BugReport],
+    login_rows: list[LoginHistory],
+) -> dict[str, Any]:
+    completed = [p for p in projects if p.status == "completed"]
+    abandoned = [p for p in projects if p.status in {"failed", "cancelled"}]
+    terminal = completed + abandoned
+    scores = [s for s in (_project_score(p) for p in completed) if s is not None]
+
+    tokens_total = sum(
+        int(r.prompt_tokens or 0) + int(r.completion_tokens or 0) for r in credit_rows
+    )
+    credits_charged = float(sum((r.credits_charged or 0) for r in credit_rows))
+    time_seconds = sum(int(r.duration_seconds or 0) for r in credit_rows)
+    session_durations = [
+        int(r.duration_seconds) for r in credit_rows if (r.duration_seconds or 0) > 0
+    ]
+    project_durations = [
+        d for d in (_project_duration_seconds(p) for p in terminal) if d is not None
+    ]
+    median_session = _median(session_durations or project_durations)
+
+    error_by_source: dict[str, int] = {}
+    for row in error_rows:
+        key = row.source or "other"
+        error_by_source[key] = error_by_source.get(key, 0) + 1
+    error_count = len(error_rows)
+    api_errors = error_by_source.get("api", 0) + error_by_source.get("backend", 0)
+    other_errors = error_count - api_errors
+
+    success_rate = None
+    if terminal:
+        success_rate = round(100.0 * len(completed) / len(terminal), 1)
+
+    avg_score = round(sum(scores) / len(scores), 1) if scores else None
+    best_score = max(scores) if scores else None
+    worst_score = min(scores) if scores else None
+
+    ratings: list[int] = []
+    for project in projects:
+        grade = _project_grade(project)
+        if not grade:
+            continue
+        rating = grade.get("rating")
+        if isinstance(rating, (int, float)):
+            ratings.append(int(rating))
+    avg_rating = round(sum(ratings) / len(ratings), 1) if ratings else None
+
+    # Pipeline mix
+    mix_counts: dict[str, int] = {}
+    for project in projects:
+        mix_counts[project.pipeline_type] = mix_counts.get(project.pipeline_type, 0) + 1
+    mix_total = sum(mix_counts.values()) or 1
+    pipeline_order = ("siloDesign", "muloDesign", "adaptiveDesign", "mpcDesign")
+    pipeline_mix = []
+    for ptype in pipeline_order:
+        count = mix_counts.get(ptype, 0)
+        pipeline_mix.append(
+            {
+                "name": PIPELINE_LABELS.get(ptype, ptype),
+                "pipeline_type": ptype,
+                "count": count,
+                "pct": round(100.0 * count / mix_total, 1) if mix_counts else 0.0,
+            }
+        )
+    for ptype, count in mix_counts.items():
+        if ptype not in pipeline_order:
+            pipeline_mix.append(
+                {
+                    "name": PIPELINE_LABELS.get(ptype, ptype),
+                    "pipeline_type": ptype,
+                    "count": count,
+                    "pct": round(100.0 * count / mix_total, 1),
+                }
+            )
+
+    # Tokens per project via job_id match on credit sessions
+    tokens_by_job: dict[str, int] = {}
+    for row in credit_rows:
+        if not row.job_id:
+            continue
+        tokens_by_job[row.job_id] = tokens_by_job.get(row.job_id, 0) + int(
+            row.prompt_tokens or 0
+        ) + int(row.completion_tokens or 0)
+
+    recent_sorted = sorted(
+        projects,
+        key=lambda p: _ts(p.updated_at) or _ts(p.created_at) or datetime.min.replace(tzinfo=timezone.utc),
+        reverse=True,
+    )
+    recent_sessions = []
+    for project in recent_sorted[:5]:
+        duration = _project_duration_seconds(project)
+        tokens = tokens_by_job.get(project.job_id or "", None)
+        recent_sessions.append(
+            {
+                "id": project.id,
+                "title": project.title,
+                "pipeline": PIPELINE_LABELS.get(project.pipeline_type, project.pipeline_type),
+                "pipeline_type": project.pipeline_type,
+                "status": project.status,
+                "score": _project_score(project),
+                "duration_seconds": duration,
+                "tokens": tokens,
+                "updated_at": utc_iso(project.updated_at or project.created_at),
+            }
+        )
+
+    last_active_candidates: list[datetime] = []
+    for row in login_rows:
+        ts = _ts(row.created_at)
+        if ts:
+            last_active_candidates.append(ts)
+    for project in projects:
+        ts = _ts(project.updated_at) or _ts(project.created_at)
+        if ts:
+            last_active_candidates.append(ts)
+    last_active = max(last_active_candidates) if last_active_candidates else None
+
+    if not projects:
+        health = "new"
+        health_detail = "No design sessions yet"
+    elif completed and error_count <= max(3, len(projects)):
+        health = "good"
+        health_detail = f"Activation complete · {len(completed)} successful design(s)"
+    elif completed:
+        health = "good"
+        health_detail = f"{len(completed)} success · {error_count} errors"
+    else:
+        health = "at_risk"
+        health_detail = f"{len(abandoned)} abandoned/failed · 0 completed"
+
+    tags: list[str] = []
+    if user.profile_survey_completed_at is not None:
+        tags.append("survey complete")
+    if completed:
+        tags.append("activated")
+    if ratings:
+        tags.append("rated designs")
+    if not user.email_verified:
+        tags.append("unverified email")
+    if not user.is_active:
+        tags.append("inactive")
+
+    persona = _infer_persona(user)
+    profile = None
+    if user.profile_survey_completed_at is not None:
+        profile = {
+            "university": user.university,
+            "degree": user.degree,
+            "major": user.major,
+            "matlab_experience": user.matlab_experience,
+            "control_design_experience": user.control_design_experience,
+            "completed_at": utc_iso(user.profile_survey_completed_at),
+        }
+
+    plan_name = None
+    plan = getattr(user, "plan", None)
+    if plan is not None:
+        plan_name = getattr(plan, "name", None)
+
+    avg_credits_per_success = None
+    if completed and credits_charged > 0:
+        avg_credits_per_success = round(credits_charged / len(completed), 2)
+
+    actions = _build_actions(
+        user=user,
+        projects=projects,
+        error_count=error_count,
+        persona_label=persona["label"],
+        completed=len(completed),
+        abandoned=len(abandoned),
+    )
+
+    return {
+        "joined_at": utc_iso(user.created_at) if user.created_at else None,
+        "last_active_at": utc_iso(last_active) if last_active else None,
+        "plan_name": plan_name,
+        "health": health,
+        "health_detail": health_detail,
+        "tags": tags,
+        "kpis": {
+            "sessions": len(projects),
+            "sessions_completed": len(completed),
+            "sessions_abandoned": len(abandoned),
+            "success_rate": success_rate,
+            "avg_score": avg_score,
+            "best_score": best_score,
+            "worst_score": worst_score,
+            "tokens_total": tokens_total,
+            "credits_charged": round(credits_charged, 2),
+            "error_count": error_count,
+            "error_by_source": error_by_source,
+            "time_seconds": time_seconds,
+            "median_session_seconds": median_session,
+        },
+        "persona": persona,
+        "profile": profile,
+        "pipeline_mix": pipeline_mix,
+        "recent_sessions": recent_sessions,
+        "usage": {
+            "tokens_total": tokens_total,
+            "credits_charged": round(credits_charged, 2),
+            "avg_credits_per_success": avg_credits_per_success,
+            "api_errors": api_errors,
+            "other_errors": other_errors,
+            "avg_rating": avg_rating,
+            "rating_count": len(ratings),
+        },
+        "flags": {
+            "email_verified": bool(user.email_verified),
+            "is_active": bool(user.is_active),
+            "bug_report_count": len(bug_rows),
+            "profile_survey_complete": user.profile_survey_completed_at is not None,
+        },
+        "actions": actions,
+        "latest_project_id": recent_sorted[0].id if recent_sorted else None,
+    }
+
+
 def get_user_journey(db: Session, user_id: int) -> dict[str, Any] | None:
     user = get_user_by_id(db, user_id)
     if user is None:
@@ -539,6 +939,15 @@ def get_user_journey(db: Session, user_id: int) -> dict[str, Any] | None:
     for item in comments:
         item.pop("_sort", None)
 
+    dossier = _build_dossier(
+        user=user,
+        projects=projects,
+        credit_rows=credit_rows,
+        error_rows=error_rows,
+        bug_rows=bug_rows,
+        login_rows=login_rows,
+    )
+
     return {
         "user": {
             "id": user.id,
@@ -547,4 +956,5 @@ def get_user_journey(db: Session, user_id: int) -> dict[str, Any] | None:
         },
         "steps": steps,
         "comments": comments,
+        "dossier": dossier,
     }
