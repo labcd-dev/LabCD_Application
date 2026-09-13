@@ -13,7 +13,7 @@ import {
   Zap,
   Gauge,
 } from 'lucide-react'
-import { mpcApi } from '../api/endpoints'
+import { mpcApi, plantArtifactApi } from '../api/endpoints'
 import type {
   DiagnosisApplyPatch,
   MPCDiagnosticsResponse,
@@ -325,6 +325,25 @@ export function MpcPage() {
     hasAutoTestedDynamicsRef.current = false
     setDiagnostics(null)
   }, [pipeline.fileContent, pipeline.fileName, pipeline.projectId])
+
+  // Prepopulate simulation time from compiled artifact / pre-launch if available
+  useEffect(() => {
+    const artifactId = sessionStorage.getItem('labcd_last_artifact_id')
+    if (!artifactId) return
+    let active = true
+    plantArtifactApi
+      .getArtifact(artifactId)
+      .then((art) => {
+        if (!active || !art?.pre_launch) return
+        if (typeof art.pre_launch.total_simulation_time === 'number' && art.pre_launch.total_simulation_time > 0) {
+          setSimTime(art.pre_launch.total_simulation_time)
+        }
+      })
+      .catch(() => {})
+    return () => {
+      active = false
+    }
+  }, [pipeline.fileContent, pipeline.fileName])
 
   const handleStartJob = async () => {
     setError(null)
@@ -1338,7 +1357,7 @@ export function MpcPage() {
                     </div>
                   )}
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs font-mono">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 text-xs font-mono">
                   <div className="rounded-xl border border-border bg-surface-elevated p-4 space-y-1">
                     <div className="flex justify-between text-muted-text">
                       <span>Prediction Horizon (Np)</span>
@@ -1396,22 +1415,6 @@ export function MpcPage() {
                       max={50}
                       value={maxIterations}
                       onChange={(e) => setMaxIterations(Number(e.target.value))}
-                      className="w-full accent-purple-500"
-                    />
-                  </div>
-
-                  <div className="rounded-xl border border-border bg-surface-elevated p-4 space-y-1">
-                    <div className="flex justify-between text-muted-text">
-                      <span>Simulation Time (T_sim)</span>
-                      <span className="text-foreground font-bold">{simTime}s</span>
-                    </div>
-                    <input
-                      type="range"
-                      min={1.0}
-                      max={10.0}
-                      step={0.5}
-                      value={simTime}
-                      onChange={(e) => setSimTime(Number(e.target.value))}
                       className="w-full accent-purple-500"
                     />
                   </div>
