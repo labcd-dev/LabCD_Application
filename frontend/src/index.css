@@ -1113,6 +1113,38 @@
   animation: admin-slide-in 0.25s ease-out;
 }
 
+@keyframes onboarding-step-forward {
+  from {
+    opacity: 0;
+    transform: translateX(18px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes onboarding-step-backward {
+  from {
+    opacity: 0;
+    transform: translateX(-18px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+.onboarding-step-in-forward {
+  animation: onboarding-step-forward 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity;
+}
+
+.onboarding-step-in-backward {
+  animation: onboarding-step-backward 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity;
+}
+
 @keyframes bug-report-success-in {
   from {
     opacity: 0;
@@ -1662,6 +1694,8 @@
   .setup-ready-banner__icon,
   .admin-fade-in,
   .admin-slide-in,
+  .onboarding-step-in-forward,
+  .onboarding-step-in-backward,
   .bug-report-success,
   .bug-report-success__ring,
   .bug-report-success__check,

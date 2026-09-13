@@ -223,6 +223,7 @@ export interface AuthUser {
   feedback_survey_completed_silo?: boolean
   feedback_survey_completed_mulo?: boolean
   tutorial_dont_show_again?: boolean
+  onboarding_answers?: OnboardingAnswers | null
 }
 
 export interface MessageResponse {
@@ -480,12 +481,33 @@ export interface SurveyStatus {
   videos: TutorialVideo[]
 }
 
+export interface OnboardingAnswers {
+  tools: string[]
+  experience: string | null
+  recency?: string | null
+  goals: string[]
+  other_text?: string
+  pipeline: string | null
+  completed?: boolean
+  skipped?: boolean
+}
+
 export interface ProfileSurveyRequest {
-  university: string
-  degree: DegreeLevel
-  major: MajorField
-  matlab_experience: ExperienceLevel
-  control_design_experience: ExperienceLevel
+  tools?: string[]
+  experience?: string | null
+  recency?: string | null
+  goals?: string[]
+  other_text?: string
+  pipeline?: string | null
+  completed?: boolean
+  skipped?: boolean
+  onboarding_answers?: OnboardingAnswers
+
+  university?: string
+  degree?: DegreeLevel | string
+  major?: MajorField | string
+  matlab_experience?: ExperienceLevel | string
+  control_design_experience?: ExperienceLevel | string
 }
 
 export interface FeedbackSurveyRequest {
@@ -507,6 +529,7 @@ export interface ProfileSurveyResponseRow {
   major: string | null
   matlab_experience: string | null
   control_design_experience: string | null
+  onboarding_answers?: OnboardingAnswers | null
   completed_at: string | null
 }
 

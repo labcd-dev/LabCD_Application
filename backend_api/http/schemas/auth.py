@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, EmailStr, Field
 
@@ -136,6 +136,7 @@ class UserOut(BaseModel):
     feedback_survey_completed_silo: bool = False
     feedback_survey_completed_mulo: bool = False
     tutorial_dont_show_again: bool = False
+    onboarding_answers: dict[str, Any] | None = None
 
     model_config = {"from_attributes": True}
 

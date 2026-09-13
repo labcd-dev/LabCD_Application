@@ -87,6 +87,8 @@ def _migrate_schema() -> None:
         statements.append(
             "ALTER TABLE users ADD COLUMN control_design_experience VARCHAR(40)"
         )
+    if "onboarding_answers" not in columns:
+        statements.append("ALTER TABLE users ADD COLUMN onboarding_answers JSON")
     if "profile_survey_completed_at" not in columns:
         statements.append(
             "ALTER TABLE users ADD COLUMN profile_survey_completed_at TIMESTAMP"
