@@ -962,11 +962,14 @@ print(f"MPC Controller initialized: Np={Np}, Nc={Nc}, dt={dt}")
           <div className="rounded-2xl border border-border bg-surface-elevated p-4 shadow-sm">
             <MpcConvergenceCharts
               mseHistory={results?.mse_history || job?.mse_history}
-              overshootHistory={results?.overshoot_history}
-              settlingHistory={results?.settling_history}
-              effortHistory={results?.effort_history}
+              overshootHistory={results?.overshoot_history || job?.overshoot_history}
+              settlingHistory={results?.settling_history || job?.settling_history}
+              effortHistory={results?.effort_history || job?.effort_history}
               paramsHistory={results?.params_history || job?.params_history}
-              dtHistory={results?.metrics?.dt_history as number[] | undefined}
+              dtHistory={
+                (results?.metrics?.dt_history as number[] | undefined) ||
+                (job?.params_history?.map((p) => ((p.dt as number) ?? (p.dt_mpc as number) ?? 0.02)) as number[] | undefined)
+              }
               bestMse={bestMse}
             />
           </div>

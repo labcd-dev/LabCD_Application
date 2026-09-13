@@ -1344,6 +1344,9 @@ export interface MPCJobStatusResponse {
   best_params?: Record<string, unknown> | null
   best_mse?: number | null
   mse_history?: Array<number | null>
+  overshoot_history?: Array<number | null>
+  settling_history?: Array<number | null>
+  effort_history?: Array<number | null>
   params_history?: Array<Record<string, unknown>>
   session_metadata?: Record<string, unknown> | null
   usage?: Record<string, unknown> | null

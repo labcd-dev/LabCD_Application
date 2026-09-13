@@ -192,6 +192,9 @@ class MPCJobStatusResponse(BaseModel):
     best_params: Any = None
     best_mse: float | None = None
     mse_history: list[Any] = Field(default_factory=list)
+    overshoot_history: list[Any] = Field(default_factory=list)
+    settling_history: list[Any] = Field(default_factory=list)
+    effort_history: list[Any] = Field(default_factory=list)
     params_history: list[Any] = Field(default_factory=list)
     session_metadata: dict[str, Any] | None = None
     avg_solve_time: float | None = None

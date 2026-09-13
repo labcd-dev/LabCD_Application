@@ -537,6 +537,9 @@ def _to_status_response(record: JobRecord) -> MPCJobStatusResponse:
         best_params=_json_safe(record.best_params),
         best_mse=_finite_float(record.best_mse),
         mse_history=_metric_series(record.mse_history),
+        overshoot_history=_metric_series(record.overshoot_history),
+        settling_history=_metric_series(record.settling_history),
+        effort_history=_metric_series(record.effort_history),
         params_history=_json_safe(list(record.params_history or [])),
         session_metadata=_json_safe(record.session_metadata),
         avg_solve_time=_finite_float(record.avg_solve_time),
@@ -940,6 +943,12 @@ def _run_tuning_thread(job_id: str, store: InMemoryJobStore) -> None:
                         live_updates["best_mse"] = _finite_float(b_mse)
                 if "mse_history" in current_state:
                     live_updates["mse_history"] = _metric_series(current_state.get("mse_history"))
+                if "overshoot_history" in current_state:
+                    live_updates["overshoot_history"] = _metric_series(current_state.get("overshoot_history"))
+                if "settling_history" in current_state:
+                    live_updates["settling_history"] = _metric_series(current_state.get("settling_history"))
+                if "effort_history" in current_state:
+                    live_updates["effort_history"] = _metric_series(current_state.get("effort_history"))
                 if "params_history" in current_state:
                     live_updates["params_history"] = _json_safe(list(current_state.get("params_history") or []))
                 if "best_params" in current_state or "current_params" in current_state:
