@@ -5,9 +5,12 @@ from __future__ import annotations
 import asyncio
 import json
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
+from starlette.concurrency import run_in_threadpool
+from sqlalchemy.orm import Session
 
 from backend_api.db.models import User
+from backend_api.db.session import get_db
 from backend_api.http.dependencies import require_action
 from backend_api.http.schemas.mpc import (
     MPCDiagnosticsRequest,
@@ -229,9 +232,10 @@ def download_export_script(
 
 
 @router.get("/jobs/{job_id}/report.pdf")
-def download_report_pdf(
+async def download_report_pdf(
     job_id: str,
     user: User = Depends(require_action("module:mpc")),
+    db: Session = Depends(get_db),
     store: InMemoryMPCJobStore = Depends(get_mpc_store),
 ):
     """Download engineering PDF report."""
@@ -239,14 +243,18 @@ def download_report_pdf(
     if record is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
     _assert_job_access(record.user_id, user)
+    # Release DB connection immediately before PDF generation so other requests are not starved
+    db.close()
+
     try:
-        pdf_bytes = get_job_report_pdf(job_id, store=store)
+        pdf_bytes = await run_in_threadpool(get_job_report_pdf, job_id, store=store)
         filename = f"{record.system_name or 'mpc_system'}_report.pdf"
-        return StreamingResponse(
-            iter([pdf_bytes]),
+        return Response(
+            content=pdf_bytes,
             media_type="application/pdf",
             headers={
                 "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Length": str(len(pdf_bytes)),
             },
         )
     except Exception as exc:

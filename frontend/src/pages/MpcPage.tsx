@@ -51,6 +51,7 @@ export function MpcPage() {
   const [testingDynamics, setTestingDynamics] = useState(false)
   const [diagnostics, setDiagnostics] = useState<MPCDiagnosticsResponse | null>(null)
   const hasAutoTestedDynamicsRef = useRef(false)
+  const [downloadingPdf, setDownloadingPdf] = useState(false)
 
   // 2. Scenario Tab Options
   const [trajectoryMode, setTrajectoryMode] = useState<'reg' | 'sin' | 'pulse'>('reg')
@@ -1562,11 +1563,17 @@ export function MpcPage() {
           <MpcDashboard
             job={job}
             results={results}
-            onDownloadReport={() => {
-              if (jobId) {
-                void mpcApi.downloadReportPdf(jobId).catch((err) => {
+            downloadingPdf={downloadingPdf}
+            onDownloadReport={async () => {
+              if (jobId && !downloadingPdf) {
+                setDownloadingPdf(true)
+                try {
+                  await mpcApi.downloadReportPdf(jobId)
+                } catch (err) {
                   console.error('Failed to download MPC PDF report:', err)
-                })
+                } finally {
+                  setDownloadingPdf(false)
+                }
               }
             }}
             onRetryFromDiagnosis={handleRetryFromDiagnosis}

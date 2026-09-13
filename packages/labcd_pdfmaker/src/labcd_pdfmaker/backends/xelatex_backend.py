@@ -249,14 +249,25 @@ class XeLatexBackend(PdfBackend):
 
             log_output = ""
             returncode = 1
-            for _ in range(3):
-                proc = subprocess.run(
-                    ["xelatex", "-interaction=nonstopmode", "-halt-on-error", "report.tex"],
-                    cwd=tmpdir, capture_output=True, timeout=180,
-                    encoding="utf-8", errors="replace",
-                )
-                log_output = proc.stdout + proc.stderr
-                returncode = proc.returncode
+            for pass_idx in range(2):
+                try:
+                    proc = subprocess.run(
+                        ["xelatex", "-interaction=batchmode", "-halt-on-error", "report.tex"],
+                        cwd=tmpdir,
+                        capture_output=True,
+                        stdin=subprocess.DEVNULL,
+                        timeout=25,
+                        encoding="utf-8",
+                        errors="replace",
+                    )
+                    log_output = proc.stdout + proc.stderr
+                    returncode = proc.returncode
+                    if returncode != 0:
+                        break
+                except subprocess.TimeoutExpired:
+                    log_output = f"XeLaTeX compilation timed out after 25s on pass {pass_idx + 1}"
+                    returncode = -1
+                    break
 
             pdf_path = os.path.join(tmpdir, "report.pdf")
             if returncode != 0 or not os.path.exists(pdf_path):

@@ -11,6 +11,7 @@ import {
   Sliders,
   Play,
   FileText,
+  Loader2,
   Search,
   Sparkles,
   Coins,
@@ -56,6 +57,7 @@ interface MpcDashboardProps {
   job?: MPCJobStatusResponse | null
   results?: MPCJobResultsResponse | null
   onDownloadReport?: () => void
+  downloadingPdf?: boolean
   onRetryFromDiagnosis?: () => void
   onApplyDiagnosisSuggestion?: (patch: DiagnosisApplyPatch) => void
   diagnosisApplyUsed?: boolean
@@ -174,6 +176,7 @@ export function MpcDashboard({
   job,
   results,
   onDownloadReport,
+  downloadingPdf = false,
   onRetryFromDiagnosis,
   onApplyDiagnosisSuggestion,
   diagnosisApplyUsed = false,
@@ -766,10 +769,12 @@ print(f"MPC Controller initialized: Np={Np}, Nc={Nc}, dt={dt}")
             <button
               type="button"
               onClick={onDownloadReport}
-              className={`${btnBase} ${btnCompact} flex items-center gap-1.5 text-xs text-muted-text hover:text-foreground border border-border hover:bg-surface-hover`}
-              title="Download authenticated engineering PDF report (.pdf)"
+              disabled={downloadingPdf}
+              className={`${btnBase} ${btnCompact} flex items-center gap-1.5 text-xs text-muted-text hover:text-foreground border border-border hover:bg-surface-hover disabled:opacity-50 disabled:cursor-not-allowed`}
+              title={downloadingPdf ? "Generating authenticated PDF report..." : "Download authenticated engineering PDF report (.pdf)"}
             >
-              <FileText className="size-3.5" /> PDF
+              {downloadingPdf ? <Loader2 className="size-3.5 animate-spin text-primary" /> : <FileText className="size-3.5" />}
+              {downloadingPdf ? 'Generating…' : 'PDF'}
             </button>
           )}
         </div>

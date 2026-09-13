@@ -1111,9 +1111,13 @@ def get_job_report_pdf(job_id: str, *, store: InMemoryAdaptiveJobStore | None = 
     - figures regenerated from stored simulation series (tracking, control, d_hat)
     - prefer_xelatex=True → real math typesetting or a clear RuntimeError
     """
-    record = _store(store).get(job_id)
+    st = _store(store)
+    record = st.get(job_id)
     if record is None:
         raise KeyError(job_id)
+
+    if getattr(record, "report_pdf", None):
+        return record.report_pdf
 
     from backend_core.AgentAdaptive.tools.report import (
         build_pdf_report,
@@ -1131,14 +1135,19 @@ def get_job_report_pdf(job_id: str, *, store: InMemoryAdaptiveJobStore | None = 
     except Exception:
         figures = []
 
+    raw_log = [ev.get("text", "") for ev in (record.progress or []) if ev.get("text")]
+    if len(raw_log) > 500:
+        raw_log = raw_log[-500:]
+    log_text = "\n".join(raw_log)
+    if len(log_text) > 50000:
+        log_text = log_text[-50000:]
+
     try:
-        return build_pdf_report(
+        pdf_bytes = build_pdf_report(
             summary_markdown=summary_md,
             figures=figures,
             usage=record.usage,
-            log_text="\n".join(
-                ev.get("text", "") for ev in (record.progress or []) if ev.get("text")
-            ),
+            log_text=log_text,
             tuning_log=list(record.tuning_log or []),
             tuning_best=record.tuning_best,
             clarification_record=list(record.clarification_record or []),
@@ -1149,13 +1158,11 @@ def get_job_report_pdf(job_id: str, *, store: InMemoryAdaptiveJobStore | None = 
     except Exception as exc:
         import logging
         logging.warning("build_pdf_report prefer_xelatex failed (%s); retrying with ReportLab backend", exc)
-        return build_pdf_report(
+        pdf_bytes = build_pdf_report(
             summary_markdown=summary_md,
             figures=figures,
             usage=record.usage,
-            log_text="\n".join(
-                ev.get("text", "") for ev in (record.progress or []) if ev.get("text")
-            ),
+            log_text=log_text,
             tuning_log=list(record.tuning_log or []),
             tuning_best=record.tuning_best,
             clarification_record=list(record.clarification_record or []),
@@ -1163,6 +1170,14 @@ def get_job_report_pdf(job_id: str, *, store: InMemoryAdaptiveJobStore | None = 
             abstract_markdown=abstract_md,
             prefer_xelatex=False,
         )
+
+    if pdf_bytes:
+        try:
+            st.update(job_id, report_pdf=pdf_bytes)
+        except Exception:
+            pass
+
+    return pdf_bytes
 
 
 def get_export_script(job_id: str, *, store: InMemoryAdaptiveJobStore | None = None) -> str:

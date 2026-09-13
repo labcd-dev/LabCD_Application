@@ -79,6 +79,7 @@ class JobRecord:
     diagnosis: dict[str, Any] | None = None
     control_law: str | None = None
     stability_proof: str | None = None
+    report_pdf: bytes | None = None
     created_at: datetime = field(default_factory=_now)
     updated_at: datetime = field(default_factory=_now)
 

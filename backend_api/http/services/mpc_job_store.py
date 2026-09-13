@@ -80,6 +80,7 @@ class JobRecord:
     design_grade: dict[str, Any] | None = None
     session_metadata: dict[str, Any] | None = None
     avg_solve_time: float | None = None
+    report_pdf: bytes | None = None
     created_at: datetime = field(default_factory=_now)
     updated_at: datetime = field(default_factory=_now)
 

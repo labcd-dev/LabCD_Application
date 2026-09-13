@@ -363,17 +363,25 @@ export function ProjectResultsView({
     return <MuloResults results={results} />
   }
 
+  const [downloadingPdf, setDownloadingPdf] = useState(false)
+
   if (pipelineType === 'mpcDesign') {
     return (
       <div className="space-y-4">
         <MpcDashboard
           job={mpcJob}
           results={results as unknown as MPCJobResultsResponse}
-          onDownloadReport={() => {
-            if (jobId) {
-              void mpcApi.downloadReportPdf(jobId).catch((err) => {
+          downloadingPdf={downloadingPdf}
+          onDownloadReport={async () => {
+            if (jobId && !downloadingPdf) {
+              setDownloadingPdf(true)
+              try {
+                await mpcApi.downloadReportPdf(jobId)
+              } catch (err) {
                 console.error('Failed to download MPC PDF report:', err)
-              })
+              } finally {
+                setDownloadingPdf(false)
+              }
             }
           }}
         />
@@ -387,11 +395,17 @@ export function ProjectResultsView({
         <AdaptiveDashboard
           job={adaptiveJob}
           results={results as unknown as AdaptiveJobResultsResponse}
-          onDownloadReport={() => {
-            if (jobId) {
-              void adaptiveApi.downloadReportPdf(jobId).catch((err) => {
+          downloadingPdf={downloadingPdf}
+          onDownloadReport={async () => {
+            if (jobId && !downloadingPdf) {
+              setDownloadingPdf(true)
+              try {
+                await adaptiveApi.downloadReportPdf(jobId)
+              } catch (err) {
                 console.error('Failed to download Adaptive PDF report:', err)
-              })
+              } finally {
+                setDownloadingPdf(false)
+              }
             }
           }}
         />

@@ -54,6 +54,7 @@ export function AdaptivePage() {
   const [showCompletedToast, setShowCompletedToast] = useState(false)
   const hasPromptedGradeRef = useRef(false)
   const [diagnosisApplyUsed, setDiagnosisApplyUsed] = useState(false)
+  const [downloadingPdf, setDownloadingPdf] = useState(false)
 
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -686,14 +687,18 @@ export function AdaptivePage() {
               solverStep,
               simTime,
             }}
+            downloadingPdf={downloadingPdf}
             onDownloadReport={async () => {
-              if (jobId) {
+              if (jobId && !downloadingPdf) {
+                setDownloadingPdf(true)
                 try {
                   await adaptiveApi.downloadReportPdf(jobId)
                 } catch (err) {
                   setError(
                     err instanceof Error ? err.message : 'Failed to download PDF report',
                   )
+                } finally {
+                  setDownloadingPdf(false)
                 }
               }
             }}

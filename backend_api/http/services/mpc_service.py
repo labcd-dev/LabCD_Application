@@ -2375,9 +2375,13 @@ def _figures_for_mpc_report(record: JobRecord) -> tuple[Any, Any]:
 
 def get_job_report_pdf(job_id: str, *, store: InMemoryJobStore | None = None) -> bytes:
     """Generate engineering PDF report."""
-    record = _store(store).get(job_id)
+    st = _store(store)
+    record = st.get(job_id)
     if record is None:
         raise KeyError(job_id)
+
+    if getattr(record, "report_pdf", None):
+        return record.report_pdf
 
     from backend_core.AgentMPC.agents.report_pdf import build_pdf_report
     from backend_core.AgentMPC.agents.report_agent import generate_report_analysis, _fallback_analysis
@@ -2457,7 +2461,12 @@ def get_job_report_pdf(job_id: str, *, store: InMemoryJobStore | None = None) ->
             backend=Backend.AUTO,
         )
         with open(pdf_path, "rb") as pf:
-            return pf.read()
+            pdf_bytes = pf.read()
+        try:
+            st.update(job_id, report_pdf=pdf_bytes)
+        except Exception:
+            pass
+        return pdf_bytes
     finally:
         import matplotlib.pyplot as plt
         if conv_fig is not None:

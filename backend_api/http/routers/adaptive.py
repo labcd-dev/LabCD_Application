@@ -5,9 +5,12 @@ from __future__ import annotations
 import asyncio
 import json
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
+from starlette.concurrency import run_in_threadpool
+from sqlalchemy.orm import Session
 
 from backend_api.db.models import User
+from backend_api.db.session import get_db
 from backend_api.http.dependencies import require_action
 from backend_api.http.schemas.adaptive import (
     AdaptiveClarifyRequest,
@@ -167,9 +170,10 @@ def adaptive_diagnosis_chat(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 @router.get("/jobs/{job_id}/report.pdf")
-def download_adaptive_report_pdf(
+async def download_adaptive_report_pdf(
     job_id: str,
     user: User = Depends(require_action("module:adaptive")),
+    db: Session = Depends(get_db),
     store: InMemoryAdaptiveJobStore = Depends(get_adaptive_store),
 ):
     """Download engineering PDF report for adaptive controller."""
@@ -177,15 +181,19 @@ def download_adaptive_report_pdf(
     if record is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
     _assert_job_access(record.user_id, user)
+    # Release DB connection immediately before PDF generation so other requests are not starved
+    db.close()
+
     try:
-        pdf_bytes = get_job_report_pdf(job_id, store=store)
+        pdf_bytes = await run_in_threadpool(get_job_report_pdf, job_id, store=store)
         system_name = (record.system_spec or {}).get("system_name") or "adaptive_system"
         filename = f"{system_name}_report.pdf"
-        return StreamingResponse(
-            iter([pdf_bytes]),
+        return Response(
+            content=pdf_bytes,
             media_type="application/pdf",
             headers={
                 "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Length": str(len(pdf_bytes)),
             },
         )
     except Exception as exc:
