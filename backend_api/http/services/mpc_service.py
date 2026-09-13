@@ -1823,6 +1823,23 @@ def submit_job(
         # Prefer fail-fast on submit.
         raise
 
+    # Enforce Pre-Launch simulation time SSOT if artifact is provided
+    art_id = None
+    if request.dynamics:
+        art_id = getattr(request.dynamics, "artifact_id", None) or getattr(request.dynamics, "plugin_id", None)
+    if art_id:
+        try:
+            from backend_api.http.services.plant_artifact_service import get_artifact
+            art_data = get_artifact(str(art_id))
+            pre_launch = getattr(art_data, "pre_launch", None) or {}
+            pre_sim_time = pre_launch.get("total_simulation_time")
+            if pre_sim_time and float(pre_sim_time) > 0:
+                # If simulation_time was not explicitly sent or defaulted, sync from artifact pre-launch
+                if "simulation_time" not in options or float(options.get("simulation_time") or 0) == 3.0:
+                    options["simulation_time"] = float(pre_sim_time)
+        except Exception:
+            pass
+
     system_name = options.get("system_name") or "mpc_system"
     source_code = request.dynamics.source if request.dynamics and request.dynamics.source else ""
     if not source_code and plugin_path and os.path.exists(plugin_path):
