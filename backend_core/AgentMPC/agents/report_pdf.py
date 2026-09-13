@@ -473,11 +473,11 @@ def _executive_summary(
 # ---------------------------------------------------------------------------
 
 class _Sections:
-    """Hands out contiguous section numbers at build time.
+    """Section titles without automatic numbering (BRc1 cosmetic).
 
     Sections are conditional -- a run with no failures has no diagnostics
-    section, a run without a tracker has no cost section -- so the numbers
-    can't be hardcoded in the strings without leaving gaps.
+    section, a run without a tracker has no cost section. Numbering was
+    removed so the PDF no longer prefixes titles with ``1.``, ``2.``, …
     """
 
     def __init__(self) -> None:
@@ -485,7 +485,7 @@ class _Sections:
 
     def __call__(self, title: str) -> str:
         self._n += 1
-        return f"{self._n}. {title}"
+        return title
 
 
 # ---------------------------------------------------------------------------
