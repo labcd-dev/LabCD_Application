@@ -79,7 +79,7 @@ class JobRecord:
     diagnosis: dict[str, Any] | None = None
     control_law: str | None = None
     stability_proof: str | None = None
-    report_pdf: bytes | None = None
+    pdf_path: str | None = None
     created_at: datetime = field(default_factory=_now)
     updated_at: datetime = field(default_factory=_now)
 
@@ -115,6 +115,7 @@ class InMemoryAdaptiveJobStore:
                     "diagnosis": record.diagnosis,
                     "control_law": record.control_law,
                     "stability_proof": record.stability_proof,
+                    "pdf_path": record.pdf_path,
                 }
                 if row is None:
                     row = DBAdaptiveJob(
@@ -188,6 +189,9 @@ class InMemoryAdaptiveJobStore:
                     session_metadata=res.get("session_metadata"),
                     export_script=res.get("export_script"),
                     diagnosis=res.get("diagnosis"),
+                    control_law=res.get("control_law"),
+                    stability_proof=res.get("stability_proof"),
+                    pdf_path=res.get("pdf_path"),
                     created_at=row.created_at or _now(),
                     updated_at=row.updated_at or _now(),
                 )

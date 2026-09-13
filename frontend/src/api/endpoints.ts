@@ -1077,26 +1077,38 @@ export const adaptiveApi = {
   /** Authenticated PDF download — browser navigation does not send JWT. */
   downloadReportPdf: async (jobId: string, filename?: string): Promise<void> => {
     const token = getAuthToken()
-    const response = await fetch(`${API_BASE}/adaptive/jobs/${jobId}/report.pdf`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    })
-    if (!response.ok) {
-      let detail = `Failed to download PDF (${response.status})`
-      try {
-        const body = await response.json()
-        if (body?.detail) detail = String(body.detail)
-      } catch {
-        /* ignore non-JSON */
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 45000)
+    try {
+      const response = await fetch(`${API_BASE}/adaptive/jobs/${jobId}/report.pdf`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        signal: controller.signal,
+      })
+      if (!response.ok) {
+        let detail = `Failed to download PDF (${response.status})`
+        try {
+          const body = await response.json()
+          if (body?.detail) detail = String(body.detail)
+        } catch {
+          /* ignore non-JSON */
+        }
+        throw new Error(detail)
       }
-      throw new Error(detail)
+      const blob = await response.blob()
+      const disposition = response.headers.get('Content-Disposition') || ''
+      const match = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(disposition)
+      const name =
+        filename ||
+        (match ? match[1].replace(/['"]/g, '') : `adaptive_${jobId}_report.pdf`)
+      triggerBlobDownload(blob, name)
+    } catch (err: any) {
+      if (err?.name === 'AbortError') {
+        throw new Error('PDF generation/download timed out after 45 seconds. Please try again.')
+      }
+      throw err
+    } finally {
+      clearTimeout(timeoutId)
     }
-    const blob = await response.blob()
-    const disposition = response.headers.get('Content-Disposition') || ''
-    const match = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(disposition)
-    const name =
-      filename ||
-      (match ? match[1].replace(/['"]/g, '') : `adaptive_${jobId}_report.pdf`)
-    triggerBlobDownload(blob, name)
   },
 }
 
@@ -1147,26 +1159,38 @@ export const mpcApi = {
   /** Authenticated PDF download — browser navigation does not send JWT. */
   downloadReportPdf: async (jobId: string, filename?: string): Promise<void> => {
     const token = getAuthToken()
-    const response = await fetch(`${API_BASE}/mpc/jobs/${jobId}/report.pdf`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    })
-    if (!response.ok) {
-      let detail = `Failed to download PDF (${response.status})`
-      try {
-        const body = await response.json()
-        if (body?.detail) detail = String(body.detail)
-      } catch {
-        /* ignore non-JSON */
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 45000)
+    try {
+      const response = await fetch(`${API_BASE}/mpc/jobs/${jobId}/report.pdf`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        signal: controller.signal,
+      })
+      if (!response.ok) {
+        let detail = `Failed to download PDF (${response.status})`
+        try {
+          const body = await response.json()
+          if (body?.detail) detail = String(body.detail)
+        } catch {
+          /* ignore non-JSON */
+        }
+        throw new Error(detail)
       }
-      throw new Error(detail)
+      const blob = await response.blob()
+      const disposition = response.headers.get('Content-Disposition') || ''
+      const match = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(disposition)
+      const name =
+        filename ||
+        (match ? match[1].replace(/['"]/g, '') : `mpc_${jobId}_report.pdf`)
+      triggerBlobDownload(blob, name)
+    } catch (err: any) {
+      if (err?.name === 'AbortError') {
+        throw new Error('PDF generation/download timed out after 45 seconds. Please try again.')
+      }
+      throw err
+    } finally {
+      clearTimeout(timeoutId)
     }
-    const blob = await response.blob()
-    const disposition = response.headers.get('Content-Disposition') || ''
-    const match = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(disposition)
-    const name =
-      filename ||
-      (match ? match[1].replace(/['"]/g, '') : `mpc_${jobId}_report.pdf`)
-    triggerBlobDownload(blob, name)
   },
 }
 

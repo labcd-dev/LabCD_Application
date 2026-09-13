@@ -52,6 +52,7 @@ from backend_api.http.schemas.mpc import (
     MPCJobStatusResponse,
     MPCJobSummary,
 )
+from backend_api.http.config import RESULTS_DIR
 from backend_api.http.services.executor import job_executor
 
 _PLUGINS_DIR = (
@@ -1348,6 +1349,12 @@ def _run_tuning_thread(job_id: str, store: InMemoryJobStore) -> None:
             except Exception:
                 pass
 
+        # Pre-generate disk-persisted PDF report in background
+        try:
+            get_or_create_job_report_pdf_file(job_id, store=store)
+        except Exception as pdf_exc:
+            log.warning("Background PDF pre-generation failed for MPC job %s: %s", job_id, pdf_exc)
+
         on_event(
             {
                 "kind": "completed",
@@ -2373,15 +2380,33 @@ def _figures_for_mpc_report(record: JobRecord) -> tuple[Any, Any]:
     return conv_fig, sim_fig
 
 
-def get_job_report_pdf(job_id: str, *, store: InMemoryJobStore | None = None) -> bytes:
-    """Generate engineering PDF report."""
+def get_or_create_job_report_pdf_file(
+    job_id: str,
+    *,
+    store: InMemoryJobStore | None = None,
+) -> Path:
+    """Generate or retrieve the disk-persisted PDF report file for an MPC job.
+
+    Persists to RESULTS_DIR / f"mpc_{job_id}_report.pdf" and stores `pdf_path` on the JobRecord.
+    If the file already exists and is non-empty, returns the existing Path immediately.
+    """
     st = _store(store)
     record = st.get(job_id)
     if record is None:
         raise KeyError(job_id)
 
-    if getattr(record, "report_pdf", None):
-        return record.report_pdf
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    target_path = RESULTS_DIR / f"mpc_{job_id}_report.pdf"
+
+    if target_path.is_file() and target_path.stat().st_size > 0:
+        if record.pdf_path != str(target_path):
+            st.update(job_id, pdf_path=str(target_path))
+        return target_path
+
+    if record.pdf_path:
+        existing = Path(record.pdf_path)
+        if existing.is_file() and existing.stat().st_size > 0:
+            return existing
 
     from backend_core.AgentMPC.agents.report_pdf import build_pdf_report
     from backend_core.AgentMPC.agents.report_agent import generate_report_analysis, _fallback_analysis
@@ -2444,13 +2469,11 @@ def get_job_report_pdf(job_id: str, *, store: InMemoryJobStore | None = None) ->
         analysis = _fallback_analysis(context)
 
     conv_fig, sim_fig = _figures_for_mpc_report(record)
-
-    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tf:
-        pdf_path = tf.name
+    tmp_path = RESULTS_DIR / f"mpc_{job_id}_report.tmp.{os.getpid()}"
 
     try:
         build_pdf_report(
-            path=pdf_path,
+            path=str(tmp_path),
             system_name=record.system_name or "AgentMPC System",
             dynamics_summary=plugin.summary(),
             results_data=results_data if results_data else [{"iteration": 1, "mse": record.best_mse or 0.01, "ok": True}],
@@ -2460,22 +2483,24 @@ def get_job_report_pdf(job_id: str, *, store: InMemoryJobStore | None = None) ->
             simulation_fig=sim_fig,
             backend=Backend.AUTO,
         )
-        with open(pdf_path, "rb") as pf:
-            pdf_bytes = pf.read()
-        try:
-            st.update(job_id, report_pdf=pdf_bytes)
-        except Exception:
-            pass
-        return pdf_bytes
+        tmp_path.replace(target_path)
+        st.update(job_id, pdf_path=str(target_path))
+        return target_path
     finally:
         import matplotlib.pyplot as plt
         if conv_fig is not None:
             plt.close(conv_fig)
         if sim_fig is not None:
             plt.close(sim_fig)
-        if os.path.exists(pdf_path):
+        if tmp_path.exists():
             try:
-                os.unlink(pdf_path)
+                tmp_path.unlink()
             except Exception:
                 pass
+
+
+def get_job_report_pdf(job_id: str, *, store: InMemoryJobStore | None = None) -> bytes:
+    """Generate engineering PDF report (backward-compatible bytes interface)."""
+    path = get_or_create_job_report_pdf_file(job_id, store=store)
+    return path.read_bytes()
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from starlette.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 
@@ -36,6 +36,7 @@ from backend_api.http.services.mpc_service import (
     get_export_script,
     get_job,
     get_job_report_pdf,
+    get_or_create_job_report_pdf_file,
     get_results,
     list_jobs,
     simulate_manual,
@@ -43,6 +44,8 @@ from backend_api.http.services.mpc_service import (
     submit_job,
     test_dynamics as run_test_dynamics,
 )
+
+_mpc_pdf_locks: dict[str, asyncio.Lock] = {}
 
 router = APIRouter(prefix="/mpc", tags=["mpc"])
 
@@ -246,19 +249,22 @@ async def download_report_pdf(
     # Release DB connection immediately before PDF generation so other requests are not starved
     db.close()
 
-    try:
-        pdf_bytes = await run_in_threadpool(get_job_report_pdf, job_id, store=store)
-        filename = f"{record.system_name or 'mpc_system'}_report.pdf"
-        return Response(
-            content=pdf_bytes,
-            media_type="application/pdf",
-            headers={
-                "Content-Disposition": f'attachment; filename="{filename}"',
-                "Content-Length": str(len(pdf_bytes)),
-            },
-        )
-    except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
+    filename = f"{record.system_name or 'mpc_system'}_report.pdf"
+
+    if job_id not in _mpc_pdf_locks:
+        _mpc_pdf_locks[job_id] = asyncio.Lock()
+    lock = _mpc_pdf_locks[job_id]
+
+    async with lock:
+        try:
+            pdf_path = await run_in_threadpool(get_or_create_job_report_pdf_file, job_id, store=store)
+            return FileResponse(
+                path=str(pdf_path),
+                filename=filename,
+                media_type="application/pdf",
+            )
+        except Exception as exc:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
 
 
 @router.post("/jobs/{job_id}/grade")

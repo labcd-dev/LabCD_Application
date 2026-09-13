@@ -271,6 +271,15 @@ class XeLatexBackend(PdfBackend):
 
             pdf_path = os.path.join(tmpdir, "report.pdf")
             if returncode != 0 or not os.path.exists(pdf_path):
+                log_file = os.path.join(tmpdir, "report.log")
+                if os.path.exists(log_file):
+                    try:
+                        with open(log_file, "r", encoding="utf-8", errors="replace") as lf:
+                            file_log = lf.read()
+                        if file_log:
+                            log_output = (log_output + "\n\n--- XeLaTeX log file (report.log) ---\n" + file_log).strip()
+                    except Exception:
+                        pass
                 raise RuntimeError(
                     "PDF compilation failed (xelatex exit code %d). The PDF, if "
                     "any, would be missing content after the error point. "

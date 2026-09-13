@@ -80,7 +80,7 @@ class JobRecord:
     design_grade: dict[str, Any] | None = None
     session_metadata: dict[str, Any] | None = None
     avg_solve_time: float | None = None
-    report_pdf: bytes | None = None
+    pdf_path: str | None = None
     created_at: datetime = field(default_factory=_now)
     updated_at: datetime = field(default_factory=_now)
 
@@ -122,6 +122,7 @@ class InMemoryMPCJobStore:
                     "design_grade": record.design_grade,
                     "session_metadata": record.session_metadata,
                     "avg_solve_time": record.avg_solve_time,
+                    "pdf_path": record.pdf_path,
                 }
                 if row is None:
                     row = DBMPCJob(
@@ -203,6 +204,7 @@ class InMemoryMPCJobStore:
                     design_grade=res.get("design_grade"),
                     session_metadata=res.get("session_metadata"),
                     avg_solve_time=res.get("avg_solve_time"),
+                    pdf_path=res.get("pdf_path"),
                     created_at=row.created_at or _now(),
                     updated_at=row.updated_at or _now(),
                 )
