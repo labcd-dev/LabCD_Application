@@ -48,6 +48,7 @@ def user_out(user: User) -> UserOut:
         feedback_survey_completed_silo=silo_done,
         feedback_survey_completed_mulo=mulo_done,
         tutorial_dont_show_again=bool(user.tutorial_dont_show_again),
+        onboarding_answers=user.onboarding_answers,
     )
 
 

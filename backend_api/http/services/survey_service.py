@@ -81,11 +81,33 @@ def should_show_tutorial(user: User, videos: list[TutorialVideo]) -> bool:
 
 def submit_profile(db: Session, user: User, request: ProfileSurveyRequest) -> User:
     now = datetime.now(timezone.utc)
-    user.university = request.university.strip()
-    user.degree = request.degree.strip()
-    user.major = request.major.strip()
-    user.matlab_experience = request.matlab_experience
-    user.control_design_experience = request.control_design_experience
+    answers = request.onboarding_answers or {
+        "tools": request.tools,
+        "experience": request.experience,
+        "recency": request.recency,
+        "goals": request.goals,
+        "other_text": request.other_text or "",
+        "pipeline": request.pipeline,
+        "completed": request.completed,
+        "skipped": request.skipped,
+    }
+    user.onboarding_answers = answers
+
+    if request.university:
+        user.university = request.university.strip()
+    if request.degree:
+        user.degree = request.degree.strip()
+    if request.major:
+        user.major = request.major.strip()
+    if request.matlab_experience:
+        user.matlab_experience = request.matlab_experience
+    elif "simulink" in request.tools:
+        user.matlab_experience = "yes"
+    if request.control_design_experience:
+        user.control_design_experience = request.control_design_experience
+    elif request.experience:
+        user.control_design_experience = request.experience
+
     user.profile_survey_completed_at = now
     db.add(user)
     db.commit()

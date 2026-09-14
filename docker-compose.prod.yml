@@ -8,10 +8,22 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
       interval: 5s
       timeout: 5s
       retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: [ "redis-server", "--appendonly", "yes" ]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
     restart: unless-stopped
 
   api:
@@ -21,15 +33,55 @@ services:
     env_file:
       - .env
     environment:
+      PYTHONPATH: /app
       RESULTS_DIR: /app/results
       UPLOADS_DIR: /app/uploads
+      LABCD_ARTIFACTS_DIR: /app/artifacts
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
     volumes:
       - ./results:/app/results
       - ./uploads:/app/uploads
+      - ./artifacts:/app/artifacts
       - ./.env:/app/.env
     depends_on:
       db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  celery_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    command: [ "python", "-m", "celery", "-A", "backend_api.celery_app", "worker", "--loglevel=info", "-Q", "celery,compute,default", "-c", "4" ]
+    env_file:
+      - .env
+    environment:
+      PYTHONPATH: /app
+      RESULTS_DIR: /app/results
+      UPLOADS_DIR: /app/uploads
+      LABCD_ARTIFACTS_DIR: /app/artifacts
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      OMP_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+      C_FORCE_ROOT: "true"
+    volumes:
+      - ./results:/app/results
+      - ./uploads:/app/uploads
+      - ./artifacts:/app/artifacts
+      - ./.env:/app/.env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     restart: unless-stopped
 
@@ -40,24 +92,31 @@ services:
       args:
         VITE_API_BASE_URL: /api/v1
         VITE_GA_MEASUREMENT_ID: ${VITE_GA_MEASUREMENT_ID:-}
+    ports:
+      - "3000:80"
     depends_on:
       - api
     restart: unless-stopped
 
-  caddy:
-    image: caddy:2-alpine
+  dozzle:
+    image: amir20/dozzle:v10.10.0
+    environment:
+      DOZZLE_AUTH_PROVIDER: simple
+      DOZZLE_AUTH_TTL: 48h
+      DOZZLE_NO_ANALYTICS: "true"
+      DOZZLE_HOSTNAME: labcd-vps
     ports:
-      - "80:80"
-      - "443:443"
+      - "8080:8080"
     volumes:
-      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      - frontend
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./deploy/dozzle:/data
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   postgres_data:
-  caddy_data:
-  caddy_config:
+  redis_data:

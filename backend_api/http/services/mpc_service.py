@@ -52,6 +52,7 @@ from backend_api.http.schemas.mpc import (
     MPCJobStatusResponse,
     MPCJobSummary,
 )
+from backend_api.http.config import RESULTS_DIR
 from backend_api.http.services.executor import job_executor
 
 _PLUGINS_DIR = (
@@ -537,6 +538,9 @@ def _to_status_response(record: JobRecord) -> MPCJobStatusResponse:
         best_params=_json_safe(record.best_params),
         best_mse=_finite_float(record.best_mse),
         mse_history=_metric_series(record.mse_history),
+        overshoot_history=_metric_series(record.overshoot_history),
+        settling_history=_metric_series(record.settling_history),
+        effort_history=_metric_series(record.effort_history),
         params_history=_json_safe(list(record.params_history or [])),
         session_metadata=_json_safe(record.session_metadata),
         avg_solve_time=_finite_float(record.avg_solve_time),
@@ -759,6 +763,7 @@ def _run_tuning_thread(job_id: str, store: InMemoryJobStore) -> None:
     os.environ.setdefault("MPLBACKEND", "Agg")
     record = store.get(job_id)
     if record is None:
+        log.error("MPC tuning aborted: job %s not found in store", job_id)
         return
     if record.cancel_requested:
         store.update(job_id, status="cancelled", stage="error", message="Cancelled before start")
@@ -940,6 +945,12 @@ def _run_tuning_thread(job_id: str, store: InMemoryJobStore) -> None:
                         live_updates["best_mse"] = _finite_float(b_mse)
                 if "mse_history" in current_state:
                     live_updates["mse_history"] = _metric_series(current_state.get("mse_history"))
+                if "overshoot_history" in current_state:
+                    live_updates["overshoot_history"] = _metric_series(current_state.get("overshoot_history"))
+                if "settling_history" in current_state:
+                    live_updates["settling_history"] = _metric_series(current_state.get("settling_history"))
+                if "effort_history" in current_state:
+                    live_updates["effort_history"] = _metric_series(current_state.get("effort_history"))
                 if "params_history" in current_state:
                     live_updates["params_history"] = _json_safe(list(current_state.get("params_history") or []))
                 if "best_params" in current_state or "current_params" in current_state:
@@ -1058,6 +1069,8 @@ def _run_tuning_thread(job_id: str, store: InMemoryJobStore) -> None:
         if not dt_h and default_dt is not None and mse_h:
             dt_h = [default_dt] * len(mse_h)
 
+        # Final evaluator metrics (capitalised keys from agents/evaluator.py)
+        final_eval_metrics = final_state.get("metrics") if isinstance(final_state.get("metrics"), dict) else {}
         metrics = {
             "best_mse": best_mse,
             "iteration": final_state.get("iteration"),
@@ -1073,6 +1086,23 @@ def _run_tuning_thread(job_id: str, store: InMemoryJobStore) -> None:
             "best_settling": _json_safe(final_state.get("best_settling")),
             "best_effort": _json_safe(final_state.get("best_effort")),
             "dt_mpc": default_dt,
+            # Richer fields for PDF report assembly (is_stable, IAE, strategy, …)
+            "final_metrics": _json_safe(final_eval_metrics),
+            "Is_Stable": _json_safe(final_eval_metrics.get("Is_Stable")),
+            "best_is_stable": _json_safe(
+                final_eval_metrics.get("Is_Stable")
+                if final_eval_metrics.get("Is_Stable") is not None
+                else final_state.get("current_is_stable")
+            ),
+            "Integral_Abs_Error": _json_safe(final_eval_metrics.get("Integral_Abs_Error")),
+            "Integral_Sq_Error": _json_safe(final_eval_metrics.get("Integral_Sq_Error")),
+            "Oscillation_Count": _json_safe(final_eval_metrics.get("Oscillation_Count")),
+            "Per_State_MSE": _json_safe(final_eval_metrics.get("Per_State_MSE")),
+            "Per_State_Overshoot": _json_safe(final_eval_metrics.get("Per_State_Overshoot")),
+            "Max_Overshoot": _json_safe(final_eval_metrics.get("Max_Overshoot")),
+            "Settling_Time": _json_safe(final_eval_metrics.get("Settling_Time")),
+            "Control_Effort_RMS": _json_safe(final_eval_metrics.get("Control_Effort_RMS")),
+            "Overshoot_Meaningful": _json_safe(final_eval_metrics.get("Overshoot_Meaningful")),
         }
         history = _normalize_history(final_state.get("history"))
 
@@ -1339,6 +1369,12 @@ def _run_tuning_thread(job_id: str, store: InMemoryJobStore) -> None:
             except Exception:
                 pass
 
+        # Pre-generate disk-persisted PDF report in background
+        try:
+            get_or_create_job_report_pdf_file(job_id, store=store)
+        except Exception as pdf_exc:
+            log.warning("Background PDF pre-generation failed for MPC job %s: %s", job_id, pdf_exc)
+
         on_event(
             {
                 "kind": "completed",
@@ -1349,6 +1385,7 @@ def _run_tuning_thread(job_id: str, store: InMemoryJobStore) -> None:
             }
         )
     except Exception as exc:  # noqa: BLE001
+        log.exception("MPC tuning exception for job %s: %s", job_id, exc)
         err_text = f"{type(exc).__name__}: {exc}"
         store.update(
             job_id,
@@ -1798,6 +1835,22 @@ def diagnosis_chat(
 
 
 def _start_tuning_async(job_id: str, store: InMemoryJobStore) -> None:
+    try:
+        from backend_api.http.services.redis_client import is_redis_available
+
+        if is_redis_available():
+            from backend_api.tasks.mpc_tasks import run_mpc_tuning_task
+
+            run_mpc_tuning_task.delay(job_id)
+            log.info("Dispatched MPC job %s to Celery worker queue", job_id)
+            return
+    except Exception as exc:
+        log.warning(
+            "Failed to dispatch MPC job %s to Celery (%s); falling back to ThreadPoolExecutor",
+            job_id,
+            exc,
+        )
+
     job_executor.submit(_run_tuning_thread, job_id, store)
 
 
@@ -1822,6 +1875,23 @@ def submit_job(
         # Still create the job as failed for auditability, or re-raise.
         # Prefer fail-fast on submit.
         raise
+
+    # Enforce Pre-Launch simulation time SSOT if artifact is provided
+    art_id = None
+    if request.dynamics:
+        art_id = getattr(request.dynamics, "artifact_id", None) or getattr(request.dynamics, "plugin_id", None)
+    if art_id:
+        try:
+            from backend_api.http.services.plant_artifact_service import get_artifact
+            art_data = get_artifact(str(art_id))
+            pre_launch = getattr(art_data, "pre_launch", None) or {}
+            pre_sim_time = pre_launch.get("total_simulation_time")
+            if pre_sim_time and float(pre_sim_time) > 0:
+                # If simulation_time was not explicitly sent or defaulted, sync from artifact pre-launch
+                if "simulation_time" not in options or float(options.get("simulation_time") or 0) == 3.0:
+                    options["simulation_time"] = float(pre_sim_time)
+        except Exception:
+            pass
 
     system_name = options.get("system_name") or "mpc_system"
     source_code = request.dynamics.source if request.dynamics and request.dynamics.source else ""
@@ -2277,6 +2347,321 @@ def get_export_script(job_id: str, *, store: InMemoryJobStore | None = None) -> 
     )
 
 
+# ---------------------------------------------------------------------------
+# PDF report row assembly (must deliver the full schema expected by report_pdf)
+# ---------------------------------------------------------------------------
+
+_REQUIRED_ROW_KEYS = (
+    "iteration", "ok", "unstable", "unstable_reason", "error", "cost",
+    "mse", "overshoot", "overshoot_meaningful", "settling", "effort",
+    "iae", "ise", "oscillation_count", "is_stable",
+    "np", "nc", "Q_formatted", "R_formatted", "P_formatted", "dt_mpc",
+    "strategy", "per_state_mse", "per_state_overshoot",
+)
+
+_REQUIRED_DYNAMICS_KEYS = (
+    "dynamics_class", "source_file", "n_states", "n_inputs",
+    "state_names", "input_names", "params",
+)
+
+
+def _format_weight_vector(val: Any) -> str:
+    """Format Q/R/P for the PDF (matches desktop report style)."""
+    if val is None:
+        return "n/a"
+    if isinstance(val, str):
+        return val
+    try:
+        if isinstance(val, (list, tuple)):
+            parts = []
+            for x in val:
+                try:
+                    fx = float(x)
+                    parts.append(f"{fx:g}")
+                except (TypeError, ValueError):
+                    parts.append(str(x))
+            return "[" + ", ".join(parts) + "]"
+        return str(val)
+    except Exception:
+        return str(val)
+
+
+def _coerce_settling(val: Any) -> Any:
+    """Keep inf for 'never settled'; _metric_series maps it to None for charts."""
+    if val is None:
+        return float("inf")
+    try:
+        v = float(val)
+    except (TypeError, ValueError):
+        return float("inf")
+    if v != v:  # NaN
+        return float("inf")
+    return v
+
+
+def _params_to_row_fields(params: dict[str, Any] | None, default_dt: float | None = None) -> dict[str, Any]:
+    """Map a params_history entry (Np/Nc/Q/R/P/dt) into report_pdf snake_case keys."""
+    p = params if isinstance(params, dict) else {}
+    np_v = p.get("Np", p.get("np"))
+    nc_v = p.get("Nc", p.get("nc"))
+    dt_v = p.get("dt_mpc", p.get("dt"))
+    if dt_v is None:
+        dt_v = default_dt
+    Q = p.get("Q")
+    R = p.get("R")
+    P = p.get("P", Q)
+    return {
+        "np": int(np_v) if np_v is not None else None,
+        "nc": int(nc_v) if nc_v is not None else None,
+        "dt_mpc": float(dt_v) if dt_v is not None else None,
+        "Q_formatted": _format_weight_vector(Q),
+        "R_formatted": _format_weight_vector(R),
+        "P_formatted": _format_weight_vector(P),
+    }
+
+
+def _infer_is_stable(
+    *,
+    mse: Any,
+    settling: Any,
+    unstable: bool,
+    ok: bool,
+    explicit: Any = None,
+) -> bool:
+    """Prefer an explicit flag; otherwise a conservative reconstruction."""
+    if explicit is not None:
+        try:
+            return bool(explicit)
+        except Exception:
+            pass
+    if not ok or unstable:
+        return False
+    # Settled within the window (finite settling) is strong evidence of stability.
+    try:
+        s = float(settling) if settling is not None else float("inf")
+        if math.isfinite(s) and s >= 0:
+            return True
+    except (TypeError, ValueError):
+        pass
+    # Low finite MSE without instability is treated as stable for report purposes.
+    try:
+        m = float(mse) if mse is not None else None
+        if m is not None and math.isfinite(m) and m < 3.0:
+            return True
+    except (TypeError, ValueError):
+        pass
+    return False
+
+
+def _build_full_report_rows(
+    record: JobRecord,
+    *,
+    default_dt: float | None = None,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Assemble complete results_data + best_row for build_pdf_report.
+
+    The web job store only persists sparse metric histories and params_history.
+    This maps them into the full snake_case schema that report_pdf expects,
+    so missing keys no longer collapse the verdict to FAIL / n/a.
+    """
+    mse_h = list(record.mse_history or [])
+    overshoot_h = list(record.overshoot_history or [])
+    settling_h = list(record.settling_history or [])
+    effort_h = list(record.effort_history or [])
+    params_h = list(record.params_history or [])
+    metrics = record.metrics if isinstance(record.metrics, dict) else {}
+
+    # Optional richer histories if a future store / completion path wrote them
+    strategy_h = list(metrics.get("strategy_history") or [])
+    unstable_h = list(metrics.get("unstable_history") or [])
+    is_stable_h = list(metrics.get("is_stable_history") or [])
+    iae_h = list(metrics.get("iae_history") or [])
+    ise_h = list(metrics.get("ise_history") or [])
+    osc_h = list(metrics.get("oscillation_history") or [])
+    results_cached = metrics.get("results_rows")
+
+    n = max(len(mse_h), len(params_h), len(overshoot_h), len(settling_h), len(effort_h), 1)
+    if isinstance(results_cached, list) and results_cached:
+        n = max(n, len(results_cached))
+
+    dt0 = default_dt
+    if dt0 is None:
+        try:
+            dt0 = float((record.options or {}).get("dt_mpc") or metrics.get("dt_mpc") or 0.02)
+        except (TypeError, ValueError):
+            dt0 = 0.02
+
+    results_data: list[dict[str, Any]] = []
+    for i in range(n):
+        cached = results_cached[i] if isinstance(results_cached, list) and i < len(results_cached) and isinstance(results_cached[i], dict) else {}
+        mse = mse_h[i] if i < len(mse_h) else cached.get("mse")
+        overshoot = overshoot_h[i] if i < len(overshoot_h) else cached.get("overshoot")
+        settling_raw = settling_h[i] if i < len(settling_h) else cached.get("settling")
+        # History series may have None for inf; restore inf for the report.
+        if settling_raw is None and i < len(settling_h):
+            settling = float("inf")
+        else:
+            settling = _coerce_settling(settling_raw if settling_raw is not None else cached.get("settling"))
+        effort = effort_h[i] if i < len(effort_h) else cached.get("effort")
+        params = params_h[i] if i < len(params_h) and isinstance(params_h[i], dict) else {}
+        pfields = _params_to_row_fields(params or cached, default_dt=dt0)
+
+        unstable = bool(
+            (unstable_h[i] if i < len(unstable_h) else False)
+            or cached.get("unstable")
+        )
+        err = cached.get("error")
+        ok = bool(cached.get("ok", err is None and mse is not None and not unstable))
+
+        explicit_stable = is_stable_h[i] if i < len(is_stable_h) else cached.get("is_stable")
+        is_stable = _infer_is_stable(
+            mse=mse, settling=settling, unstable=unstable, ok=ok, explicit=explicit_stable
+        )
+
+        strategy = (
+            (strategy_h[i] if i < len(strategy_h) else None)
+            or cached.get("strategy")
+            or "explore"
+        )
+
+        row: dict[str, Any] = {
+            "iteration": int(cached.get("iteration") or (i + 1)),
+            "ok": ok,
+            "unstable": unstable,
+            "unstable_reason": cached.get("unstable_reason") or (None if not unstable else "unstable"),
+            "error": err,
+            "cost": cached.get("cost"),
+            "mse": mse,
+            "overshoot": overshoot,
+            "overshoot_meaningful": cached.get("overshoot_meaningful", True),
+            "settling": settling,
+            "effort": effort,
+            "iae": iae_h[i] if i < len(iae_h) else cached.get("iae"),
+            "ise": ise_h[i] if i < len(ise_h) else cached.get("ise"),
+            "oscillation_count": osc_h[i] if i < len(osc_h) else cached.get("oscillation_count", 0),
+            "is_stable": is_stable,
+            "strategy": strategy,
+            "per_state_mse": cached.get("per_state_mse") or {},
+            "per_state_overshoot": cached.get("per_state_overshoot") or {},
+            **pfields,
+        }
+        # Prefer explicit np/nc from cache if params were sparse
+        if row["np"] is None and cached.get("np") is not None:
+            row["np"] = cached["np"]
+        if row["nc"] is None and cached.get("nc") is not None:
+            row["nc"] = cached["nc"]
+        results_data.append(row)
+
+    # ---- best_row ----
+    best_params = record.best_params if isinstance(record.best_params, dict) else {}
+    best_fields = _params_to_row_fields(best_params, default_dt=dt0)
+
+    # Prefer the iteration that matches best_mse if possible
+    best_mse = record.best_mse
+    best_idx = None
+    if best_mse is not None and mse_h:
+        try:
+            target = float(best_mse)
+            for i, m in enumerate(mse_h):
+                if m is not None and abs(float(m) - target) < 1e-12:
+                    best_idx = i
+                    break
+        except (TypeError, ValueError):
+            pass
+    if best_idx is None and results_data:
+        # lowest finite mse among ok rows
+        best_idx = min(
+            (i for i, r in enumerate(results_data) if r.get("ok") and r.get("mse") is not None),
+            key=lambda i: float(results_data[i]["mse"]),
+            default=len(results_data) - 1,
+        )
+
+    base = results_data[best_idx] if best_idx is not None and 0 <= best_idx < len(results_data) else {}
+
+    # Final evaluator metrics (capitalised) may live under record.metrics from a richer path
+    final_metrics = metrics.get("final_metrics") or metrics.get("metrics") or {}
+    if not isinstance(final_metrics, dict):
+        final_metrics = {}
+
+    def _mget(*keys: str, default: Any = None) -> Any:
+        for k in keys:
+            if k in final_metrics and final_metrics[k] is not None:
+                return final_metrics[k]
+            if k in metrics and metrics[k] is not None:
+                return metrics[k]
+        return default
+
+    best_settling = _coerce_settling(
+        _mget("best_settling", "Settling_Time", default=base.get("settling"))
+    )
+    best_overshoot = _mget("best_overshoot", "Max_Overshoot", default=base.get("overshoot"))
+    best_effort = _mget("best_effort", "Control_Effort_RMS", default=base.get("effort"))
+    explicit_best_stable = _mget("best_is_stable", "Is_Stable", "is_stable", default=base.get("is_stable"))
+
+    best_row: dict[str, Any] = {
+        "iteration": int(base.get("iteration") or record.iteration or (best_idx + 1 if best_idx is not None else 1)),
+        "ok": True,
+        "unstable": False,
+        "unstable_reason": None,
+        "error": None,
+        "cost": base.get("cost"),
+        "mse": best_mse if best_mse is not None else base.get("mse"),
+        "overshoot": best_overshoot,
+        "overshoot_meaningful": base.get("overshoot_meaningful", True),
+        "settling": best_settling,
+        "effort": best_effort,
+        "iae": _mget("Integral_Abs_Error", "iae", default=base.get("iae")),
+        "ise": _mget("Integral_Sq_Error", "ise", default=base.get("ise")),
+        "oscillation_count": int(
+            _mget("Oscillation_Count", "best_oscillations", "oscillation_count", default=base.get("oscillation_count") or 0)
+            or 0
+        ),
+        "is_stable": _infer_is_stable(
+            mse=best_mse if best_mse is not None else base.get("mse"),
+            settling=best_settling,
+            unstable=False,
+            ok=True,
+            explicit=explicit_best_stable,
+        ),
+        "strategy": base.get("strategy") or "exploit",
+        "per_state_mse": _mget("Per_State_MSE", "per_state_mse", default=base.get("per_state_mse") or {}),
+        "per_state_overshoot": _mget("Per_State_Overshoot", "per_state_overshoot", default=base.get("per_state_overshoot") or {}),
+        **best_fields,
+    }
+    # Ensure np/nc from best_params win
+    if best_fields.get("np") is not None:
+        best_row["np"] = best_fields["np"]
+    if best_fields.get("nc") is not None:
+        best_row["nc"] = best_fields["nc"]
+
+    return results_data, best_row
+
+
+def _validate_report_payload(
+    results_data: list[dict[str, Any]],
+    best_row: dict[str, Any],
+    dynamics_summary: dict[str, Any] | None = None,
+) -> None:
+    """Raise loudly if any required key is missing — never silent FAIL/n/a."""
+    missing: list[str] = []
+    for i, row in enumerate(results_data):
+        for key in _REQUIRED_ROW_KEYS:
+            if key not in row:
+                missing.append(f"results_data[{i}].{key}")
+    for key in _REQUIRED_ROW_KEYS:
+        if key not in best_row:
+            missing.append(f"best_row.{key}")
+    if dynamics_summary is not None:
+        for key in _REQUIRED_DYNAMICS_KEYS:
+            if key not in dynamics_summary:
+                missing.append(f"dynamics_summary.{key}")
+    if missing:
+        raise ValueError(
+            "MPC PDF report payload incomplete — refusing to generate a degraded report. "
+            f"Missing fields: {', '.join(missing)}"
+        )
+
+
 def _figures_for_mpc_report(record: JobRecord) -> tuple[Any, Any]:
     """Render matplotlib Figures for the PDF report (light background for print)."""
     import numpy as np
@@ -2347,11 +2732,33 @@ def _figures_for_mpc_report(record: JobRecord) -> tuple[Any, Any]:
     return conv_fig, sim_fig
 
 
-def get_job_report_pdf(job_id: str, *, store: InMemoryJobStore | None = None) -> bytes:
-    """Generate engineering PDF report."""
-    record = _store(store).get(job_id)
+def get_or_create_job_report_pdf_file(
+    job_id: str,
+    *,
+    store: InMemoryJobStore | None = None,
+) -> Path:
+    """Generate or retrieve the disk-persisted PDF report file for an MPC job.
+
+    Persists to RESULTS_DIR / f"mpc_{job_id}_report.pdf" and stores `pdf_path` on the JobRecord.
+    If the file already exists and is non-empty, returns the existing Path immediately.
+    """
+    st = _store(store)
+    record = st.get(job_id)
     if record is None:
         raise KeyError(job_id)
+
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    target_path = RESULTS_DIR / f"mpc_{job_id}_report.pdf"
+
+    if target_path.is_file() and target_path.stat().st_size > 0:
+        if record.pdf_path != str(target_path):
+            st.update(job_id, pdf_path=str(target_path))
+        return target_path
+
+    if record.pdf_path:
+        existing = Path(record.pdf_path)
+        if existing.is_file() and existing.stat().st_size > 0:
+            return existing
 
     from backend_core.AgentMPC.agents.report_pdf import build_pdf_report
     from backend_core.AgentMPC.agents.report_agent import generate_report_analysis, _fallback_analysis
@@ -2362,28 +2769,11 @@ def get_job_report_pdf(job_id: str, *, store: InMemoryJobStore | None = None) ->
     plugin_path = _resolve_plugin_path(MPCDynamicsInput(**dyn_ref) if dyn_ref else None)
     plugin = DynamicLoader.load_from_path(plugin_path)
     dynamics = plugin.create_dynamics()
+    dynamics_summary = plugin.summary()
 
-    results_data = []
-    mse_h = record.mse_history or []
-    for it, mse in enumerate(mse_h):
-        results_data.append({
-            "iteration": it + 1,
-            "mse": mse,
-            "overshoot": record.overshoot_history[it] if record.overshoot_history and it < len(record.overshoot_history) else 0.0,
-            "settling": record.settling_history[it] if record.settling_history and it < len(record.settling_history) else 0.0,
-            "effort": record.effort_history[it] if record.effort_history and it < len(record.effort_history) else 0.0,
-            "ok": True,
-        })
-
-    best_row = {
-        "iteration": record.iteration,
-        "mse": record.best_mse,
-        "Np": (record.best_params or {}).get("Np", 12),
-        "Nc": (record.best_params or {}).get("Nc", 4),
-        "dt": (record.best_params or {}).get("dt", 0.02),
-        "Q": (record.best_params or {}).get("Q"),
-        "R": (record.best_params or {}).get("R"),
-    }
+    results_data, best_row = _build_full_report_rows(record)
+    # Guard: never emit a silently degraded PDF
+    _validate_report_payload(results_data, best_row, dynamics_summary)
 
     try:
         analysis = generate_report_analysis(
@@ -2399,48 +2789,53 @@ def get_job_report_pdf(job_id: str, *, store: InMemoryJobStore | None = None) ->
             "system_name": record.system_name or "AgentMPC System",
             "n_states": plugin.config.n_states,
             "n_inputs": plugin.config.n_inputs,
-            "best_np": best_row.get("Np", 12),
-            "best_nc": best_row.get("Nc", 4),
-            "best_dt": best_row.get("dt", 0.02),
-            "best_q": best_row.get("Q"),
-            "best_r": best_row.get("R"),
+            "best_np": best_row.get("np", 12),
+            "best_nc": best_row.get("nc", 4),
+            "best_dt": best_row.get("dt_mpc", 0.02),
+            "best_q": best_row.get("Q_formatted"),
+            "best_r": best_row.get("R_formatted"),
             "n_iterations": len(results_data),
             "n_ok": sum(1 for r in results_data if r.get("ok")),
-            "n_unstable": 0,
-            "n_failed": 0,
+            "n_unstable": sum(1 for r in results_data if r.get("unstable")),
+            "n_failed": sum(1 for r in results_data if not r.get("ok")),
             "best_mse": best_row.get("mse", 0.01),
             "first_mse": results_data[0].get("mse", 0.05) if results_data else 0.05,
         }
         analysis = _fallback_analysis(context)
 
     conv_fig, sim_fig = _figures_for_mpc_report(record)
-
-    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tf:
-        pdf_path = tf.name
+    tmp_path = RESULTS_DIR / f"mpc_{job_id}_report.tmp.{os.getpid()}"
 
     try:
         build_pdf_report(
-            path=pdf_path,
+            path=str(tmp_path),
             system_name=record.system_name or "AgentMPC System",
-            dynamics_summary=plugin.summary(),
-            results_data=results_data if results_data else [{"iteration": 1, "mse": record.best_mse or 0.01, "ok": True}],
+            dynamics_summary=dynamics_summary,
+            results_data=results_data,
             best_row=best_row,
             analysis=analysis,
             convergence_fig=conv_fig,
             simulation_fig=sim_fig,
             backend=Backend.AUTO,
         )
-        with open(pdf_path, "rb") as pf:
-            return pf.read()
+        tmp_path.replace(target_path)
+        st.update(job_id, pdf_path=str(target_path))
+        return target_path
     finally:
         import matplotlib.pyplot as plt
         if conv_fig is not None:
             plt.close(conv_fig)
         if sim_fig is not None:
             plt.close(sim_fig)
-        if os.path.exists(pdf_path):
+        if tmp_path.exists():
             try:
-                os.unlink(pdf_path)
+                tmp_path.unlink()
             except Exception:
                 pass
+
+
+def get_job_report_pdf(job_id: str, *, store: InMemoryJobStore | None = None) -> bytes:
+    """Generate engineering PDF report (backward-compatible bytes interface)."""
+    path = get_or_create_job_report_pdf_file(job_id, store=store)
+    return path.read_bytes()
 

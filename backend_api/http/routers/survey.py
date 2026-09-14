@@ -199,6 +199,7 @@ def list_survey_responses(
                 major=u.major,
                 matlab_experience=u.matlab_experience,
                 control_design_experience=u.control_design_experience,
+                onboarding_answers=u.onboarding_answers,
                 completed_at=u.profile_survey_completed_at,
             )
             for u in profile_users

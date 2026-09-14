@@ -8,6 +8,7 @@ import {
   FileText,
   Gauge,
   Info,
+  Loader2,
   Search,
   ShieldCheck,
   Stethoscope,
@@ -54,6 +55,7 @@ interface AdaptiveDashboardProps {
   job?: AdaptiveJobStatusResponse | null
   results?: AdaptiveJobResultsResponse | null
   onDownloadReport?: () => void
+  downloadingPdf?: boolean
   /** Re-run design with current form inputs. */
   onRetryFromDiagnosis?: () => void
   /** Write a suggestion into form inputs (max 1 apply enforced here). */
@@ -80,6 +82,7 @@ export function AdaptiveDashboard({
   job,
   results,
   onDownloadReport,
+  downloadingPdf = false,
   onRetryFromDiagnosis,
   onApplyDiagnosisSuggestion,
   diagnosisApplyUsed = false,
@@ -870,10 +873,12 @@ title('LabCD Adaptive Closed-Loop Response'); legend('show', 'Location', 'best')
             <button
               type="button"
               onClick={onDownloadReport}
-              className={`${btnBase} ${btnCompact} flex items-center gap-1.5 text-xs text-muted-text hover:text-foreground border border-border hover:bg-surface-hover`}
-              title="Download authenticated engineering PDF report (.pdf)"
+              disabled={downloadingPdf}
+              className={`${btnBase} ${btnCompact} flex items-center gap-1.5 text-xs text-muted-text hover:text-foreground border border-border hover:bg-surface-hover disabled:opacity-50 disabled:cursor-not-allowed`}
+              title={downloadingPdf ? "Generating authenticated PDF report..." : "Download authenticated engineering PDF report (.pdf)"}
             >
-              <FileText className="size-3.5" /> PDF
+              {downloadingPdf ? <Loader2 className="size-3.5 animate-spin text-primary" /> : <FileText className="size-3.5" />}
+              {downloadingPdf ? 'Generating…' : 'PDF'}
             </button>
           )}
         </div>
@@ -1349,9 +1354,11 @@ title('LabCD Adaptive Closed-Loop Response'); legend('show', 'Location', 'best')
                 <button
                   type="button"
                   onClick={onDownloadReport}
-                  className={`${btnBase} ${btnCompact} flex items-center gap-1.5 text-xs text-muted-text hover:text-foreground`}
+                  disabled={downloadingPdf}
+                  className={`${btnBase} ${btnCompact} flex items-center gap-1.5 text-xs text-muted-text hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed`}
                 >
-                  <Download className="size-3.5" /> PDF Report
+                  {downloadingPdf ? <Loader2 className="size-3.5 animate-spin text-primary" /> : <Download className="size-3.5" />}
+                  {downloadingPdf ? 'Generating…' : 'PDF Report'}
                 </button>
               )}
             </div>

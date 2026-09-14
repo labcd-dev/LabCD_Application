@@ -59,6 +59,8 @@ Desktop.ini
 .env.local
 .env.*.local
 !.env.example
+deploy/dozzle/*
+!deploy/dozzle/.gitkeep
 
 # Node / frontend build
 node_modules/

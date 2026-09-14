@@ -23,6 +23,11 @@ DATABASE_URL = os.getenv(
     "DATABASE_URL",
     "postgresql+psycopg://labcd:labcd@localhost:5432/labcd",
 )
+# Redis & Celery broker / backend configurations
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0").strip()
+CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", REDIS_URL).strip()
+CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", REDIS_URL).strip()
+
 # Keep pool headroom for API requests while design jobs open short-lived sessions.
 DB_POOL_SIZE = int(os.getenv("DB_POOL_SIZE", "10"))
 DB_MAX_OVERFLOW = int(os.getenv("DB_MAX_OVERFLOW", "20"))

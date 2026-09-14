@@ -157,21 +157,32 @@ def _resolve_plant_from_db(
     except ConversationAccessDenied as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
 
-    # Check saved final system name & python code
+    session_st = conversation.session_state or {}
+    latest = session_st.get("latest_draft") if isinstance(session_st, dict) else None
+    draft_meta = None
+    if isinstance(latest, dict) and isinstance(latest.get("metadata"), dict):
+        draft_meta = latest["metadata"]
+
+    # Completed plant: system_name + python_code columns; metadata lives on the
+    # accepted draft in session_state (no separate final_metadata column).
     if conversation.final_system_name and conversation.final_python_code:
-        return {
+        plant: dict[str, Any] = {
             "system_name": conversation.final_system_name,
             "python_code": conversation.final_python_code,
         }
+        if draft_meta is not None:
+            plant["metadata"] = draft_meta
+        return plant
 
     # Fallback to latest draft in session_state
-    session_st = conversation.session_state or {}
-    latest = session_st.get("latest_draft")
     if isinstance(latest, dict) and latest.get("system_name") and latest.get("python_code"):
-        return {
+        plant = {
             "system_name": latest["system_name"],
             "python_code": latest["python_code"],
         }
+        if draft_meta is not None:
+            plant["metadata"] = draft_meta
+        return plant
 
     raise HTTPException(
         status_code=400,

@@ -51,19 +51,22 @@ def test_adaptive_job_store():
     assert record.status == "queued"
     
     # Update record
-    updated = store.update(record.job_id, status="completed", message="Done")
+    updated = store.update(record.job_id, status="completed", message="Done", pdf_path="/tmp/test.pdf")
     assert updated.status == "completed"
     assert updated.message == "Done"
+    assert updated.pdf_path == "/tmp/test.pdf"
     
     # Get record
     fetched = store.get(record.job_id)
     assert fetched is not None
     assert fetched.status == "completed"
+    assert fetched.pdf_path == "/tmp/test.pdf"
     
     # List jobs
     jobs = store.list_jobs(user_id=1)
     assert len(jobs) == 1
     assert jobs[0].job_id == record.job_id
+    assert jobs[0].pdf_path == "/tmp/test.pdf"
 
 
 def test_mpc_job_store():
@@ -78,8 +81,14 @@ def test_mpc_job_store():
     fetched = store.get(record.job_id)
     assert len(fetched.progress) == 1
     assert fetched.progress[0]["stage"] == "actor"
+
+    # Update pdf_path
+    updated = store.update(record.job_id, pdf_path="/tmp/test_mpc.pdf")
+    assert updated.pdf_path == "/tmp/test_mpc.pdf"
+    assert store.get(record.job_id).pdf_path == "/tmp/test_mpc.pdf"
     
     # Request cancel
     cancelled = store.request_cancel(record.job_id)
     assert cancelled.cancel_requested is True
     assert store.is_cancel_requested(record.job_id) is True
+

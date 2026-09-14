@@ -63,13 +63,46 @@ class ArtifactValidationError(Exception):
         super().__init__("; ".join(self.errors) if self.errors else "validation failed")
 
 
+def _metadata_is_usable(meta: Any) -> bool:
+    """True when plant metadata has real states + matching non-empty state_equations.
+
+    Used to decide whether to treat AgentPlant (or client) metadata as authoritative
+    instead of synthesizing a strict-feedback chain via ``infer_metadata``.
+    """
+    if not isinstance(meta, dict):
+        return False
+    states = meta.get("states")
+    eqs = meta.get("state_equations")
+    if not isinstance(states, list) or not states:
+        return False
+    if not isinstance(eqs, list) or len(eqs) != len(states):
+        return False
+    if not all(isinstance(e, str) and e.strip() for e in eqs):
+        return False
+    return True
+
+
 def validate_plant_and_pre_launch(
     plant: dict[str, Any],
     pre_launch: dict[str, Any] | None = None,
 ) -> ValidationResponse:
+    """Validate plant (+ optional pre-launch) without wiping good metadata.
+
+    Prefer the caller's ``plant["metadata"]`` when it already has usable
+    ``states`` and matching ``state_equations``. Only call
+    ``PlantCompiler.infer_metadata`` as a true fallback (missing / incomplete),
+    and even then the compiler merges rather than inventing a chain over real
+    equations.
+    """
     compiler = PlantCompiler()
-    # Enrich metadata with complete schema before validation
-    meta = compiler.infer_metadata(plant, pre_launch or {})
+    # Prefer reconcile (extract + np.sin→sin normalize + numerical check) so
+    # code-derived equations never fail sympy validation with numpy prefixes.
+    try:
+        from backend_core.plant_compiler import reconcile_metadata_with_code
+        meta = reconcile_metadata_with_code(plant, pre_launch or {}, compiler=compiler)
+        meta.pop("_verify", None)
+    except Exception:
+        meta = compiler.infer_metadata(plant, pre_launch or {})
     plant["metadata"] = meta
 
     plant_result = compiler.validate(plant)

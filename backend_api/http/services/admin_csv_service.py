@@ -101,6 +101,7 @@ PROFILE_SURVEY_CSV_FIELDS = [
     "major",
     "matlab_experience",
     "control_design_experience",
+    "onboarding_answers",
     "completed_at",
 ]
 
@@ -369,6 +370,7 @@ def _overview_project_csv_row(project: Project) -> dict[str, Any]:
 
 
 def _profile_survey_csv_row(user: User) -> dict[str, Any]:
+    answers_str = json.dumps(user.onboarding_answers, ensure_ascii=False) if user.onboarding_answers else ""
     return {
         "user_id": user.id,
         "email": user.email,
@@ -377,6 +379,7 @@ def _profile_survey_csv_row(user: User) -> dict[str, Any]:
         "major": user.major or "",
         "matlab_experience": user.matlab_experience or "",
         "control_design_experience": user.control_design_experience or "",
+        "onboarding_answers": answers_str,
         "completed_at": _iso(user.profile_survey_completed_at),
     }
 

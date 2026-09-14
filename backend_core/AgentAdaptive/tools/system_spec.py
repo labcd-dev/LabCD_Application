@@ -594,19 +594,33 @@ def sim_overrides_from_spec(spec):
 def substitute_parameters(spec):
     # bakes params into the equations numerically here in Python, not by the
     # LLM, since it's just arithmetic - no judgment call needed.
+    # State and input names MUST be in locals so sympy does not treat e.g.
+    # ``i`` as the imaginary unit or drop free symbols incorrectly.
     spec = normalize_spec(spec)
     dyn = dict(spec["dynamics"])
-    params = dyn["parameters"]
+    params = dyn["parameters"] if isinstance(dyn.get("parameters"), dict) else {}
     if not params:
         return spec
-    param_symbols = {name: sp.Symbol(name) for name in params}
-    subs = {param_symbols[name]: sp.Float(value) for name, value in params.items()}
+    states = list(dyn.get("states") or [])
+    inputs = list(dyn.get("inputs") or [])
+    local_syms = {}
+    for name in list(states) + list(inputs):
+        if isinstance(name, str) and name:
+            local_syms[name] = sp.Symbol(name, real=True)
+    for name in params:
+        if isinstance(name, str) and name:
+            local_syms[name] = sp.Symbol(name, real=True)
+    subs = {
+        local_syms[name]: sp.Float(value)
+        for name, value in params.items()
+        if name in local_syms and isinstance(value, (int, float))
+    }
 
     def _sub(expr_text):
         if not expr_text:
             return expr_text
         try:
-            expr = sp.sympify(expr_text, locals=param_symbols)
+            expr = sp.sympify(expr_text, locals=local_syms)
         except (sp.SympifyError, TypeError, ValueError, AttributeError):
             return expr_text
         try:
@@ -615,8 +629,8 @@ def substitute_parameters(spec):
             return expr_text
 
     dyn["state_equations"] = [_sub(e) for e in dyn["state_equations"]]
-    dyn["uncertainty"] = [dict(e, expr=_sub(e.get("expr"))) for e in dyn["uncertainty"]]
-    dyn["disturbance"] = [dict(e, expr=_sub(e.get("expr"))) for e in dyn["disturbance"]]
+    dyn["uncertainty"] = [dict(e, expr=_sub(e.get("expr") or "")) for e in (dyn.get("uncertainty") or [])]
+    dyn["disturbance"] = [dict(e, expr=_sub(e.get("expr") or "")) for e in (dyn.get("disturbance") or [])]
     dyn["parameters"] = {}
     return {"status": spec["status"], "system_name": spec["system_name"], "dynamics": dyn}
 

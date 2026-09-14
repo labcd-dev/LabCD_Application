@@ -58,6 +58,25 @@ def _build_backstepping_structure(states, u, f, c_gains):
 
     u_law = alpha[n - 1]
 
+    # Guard against singular g_i (non-strict-feedback plants that slipped past
+    # method validation). Dividing by 0 produces ComplexInfinity and a cryptic
+    # KeyError inside sympy.lambdify — raise a clear structural error instead.
+    for i, g in enumerate(g_list):
+        g_s = sp.simplify(g)
+        if g_s == 0 or g_s.has(sp.zoo) or g_s.has(sp.oo) or g_s.has(sp.nan):
+            next_name = str(states[i + 1]) if i < n - 1 else str(u)
+            raise ValueError(
+                "backstepping structure is singular at step %d: coefficient of "
+                "%s in f[%d] is %s (not a strict-feedback chain). "
+                "Use method='smc' for this plant."
+                % (i, next_name, i, g_s)
+            )
+    if u_law.has(sp.zoo) or u_law.has(sp.oo) or u_law.has(sp.nan):
+        raise ValueError(
+            "backstepping control law is singular (ComplexInfinity/NaN). "
+            "The plant is not a strict-feedback chain; use method='smc'."
+        )
+
     u_func = sp.lambdify(list(states) + yd, u_law, "numpy")
 
     return {

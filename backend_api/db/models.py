@@ -144,6 +144,7 @@ class User(Base):
     major: Mapped[str | None] = mapped_column(String(200), nullable=True)
     matlab_experience: Mapped[str | None] = mapped_column(String(40), nullable=True)
     control_design_experience: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    onboarding_answers: Mapped[dict[str, Any] | None] = mapped_column(JsonDict, nullable=True)
     profile_survey_completed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,

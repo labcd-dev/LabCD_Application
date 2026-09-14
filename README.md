@@ -121,7 +121,9 @@ LabCD-Phase-1-31/
 ├── uploads/               # Runtime uploads (gitignored; .gitkeep only)
 ├── results/               # Runtime artifacts (gitignored; .gitkeep only)
 ├── docs/                  # Deploy + feature docs (e.g. Telegram analytics)
+├── deploy/                # Caddyfile, prod env template, Dozzle setup, deploy.sh
 ├── docker-compose.yml     # db + api + frontend
+├── docker-compose.prod.yml  # db + api + frontend + caddy + dozzle
 ├── Dockerfile.api         # FastAPI image
 ├── Dockerfile             # Legacy Streamlit image
 ├── requirements.txt       # Python dependencies
@@ -210,7 +212,7 @@ Never commit `.env` (ignored). Commit only `.env.example`.
 
 | Doc | Topic |
 |-----|--------|
-| [docs/DEPLOY.md](./docs/DEPLOY.md) | Production deploy on Ubuntu |
+| [docs/DEPLOY.md](./docs/DEPLOY.md) | Production deploy on Ubuntu (includes Dozzle at `logs.labcd.ai`) |
 | [docs/TELEGRAM_ANALYTICS.md](./docs/TELEGRAM_ANALYTICS.md) | Daily Telegram analytics digest |
 | [docs/CREDITS.md](./docs/CREDITS.md) | Credit balances, bonuses, usage metering, admin checklist |
 

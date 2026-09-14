@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -45,11 +45,22 @@ class SurveyStatusResponse(BaseModel):
 
 
 class ProfileSurveyRequest(BaseModel):
-    university: str = Field(min_length=1, max_length=200)
-    degree: DegreeLevel
-    major: MajorField
-    matlab_experience: ExperienceLevel
-    control_design_experience: ExperienceLevel
+    tools: list[str] = Field(default_factory=list)
+    experience: str | None = None
+    recency: str | None = None
+    goals: list[str] = Field(default_factory=list)
+    other_text: str | None = None
+    pipeline: str | None = None
+    completed: bool = True
+    skipped: bool = False
+    onboarding_answers: dict[str, Any] | None = None
+
+    # Legacy fields for backward compatibility
+    university: str | None = None
+    degree: DegreeLevel | str | None = None
+    major: MajorField | str | None = None
+    matlab_experience: ExperienceLevel | str | None = None
+    control_design_experience: ExperienceLevel | str | None = None
 
 
 class FeedbackSurveyRequest(BaseModel):
@@ -98,12 +109,13 @@ class TutorialDismissRequest(BaseModel):
 class ProfileSurveyResponseOut(BaseModel):
     user_id: int
     email: str
-    university: str | None
-    degree: str | None
-    major: str | None
-    matlab_experience: str | None
-    control_design_experience: str | None
-    completed_at: datetime | None
+    university: str | None = None
+    degree: str | None = None
+    major: str | None = None
+    matlab_experience: str | None = None
+    control_design_experience: str | None = None
+    onboarding_answers: dict[str, Any] | None = None
+    completed_at: datetime | None = None
 
 
 class FeedbackSurveyResponseOut(BaseModel):

@@ -11,8 +11,10 @@ import {
   AlertTriangle,
   Zap,
   Gauge,
+  Clock,
+  Sliders,
 } from 'lucide-react'
-import { mpcApi } from '../api/endpoints'
+import { mpcApi, plantArtifactApi } from '../api/endpoints'
 import type {
   DiagnosisApplyPatch,
   MPCDiagnosticsResponse,
@@ -49,6 +51,7 @@ export function MpcPage() {
   const [testingDynamics, setTestingDynamics] = useState(false)
   const [diagnostics, setDiagnostics] = useState<MPCDiagnosticsResponse | null>(null)
   const hasAutoTestedDynamicsRef = useRef(false)
+  const [downloadingPdf, setDownloadingPdf] = useState(false)
 
   // 2. Scenario Tab Options
   const [trajectoryMode, setTrajectoryMode] = useState<'reg' | 'sin' | 'pulse'>('reg')
@@ -79,7 +82,9 @@ export function MpcPage() {
   const [np, setNp] = useState(12)
   const [nc, setNc] = useState(4)
   const [dtMpc, setDtMpc] = useState(0.02)
-  const [simTime, setSimTime] = useState(10.0)
+  const [simTime, setSimTime] = useState(3.0)
+  const [simTimeSource, setSimTimeSource] = useState<'default' | 'pre_launch' | 'diagnosis'>('default')
+  const [diagnosisNotice, setDiagnosisNotice] = useState<string | null>(null)
   const [maxIterations, setMaxIterations] = useState(8)
   const [explorationIntensity, setExplorationIntensity] = useState(50)
   const [userGuidance, setUserGuidance] = useState('')
@@ -326,6 +331,53 @@ export function MpcPage() {
     setDiagnostics(null)
   }, [pipeline.fileContent, pipeline.fileName, pipeline.projectId])
 
+  // Prepopulate simulation time from compiled artifact / pre-launch if available
+  useEffect(() => {
+    let active = true
+    const resolveAndSetSimTime = async () => {
+      let artifactId = sessionStorage.getItem('labcd_last_artifact_id')
+      if (!artifactId) {
+        try {
+          const artifacts = await plantArtifactApi.listArtifacts()
+          if (artifacts && artifacts.length > 0) {
+            const cleanName = pipeline.fileName?.replace('.py', '')?.toLowerCase()
+            const match = cleanName
+              ? artifacts.find(
+                  (a) =>
+                    a.system_name?.toLowerCase().includes(cleanName) ||
+                    a.artifact_id.toLowerCase().includes(cleanName),
+                )
+              : null
+            artifactId = match ? match.artifact_id : artifacts[0].artifact_id
+            if (artifactId) {
+              sessionStorage.setItem('labcd_last_artifact_id', artifactId)
+            }
+          }
+        } catch {
+          // ignore fallback fetch error
+        }
+      }
+
+      if (!artifactId || !active) return
+
+      try {
+        const art = await plantArtifactApi.getArtifact(artifactId)
+        if (!active || !art?.pre_launch) return
+        if (typeof art.pre_launch.total_simulation_time === 'number' && art.pre_launch.total_simulation_time > 0) {
+          setSimTime(art.pre_launch.total_simulation_time)
+          setSimTimeSource('pre_launch')
+        }
+      } catch {
+        // keep current value
+      }
+    }
+
+    void resolveAndSetSimTime()
+    return () => {
+      active = false
+    }
+  }, [pipeline.fileContent, pipeline.fileName, pipeline.projectId])
+
   const handleStartJob = async () => {
     setError(null)
     setLoading(true)
@@ -423,7 +475,11 @@ export function MpcPage() {
     } else if (field.includes('control_horizon') || field === 'nc' || (field.includes('control') && field.includes('horizon'))) {
       if (!Number.isNaN(n) && n > 0) setNc(Math.round(n))
     } else if (field.includes('sim') && field.includes('time')) {
-      if (!Number.isNaN(n) && n > 0) setSimTime(n)
+      if (!Number.isNaN(n) && n > 0) {
+        setSimTime(n)
+        setSimTimeSource('diagnosis')
+        setDiagnosisNotice(`Simulation horizon updated to ${n}s from AI diagnosis recommendation.`)
+      }
     } else if (field.includes('dt') || field.includes('sampling') || field.includes('step')) {
       if (!Number.isNaN(n) && n > 0) setDtMpc(n)
     } else if (field.includes('max_iter')) {
@@ -1333,7 +1389,45 @@ export function MpcPage() {
                     </div>
                   )}
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs font-mono">
+
+                {/* Knobs Header with Pre-Launch Simulation Horizon Read-Only Badge */}
+                <div className="flex flex-wrap items-center justify-between gap-2 pb-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                      <Sliders className="size-3.5 text-purple-500" />
+                      Agentic MPC Tuning Knobs
+                    </span>
+                    {diagnosisNotice && (
+                      <span className="text-[11px] text-amber-500 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full font-sans">
+                        {diagnosisNotice}
+                      </span>
+                    )}
+                  </div>
+                  <div
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-mono transition-colors ${
+                      simTimeSource === 'diagnosis'
+                        ? 'border-amber-500/40 bg-amber-500/10 text-amber-500 dark:text-amber-400'
+                        : simTimeSource === 'pre_launch'
+                          ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                          : 'border-border bg-surface-muted text-muted-text'
+                    }`}
+                    title={
+                      simTimeSource === 'diagnosis'
+                        ? 'Adjusted via AI diagnosis suggestion'
+                        : simTimeSource === 'pre_launch'
+                          ? 'Inherited from Pre-launch plant configuration'
+                          : 'Default simulation horizon'
+                    }
+                  >
+                    <Clock className="size-3" />
+                    <span>Total Sim Time: <b className="font-bold text-foreground">{simTime}s</b></span>
+                    <span className="text-[10px] opacity-75">
+                      {simTimeSource === 'diagnosis' ? '(Diagnosis)' : simTimeSource === 'pre_launch' ? '(Pre-launch)' : '(Default)'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 text-xs font-mono">
                   <div className="rounded-xl border border-border bg-surface-elevated p-4 space-y-1">
                     <div className="flex justify-between text-muted-text">
                       <span>Prediction Horizon (Np)</span>
@@ -1391,22 +1485,6 @@ export function MpcPage() {
                       max={50}
                       value={maxIterations}
                       onChange={(e) => setMaxIterations(Number(e.target.value))}
-                      className="w-full accent-purple-500"
-                    />
-                  </div>
-
-                  <div className="rounded-xl border border-border bg-surface-elevated p-4 space-y-1">
-                    <div className="flex justify-between text-muted-text">
-                      <span>Simulation Time (T_sim)</span>
-                      <span className="text-foreground font-bold">{simTime}s</span>
-                    </div>
-                    <input
-                      type="range"
-                      min={1.0}
-                      max={10.0}
-                      step={0.5}
-                      value={simTime}
-                      onChange={(e) => setSimTime(Number(e.target.value))}
                       className="w-full accent-purple-500"
                     />
                   </div>
@@ -1480,11 +1558,17 @@ export function MpcPage() {
           <MpcDashboard
             job={job}
             results={results}
-            onDownloadReport={() => {
-              if (jobId) {
-                void mpcApi.downloadReportPdf(jobId).catch((err) => {
+            downloadingPdf={downloadingPdf}
+            onDownloadReport={async () => {
+              if (jobId && !downloadingPdf) {
+                setDownloadingPdf(true)
+                try {
+                  await mpcApi.downloadReportPdf(jobId)
+                } catch (err) {
                   console.error('Failed to download MPC PDF report:', err)
-                })
+                } finally {
+                  setDownloadingPdf(false)
+                }
               }
             }}
             onRetryFromDiagnosis={handleRetryFromDiagnosis}

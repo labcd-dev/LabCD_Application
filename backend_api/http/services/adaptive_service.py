@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Callable
+
+log = logging.getLogger(__name__)
+
+from backend_api.http.config import RESULTS_DIR
 
 from backend_core.AgentAdaptive.agents import clarifier
 from backend_core.AgentAdaptive.agents.tuner_agent import run_full_pipeline
@@ -331,6 +337,7 @@ def _run_pipeline_thread(job_id: str, store: InMemoryAdaptiveJobStore) -> None:
     os.environ.setdefault("MPLBACKEND", "Agg")
     record = store.get(job_id)
     if record is None:
+        log.error("Adaptive pipeline aborted: job %s not found in store", job_id)
         return
     if record.cancel_requested:
         store.update(job_id, status="cancelled", stage="error", message="Cancelled before design")
@@ -632,7 +639,17 @@ def _run_pipeline_thread(job_id: str, store: InMemoryAdaptiveJobStore) -> None:
                 )
             except Exception:
                 pass
+
+        # Pre-generate disk-persisted PDF report in background
+        try:
+            get_or_create_job_report_pdf_file(job_id, store=store)
+        except Exception as pdf_exc:
+            import logging
+            logging.getLogger(__name__).warning(
+                "Background PDF pre-generation failed for adaptive job %s: %s", job_id, pdf_exc
+            )
     except Exception as exc:  # noqa: BLE001
+        log.exception("Adaptive pipeline thread failed for job %s: %s", job_id, exc)
         store.update(
             job_id,
             status="failed",
@@ -660,6 +677,22 @@ def _run_pipeline_thread(job_id: str, store: InMemoryAdaptiveJobStore) -> None:
 
 
 def _start_pipeline_async(job_id: str, store: InMemoryAdaptiveJobStore) -> None:
+    try:
+        from backend_api.http.services.redis_client import is_redis_available
+
+        if is_redis_available():
+            from backend_api.tasks.adaptive_tasks import run_adaptive_pipeline_task
+
+            run_adaptive_pipeline_task.delay(job_id)
+            log.info("Dispatched Adaptive job %s to Celery worker queue", job_id)
+            return
+    except Exception as exc:
+        log.warning(
+            "Failed to dispatch Adaptive job %s to Celery (%s); falling back to ThreadPoolExecutor",
+            job_id,
+            exc,
+        )
+
     job_executor.submit(_run_pipeline_thread, job_id, store)
 
 
@@ -1103,18 +1136,8 @@ def _figures_from_series(series: dict[str, Any] | None) -> list[tuple[bytes, str
     return figs
 
 
-def get_job_report_pdf(job_id: str, *, store: InMemoryAdaptiveJobStore | None = None) -> bytes:
-    """Generate engineering PDF report for an adaptive job (XeLaTeX required).
-
-    Parity with Streamlit ``adaptive_app.py`` PDF path:
-    - same LaTeX delimiter / align-env sanitization
-    - figures regenerated from stored simulation series (tracking, control, d_hat)
-    - prefer_xelatex=True → real math typesetting or a clear RuntimeError
-    """
-    record = _store(store).get(job_id)
-    if record is None:
-        raise KeyError(job_id)
-
+def _generate_adaptive_report_pdf_bytes(record: JobRecord) -> bytes:
+    """Render PDF report bytes for an adaptive job via XeLaTeX with ReportLab fallback."""
     from backend_core.AgentAdaptive.tools.report import (
         build_pdf_report,
         prepare_summary_markdown,
@@ -1123,7 +1146,6 @@ def get_job_report_pdf(job_id: str, *, store: InMemoryAdaptiveJobStore | None = 
     raw_summary = record.report or (
         f"# Adaptive Controller Design Report\n\nMethod: {record.method or 'SMC / Backstepping'}"
     )
-    # Same preprocessing Streamlit applies before build_pdf_report
     summary_md = prepare_summary_markdown(raw_summary)
     abstract_md = prepare_summary_markdown(record.abstract or "") if record.abstract else ""
     try:
@@ -1131,14 +1153,19 @@ def get_job_report_pdf(job_id: str, *, store: InMemoryAdaptiveJobStore | None = 
     except Exception:
         figures = []
 
+    raw_log = [ev.get("text", "") for ev in (record.progress or []) if ev.get("text")]
+    if len(raw_log) > 500:
+        raw_log = raw_log[-500:]
+    log_text = "\n".join(raw_log)
+    if len(log_text) > 50000:
+        log_text = log_text[-50000:]
+
     try:
-        return build_pdf_report(
+        pdf_bytes = build_pdf_report(
             summary_markdown=summary_md,
             figures=figures,
             usage=record.usage,
-            log_text="\n".join(
-                ev.get("text", "") for ev in (record.progress or []) if ev.get("text")
-            ),
+            log_text=log_text,
             tuning_log=list(record.tuning_log or []),
             tuning_best=record.tuning_best,
             clarification_record=list(record.clarification_record or []),
@@ -1149,13 +1176,11 @@ def get_job_report_pdf(job_id: str, *, store: InMemoryAdaptiveJobStore | None = 
     except Exception as exc:
         import logging
         logging.warning("build_pdf_report prefer_xelatex failed (%s); retrying with ReportLab backend", exc)
-        return build_pdf_report(
+        pdf_bytes = build_pdf_report(
             summary_markdown=summary_md,
             figures=figures,
             usage=record.usage,
-            log_text="\n".join(
-                ev.get("text", "") for ev in (record.progress or []) if ev.get("text")
-            ),
+            log_text=log_text,
             tuning_log=list(record.tuning_log or []),
             tuning_best=record.tuning_best,
             clarification_record=list(record.clarification_record or []),
@@ -1163,6 +1188,58 @@ def get_job_report_pdf(job_id: str, *, store: InMemoryAdaptiveJobStore | None = 
             abstract_markdown=abstract_md,
             prefer_xelatex=False,
         )
+
+    return pdf_bytes
+
+
+def get_or_create_job_report_pdf_file(
+    job_id: str,
+    *,
+    store: InMemoryAdaptiveJobStore | None = None,
+) -> Path:
+    """Generate or retrieve the disk-persisted PDF report file for an adaptive job.
+
+    Persists to RESULTS_DIR / f"adaptive_{job_id}_report.pdf" and stores `pdf_path` on the JobRecord.
+    If the file already exists and is non-empty, returns the existing Path immediately.
+    """
+    st = _store(store)
+    record = st.get(job_id)
+    if record is None:
+        raise KeyError(job_id)
+
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    target_path = RESULTS_DIR / f"adaptive_{job_id}_report.pdf"
+
+    if target_path.is_file() and target_path.stat().st_size > 0:
+        if record.pdf_path != str(target_path):
+            st.update(job_id, pdf_path=str(target_path))
+        return target_path
+
+    if record.pdf_path:
+        existing = Path(record.pdf_path)
+        if existing.is_file() and existing.stat().st_size > 0:
+            return existing
+
+    pdf_bytes = _generate_adaptive_report_pdf_bytes(record)
+    tmp_path = RESULTS_DIR / f"adaptive_{job_id}_report.tmp.{os.getpid()}"
+    try:
+        tmp_path.write_bytes(pdf_bytes)
+        tmp_path.replace(target_path)
+    finally:
+        if tmp_path.exists():
+            try:
+                tmp_path.unlink()
+            except Exception:
+                pass
+
+    st.update(job_id, pdf_path=str(target_path))
+    return target_path
+
+
+def get_job_report_pdf(job_id: str, *, store: InMemoryAdaptiveJobStore | None = None) -> bytes:
+    """Generate engineering PDF report for an adaptive job (backward-compatible bytes interface)."""
+    path = get_or_create_job_report_pdf_file(job_id, store=store)
+    return path.read_bytes()
 
 
 def get_export_script(job_id: str, *, store: InMemoryAdaptiveJobStore | None = None) -> str:

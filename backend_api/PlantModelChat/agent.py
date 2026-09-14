@@ -87,7 +87,9 @@ _ASCII_REPLACEMENTS = (
 @dataclass
 class PlantModelSessionState:
     draft_count: int = 0
-    latest_draft: Dict[str, str] | None = None
+    # Was Dict[str, str] (system_name/python_code only); widened so a
+    # "metadata" key (a nested dict, not a string) can round-trip too.
+    latest_draft: Dict[str, Any] | None = None
 
 
 def apply_session_state(
@@ -214,10 +216,7 @@ class PlantModelAgent(BaseAgent):
         if status == "draft" and self._has_code(parsed):
             parsed = self._sanitize_code_fields(parsed)
             self._draft_count += 1
-            self._latest_draft = {
-                "system_name": parsed["system_name"],
-                "python_code": parsed["python_code"],
-            }
+            self._latest_draft = self._draft_payload(parsed)
             display = self._format_draft_display(parsed)
             if self._draft_count >= self.max_drafts:
                 return display, dict(self._latest_draft)
@@ -243,10 +242,7 @@ class PlantModelAgent(BaseAgent):
             if parsed.get("status") == "draft" and self._has_code(parsed):
                 parsed = self._sanitize_code_fields(parsed)
                 self._draft_count += 1
-                self._latest_draft = {
-                    "system_name": parsed["system_name"],
-                    "python_code": parsed["python_code"],
-                }
+                self._latest_draft = self._draft_payload(parsed)
                 return self._format_draft_display(parsed), None
             if parsed.get("status") == "continue":
                 reply = (parsed.get("reply") or "").strip()
@@ -262,12 +258,24 @@ class PlantModelAgent(BaseAgent):
 
     def _accept_complete(self, payload: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
         payload = self._sanitize_code_fields(payload)
-        final = {
-            "system_name": payload["system_name"],
-            "python_code": payload["python_code"],
-        }
+        final = self._draft_payload(payload)
         self._latest_draft = final
         return f"Model ready — **{final['system_name']}**.", final
+
+    @staticmethod
+    def _draft_payload(parsed: Dict[str, Any]) -> Dict[str, Any]:
+        """Build the stored draft/complete payload, keeping ``metadata`` when the
+        LLM provided a real (dict) one, without requiring it (backward compatible
+        with older draft/complete shapes that only have system_name/python_code).
+        """
+        out: Dict[str, Any] = {
+            "system_name": parsed["system_name"],
+            "python_code": parsed["python_code"],
+        }
+        metadata = parsed.get("metadata")
+        if isinstance(metadata, dict) and metadata:
+            out["metadata"] = metadata
+        return out
 
     @staticmethod
     def _sanitize_code_fields(data: Dict[str, Any]) -> Dict[str, Any]:

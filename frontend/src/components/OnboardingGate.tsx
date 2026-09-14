@@ -68,27 +68,24 @@ export function OnboardingGate({ children }: OnboardingGateProps) {
 
   return (
     <>
-      {needsProfile ? (
+      {children}
+      {needsProfile && (
         <ProfileSurveyModal
           onCompleted={async () => {
             await refreshUser()
             await loadStatus()
           }}
         />
-      ) : (
-        <>
-          {children}
-          {showTutorial && status && (
-            <TutorialSliderModal
-              videos={status.videos}
-              onClosed={async () => {
-                setTutorialDismissedLocally(true)
-                await refreshUser()
-                await loadStatus()
-              }}
-            />
-          )}
-        </>
+      )}
+      {showTutorial && status && (
+        <TutorialSliderModal
+          videos={status.videos}
+          onClosed={async () => {
+            setTutorialDismissedLocally(true)
+            await refreshUser()
+            await loadStatus()
+          }}
+        />
       )}
     </>
   )

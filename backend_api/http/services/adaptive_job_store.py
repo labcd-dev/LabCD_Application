@@ -5,9 +5,12 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+import logging
 from threading import Lock
 from typing import Any, Literal
 from uuid import uuid4
+
+log = logging.getLogger(__name__)
 
 JobStatus = Literal[
     "queued",
@@ -79,16 +82,68 @@ class JobRecord:
     diagnosis: dict[str, Any] | None = None
     control_law: str | None = None
     stability_proof: str | None = None
+    pdf_path: str | None = None
     created_at: datetime = field(default_factory=_now)
     updated_at: datetime = field(default_factory=_now)
 
 
+def _record_to_dict(rec: JobRecord) -> dict[str, Any]:
+    d = dict(rec.__dict__)
+    if isinstance(d.get("created_at"), datetime):
+        d["created_at"] = d["created_at"].isoformat()
+    if isinstance(d.get("updated_at"), datetime):
+        d["updated_at"] = d["updated_at"].isoformat()
+    return d
+
+
+def _dict_to_record(d: dict[str, Any]) -> JobRecord:
+    data = dict(d)
+    if "created_at" in data and isinstance(data["created_at"], str):
+        try:
+            data["created_at"] = datetime.fromisoformat(data["created_at"])
+        except Exception:
+            data["created_at"] = _now()
+    if "updated_at" in data and isinstance(data["updated_at"], str):
+        try:
+            data["updated_at"] = datetime.fromisoformat(data["updated_at"])
+        except Exception:
+            data["updated_at"] = _now()
+    valid_fields = set(JobRecord.__dataclass_fields__.keys())
+    clean_data = {k: v for k, v in data.items() if k in valid_fields}
+    return JobRecord(**clean_data)
+
+
 class InMemoryAdaptiveJobStore:
-    """Thread-safe in-memory job registry for AgentAdaptive with PostgreSQL persistence."""
+    """Thread-safe in-memory job registry for AgentAdaptive with Redis and PostgreSQL persistence."""
 
     def __init__(self) -> None:
         self._lock = Lock()
         self._jobs: dict[str, JobRecord] = {}
+
+    def _sync_to_redis(self, record: JobRecord) -> None:
+        try:
+            from backend_api.http.services.redis_client import is_redis_available, redis_set_json
+
+            if is_redis_available():
+                redis_set_json(f"labcd:adaptive_job:{record.job_id}", _record_to_dict(record), ex=86400 * 7)
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).warning("Failed to sync adaptive job %s to redis: %s", record.job_id, exc)
+
+    def _load_from_redis(self, job_id: str) -> JobRecord | None:
+        try:
+            from backend_api.http.services.redis_client import is_redis_available, redis_get_json
+
+            if is_redis_available():
+                data = redis_get_json(f"labcd:adaptive_job:{job_id}")
+                if data and isinstance(data, dict):
+                    rec = _dict_to_record(data)
+                    self._jobs[job_id] = rec
+                    return rec
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).warning("Failed to load adaptive job %s from redis: %s", job_id, exc)
+        return None
 
     def _sync_to_db(self, record: JobRecord) -> None:
         try:
@@ -114,6 +169,7 @@ class InMemoryAdaptiveJobStore:
                     "diagnosis": record.diagnosis,
                     "control_law": record.control_law,
                     "stability_proof": record.stability_proof,
+                    "pdf_path": record.pdf_path,
                 }
                 if row is None:
                     row = DBAdaptiveJob(
@@ -187,6 +243,9 @@ class InMemoryAdaptiveJobStore:
                     session_metadata=res.get("session_metadata"),
                     export_script=res.get("export_script"),
                     diagnosis=res.get("diagnosis"),
+                    control_law=res.get("control_law"),
+                    stability_proof=res.get("stability_proof"),
+                    pdf_path=res.get("pdf_path"),
                     created_at=row.created_at or _now(),
                     updated_at=row.updated_at or _now(),
                 )
@@ -217,17 +276,36 @@ class InMemoryAdaptiveJobStore:
                 project_id=project_id,
             )
             self._jobs[job_id] = record
+            self._sync_to_redis(record)
             self._sync_to_db(record)
             return deepcopy(record)
 
     def get(self, job_id: str) -> JobRecord | None:
         with self._lock:
-            record = self._jobs.get(job_id)
+            record = self._load_from_redis(job_id)
+            if record is None:
+                record = self._jobs.get(job_id)
             if record is None:
                 record = self._load_from_db(job_id)
             return deepcopy(record) if record is not None else None
 
     def list_jobs(self, user_id: int | None = None) -> list[JobRecord]:
+        # Sync from DB to ensure persistent history is visible across workers and after restarts
+        try:
+            from backend_api.db.session import SessionLocal
+            from backend_api.db.models import AdaptiveJobRecord as DBAdaptiveJob
+
+            with SessionLocal() as db:
+                query = db.query(DBAdaptiveJob)
+                if user_id is not None:
+                    query = query.filter(DBAdaptiveJob.user_id == user_id)
+                rows = query.order_by(DBAdaptiveJob.created_at.desc()).limit(100).all()
+                for row in rows:
+                    if row.job_id not in self._jobs:
+                        self._load_from_db(row.job_id)
+        except Exception:
+            pass
+
         with self._lock:
             records = list(self._jobs.values())
         if user_id is not None:
@@ -237,9 +315,7 @@ class InMemoryAdaptiveJobStore:
 
     def update(self, job_id: str, **fields: Any) -> JobRecord | None:
         with self._lock:
-            record = self._jobs.get(job_id)
-            if record is None:
-                record = self._load_from_db(job_id)
+            record = self._load_from_redis(job_id) or self._jobs.get(job_id) or self._load_from_db(job_id)
             if record is None:
                 return None
             for key, value in fields.items():
@@ -252,37 +328,90 @@ class InMemoryAdaptiveJobStore:
                     value = str(value)
                 setattr(record, key, value)
             record.updated_at = _now()
+            self._jobs[job_id] = record
+            self._sync_to_redis(record)
             self._sync_to_db(record)
+
+            # Broadcast status update via Redis Pub/Sub for instant real-time SSE delivery
+            try:
+                from backend_api.http.services.redis_client import is_redis_available, redis_publish
+
+                if is_redis_available():
+                    status_payload = {
+                        "status": record.status,
+                        "stage": record.stage,
+                        "message": record.message,
+                        "round": record.clarify_round,
+                        "clarify_pending": record.status == "clarifying",
+                    }
+                    redis_publish(f"labcd:adaptive_job:{job_id}:events", {"event": "status", "data": status_payload})
+                    if record.status in ("completed", "failed", "cancelled"):
+                        redis_publish(f"labcd:adaptive_job:{job_id}:events", {"event": "done", "data": {"status": record.status}})
+            except Exception:
+                pass
+
             return deepcopy(record)
 
     def append_progress(self, job_id: str, event: dict[str, Any]) -> None:
         with self._lock:
-            record = self._jobs.get(job_id)
-            if record is None:
-                record = self._load_from_db(job_id)
+            record = self._load_from_redis(job_id) or self._jobs.get(job_id) or self._load_from_db(job_id)
             if record is None:
                 return
             record.progress.append(dict(event))
             record.updated_at = _now()
-            self._sync_to_db(record)
+            self._jobs[job_id] = record
+            self._sync_to_redis(record)
+
+            # Publish event directly via Pub/Sub so clients receive progress with 0ms latency
+            try:
+                from backend_api.http.services.redis_client import is_redis_available, redis_publish
+
+                if is_redis_available():
+                    redis_publish(f"labcd:adaptive_job:{job_id}:events", {"event": "progress", "data": event})
+            except Exception:
+                pass
+
+            if len(record.progress) % 5 == 0:
+                self._sync_to_db(record)
 
     def request_cancel(self, job_id: str) -> JobRecord | None:
+        # 1. Atomic Redis cancel flag to eliminate race conditions between processes
+        try:
+            from backend_api.http.services.redis_client import is_redis_available, get_redis_client, redis_publish
+
+            if is_redis_available():
+                client = get_redis_client()
+                if client:
+                    client.set(f"labcd:adaptive_job:{job_id}:cancel", "1", ex=86400 * 7)
+                redis_publish(f"labcd:adaptive_job:{job_id}:events", {"event": "status", "data": {"status": "cancelled"}})
+        except Exception:
+            pass
+
         with self._lock:
-            record = self._jobs.get(job_id)
-            if record is None:
-                record = self._load_from_db(job_id)
+            record = self._load_from_redis(job_id) or self._jobs.get(job_id) or self._load_from_db(job_id)
             if record is None:
                 return None
             record.cancel_requested = True
             record.updated_at = _now()
+            self._jobs[job_id] = record
+            self._sync_to_redis(record)
             self._sync_to_db(record)
             return deepcopy(record)
 
     def is_cancel_requested(self, job_id: str) -> bool:
+        # Atomic check against Redis first
+        try:
+            from backend_api.http.services.redis_client import is_redis_available, get_redis_client
+
+            if is_redis_available():
+                client = get_redis_client()
+                if client and client.get(f"labcd:adaptive_job:{job_id}:cancel") == "1":
+                    return True
+        except Exception:
+            pass
+
         with self._lock:
-            record = self._jobs.get(job_id)
-            if record is None:
-                record = self._load_from_db(job_id)
+            record = self._load_from_redis(job_id) or self._jobs.get(job_id) or self._load_from_db(job_id)
             return bool(record and record.cancel_requested)
 
 

@@ -41,6 +41,7 @@ def get_user_detail(db: Session, user_id: int) -> dict | None:
             "major": user.major,
             "matlab_experience": user.matlab_experience,
             "control_design_experience": user.control_design_experience,
+            "onboarding_answers": user.onboarding_answers,
             "completed_at": user.profile_survey_completed_at,
         }
 

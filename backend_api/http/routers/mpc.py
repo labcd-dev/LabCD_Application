@@ -5,9 +5,12 @@ from __future__ import annotations
 import asyncio
 import json
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
+from starlette.concurrency import run_in_threadpool
+from sqlalchemy.orm import Session
 
 from backend_api.db.models import User
+from backend_api.db.session import get_db
 from backend_api.http.dependencies import require_action
 from backend_api.http.schemas.mpc import (
     MPCDiagnosticsRequest,
@@ -33,6 +36,7 @@ from backend_api.http.services.mpc_service import (
     get_export_script,
     get_job,
     get_job_report_pdf,
+    get_or_create_job_report_pdf_file,
     get_results,
     list_jobs,
     simulate_manual,
@@ -40,6 +44,8 @@ from backend_api.http.services.mpc_service import (
     submit_job,
     test_dynamics as run_test_dynamics,
 )
+
+_mpc_pdf_locks: dict[str, asyncio.Lock] = {}
 
 router = APIRouter(prefix="/mpc", tags=["mpc"])
 
@@ -160,6 +166,9 @@ async def stream_mpc_job_events(
                 "best_mse": cur.best_mse,
                 "best_params": cur.best_params,
                 "mse_history": cur.mse_history,
+                "overshoot_history": cur.overshoot_history,
+                "settling_history": cur.settling_history,
+                "effort_history": cur.effort_history,
                 "params_history": cur.params_history,
                 "series": cur.series,
                 "baseline_series": cur.baseline_series,
@@ -226,9 +235,10 @@ def download_export_script(
 
 
 @router.get("/jobs/{job_id}/report.pdf")
-def download_report_pdf(
+async def download_report_pdf(
     job_id: str,
     user: User = Depends(require_action("module:mpc")),
+    db: Session = Depends(get_db),
     store: InMemoryMPCJobStore = Depends(get_mpc_store),
 ):
     """Download engineering PDF report."""
@@ -236,18 +246,25 @@ def download_report_pdf(
     if record is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
     _assert_job_access(record.user_id, user)
-    try:
-        pdf_bytes = get_job_report_pdf(job_id, store=store)
-        filename = f"{record.system_name or 'mpc_system'}_report.pdf"
-        return StreamingResponse(
-            iter([pdf_bytes]),
-            media_type="application/pdf",
-            headers={
-                "Content-Disposition": f'attachment; filename="{filename}"',
-            },
-        )
-    except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
+    # Release DB connection immediately before PDF generation so other requests are not starved
+    db.close()
+
+    filename = f"{record.system_name or 'mpc_system'}_report.pdf"
+
+    if job_id not in _mpc_pdf_locks:
+        _mpc_pdf_locks[job_id] = asyncio.Lock()
+    lock = _mpc_pdf_locks[job_id]
+
+    async with lock:
+        try:
+            pdf_path = await run_in_threadpool(get_or_create_job_report_pdf_file, job_id, store=store)
+            return FileResponse(
+                path=str(pdf_path),
+                filename=filename,
+                media_type="application/pdf",
+            )
+        except Exception as exc:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
 
 
 @router.post("/jobs/{job_id}/grade")

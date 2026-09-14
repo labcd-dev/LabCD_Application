@@ -92,6 +92,119 @@ function autoresize(el: HTMLTextAreaElement) {
   el.style.height = `${Math.min(el.scrollHeight, 160)}px`
 }
 
+// --- Plant metadata formatting (sidebar) -----------------------------------
+// Canonical order matches PlantCompiler.REQUIRED_METADATA_KEYS; any extra
+// keys a future backend adds are still shown, appended after the known ones.
+const METADATA_KEY_ORDER = [
+  'states',
+  'state_meanings',
+  'inputs',
+  'outputs',
+  'state_equations',
+  'parameters',
+  'system_type',
+  'assumptions',
+]
+
+const METADATA_LABELS: Record<string, string> = {
+  states: 'States',
+  state_meanings: 'State meanings',
+  inputs: 'Inputs',
+  outputs: 'Outputs',
+  state_equations: 'State equations',
+  parameters: 'Parameters',
+  system_type: 'System type',
+  assumptions: 'Assumptions',
+}
+
+function humanizeMetadataKey(key: string): string {
+  return (
+    METADATA_LABELS[key] ??
+    key
+      .split('_')
+      .filter(Boolean)
+      .map((word) => word[0].toUpperCase() + word.slice(1))
+      .join(' ')
+  )
+}
+
+function isEmptyMetadataValue(value: unknown): boolean {
+  if (value === null || value === undefined) return true
+  if (Array.isArray(value)) return value.length === 0
+  if (typeof value === 'object') return Object.keys(value as Record<string, unknown>).length === 0
+  if (typeof value === 'string') return value.trim().length === 0
+  return false
+}
+
+function orderedMetadataEntries(metadata: Record<string, unknown>): [string, unknown][] {
+  const seen = new Set<string>()
+  const ordered: [string, unknown][] = []
+  for (const key of METADATA_KEY_ORDER) {
+    if (key in metadata) {
+      ordered.push([key, metadata[key]])
+      seen.add(key)
+    }
+  }
+  for (const [key, value] of Object.entries(metadata)) {
+    if (!seen.has(key)) ordered.push([key, value])
+  }
+  return ordered.filter(([, value]) => !isEmptyMetadataValue(value))
+}
+
+function formatScalar(value: unknown): string {
+  if (value === null || value === undefined) return '—'
+  if (typeof value === 'number') {
+    return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(6)))
+  }
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No'
+  return String(value)
+}
+
+/** Render a single metadata value, adapting to its shape: short lists of
+ * identifiers read fine inline, but longer or more sentence-like entries
+ * (meanings, equations, assumptions) get their own line so they can wrap
+ * without cramming the panel or forcing a horizontal scroll. */
+function MetadataValue({ value }: { value: unknown }) {
+  if (Array.isArray(value)) {
+    const items = value.map((v) => (v !== null && typeof v === 'object' ? JSON.stringify(v) : formatScalar(v)))
+    const stacked = items.length > 4 || items.some((s) => s.length > 22)
+    if (stacked) {
+      return (
+        <ul className="m-0 flex list-none flex-col gap-1 p-0">
+          {items.map((item, i) => (
+            <li
+              key={i}
+              className="rounded-md bg-surface-elevated px-2 py-1 font-mono text-[11.5px] leading-snug text-foreground break-words"
+            >
+              {item}
+            </li>
+          ))}
+        </ul>
+      )
+    }
+    return <span className="break-words font-mono text-[12.5px] text-foreground">{items.join(', ')}</span>
+  }
+
+  if (value !== null && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+    return (
+      <ul className="m-0 flex list-none flex-col gap-1 p-0">
+        {entries.map(([key, entryValue]) => (
+          <li
+            key={key}
+            className="flex items-baseline justify-between gap-2 font-mono text-[11.5px] leading-snug"
+          >
+            <span className="shrink-0 text-muted">{key}</span>
+            <span className="break-words text-right text-foreground">{formatScalar(entryValue)}</span>
+          </li>
+        ))}
+      </ul>
+    )
+  }
+
+  return <span className="break-words font-mono text-[12.5px] text-foreground">{formatScalar(value)}</span>
+}
+
 export function PlantModelChat({
   model: _model = AUTO_MODEL,
   models,
@@ -319,6 +432,7 @@ export function PlantModelChat({
     })
     plantRows.push({ k: 'Artifact', v: 'dynamics(t, x, u) · Python' })
   }
+  const metadataEntries = draft?.metadata ? orderedMetadataEntries(draft.metadata) : []
 
   return (
     <div className="relative flex min-h-0 min-w-0 flex-1 overflow-x-hidden">
@@ -681,6 +795,28 @@ export function PlantModelChat({
                       className="h-full bg-gradient-to-r from-primary via-indigo-400 to-[var(--app-status-success-text)] shadow-[0_0_8px_rgba(99,102,241,0.4)] transition-[width] duration-500"
                       style={{ width: `${progressPct}%` }}
                     />
+                {metadataEntries.length > 0 && (
+                  <>
+                    <div className="mt-1 text-[11px] font-semibold uppercase tracking-[0.05em] text-muted">
+                      Model details
+                    </div>
+                    {metadataEntries.map(([key, value]) => (
+                      <div
+                        key={key}
+                        className="min-w-0 rounded-[10px] border border-border-subtle bg-surface-muted px-3 py-2.5"
+                      >
+                        <div className="mb-1.5 text-[11.5px] font-semibold text-muted">
+                          {humanizeMetadataKey(key)}
+                        </div>
+                        <MetadataValue value={value} />
+                      </div>
+                    ))}
+                  </>
+                )}
+
+                {draft && (
+                  <div className="mt-1 overflow-hidden rounded-[10px] border border-border-subtle">
+                    <CodePreview value={draft.python_code} readOnly height={260} language="python" />
                   </div>
                   <div
                     className={`mt-1.5 text-[11px] ${
