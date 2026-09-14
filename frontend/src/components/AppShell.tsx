@@ -12,6 +12,7 @@ import {
   Shield,
   Sun,
 } from 'lucide-react'
+import { BackToCaseStudies } from './BackToCaseStudies'
 import { SupportFabs } from './SupportFabs'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
@@ -116,6 +117,9 @@ export function AppShell({ children, topbarActions }: AppShellProps) {
   const isMpc = location.pathname.startsWith('/mpc')
   const isAdaptive = location.pathname.startsWith('/adaptive')
   const isFullBleed = isProfile || isDesign || isMpc || isAdaptive
+  const isContinuingChat =
+    isDesign && new URLSearchParams(location.search).has('conversation')
+  const showCaseStudiesBack = isContinuingChat || isMpc || isAdaptive
   const initials = userInitials(user)
   const label = sectionLabel(location.pathname)
   const sidebarWidth = sidebarOpen ? SIDEBAR_EXPANDED_WIDTH : SIDEBAR_COLLAPSED_WIDTH
@@ -328,6 +332,7 @@ export function AppShell({ children, topbarActions }: AppShellProps) {
                 <Menu className="size-4" />
               </button>
             )}
+            {showCaseStudiesBack && <BackToCaseStudies />}
             <div className="flex items-center gap-2 text-[13px] text-muted-text">
               <span className="font-bold text-foreground tracking-tight">LabCD</span>
               <span className="text-muted/50">/</span>
@@ -389,7 +394,7 @@ export function AppShell({ children, topbarActions }: AppShellProps) {
         </header>
 
         <main
-          className={`flex min-h-0 flex-1 flex-col overflow-y-auto ${
+          className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto ${
             isFullBleed ? '' : 'p-4 sm:p-6 lg:p-8 xl:p-10'
           }`}
         >

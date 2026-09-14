@@ -5,8 +5,11 @@ import {
   Check,
   Clock,
   Loader2,
+  PanelRightClose,
+  PanelRightOpen,
   Sparkles,
 } from 'lucide-react'
+import { BackToCaseStudies } from './BackToCaseStudies'
 import { plantModelApi, triggerBlobDownload } from '../api/endpoints'
 import type {
   PlantModelChatMessage,
@@ -115,6 +118,7 @@ export function PlantModelChat({
   const [toastOpen, setToastOpen] = useState(false)
   const [selection, setSelection] = useState(AUTO_MODEL)
   const [recentConversations, setRecentConversations] = useState<PlantModelConversationSummary[]>([])
+  const [plantPanelOpen, setPlantPanelOpen] = useState(true)
   const deepLinkHandled = useRef<string | null>(null)
 
   useEffect(() => {
@@ -129,6 +133,8 @@ export function PlantModelChat({
   const threadInputRef = useRef<HTMLTextAreaElement>(null)
 
   const inChat = messages.length > 0 || finalResult !== null
+  const fromCaseStudies = Boolean(searchParams.get('conversation'))
+  const showBackToCaseStudies = inChat || fromCaseStudies
   const chatDisabled = disabled || loading
   const draft = finalResult ?? sessionState?.latest_draft ?? null
   const resolvedModel = resolveChatModel(selection, models)
@@ -315,8 +321,14 @@ export function PlantModelChat({
   }
 
   return (
-    <div className="relative flex min-h-0 flex-1">
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+    <div className="relative flex min-h-0 min-w-0 flex-1 overflow-x-hidden">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden">
+        {showBackToCaseStudies && (
+          <div className="flex shrink-0 items-center border-b border-border px-5 py-2.5 sm:px-8">
+            <BackToCaseStudies to={caseStudiesHref} />
+          </div>
+        )}
+
         {/* Landing */}
         {!inChat && (
           <div className="relative flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-4 py-8 sm:px-6 sm:py-12">
@@ -473,23 +485,47 @@ export function PlantModelChat({
 
         {/* Chat layout */}
         {inChat && (
-          <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[1fr_380px] xl:grid-cols-[1fr_440px] 2xl:grid-cols-[1fr_480px]">
-            <div className="flex min-h-0 flex-col border-border lg:border-r">
+          <div
+            className={`grid min-h-0 min-w-0 flex-1 overflow-x-hidden grid-cols-1 ${
+              plantPanelOpen
+                ? 'lg:grid-cols-[minmax(0,1fr)_minmax(0,380px)] xl:grid-cols-[minmax(0,1fr)_minmax(0,440px)] 2xl:grid-cols-[minmax(0,1fr)_minmax(0,480px)]'
+                : ''
+            }`}
+          >
+            <div
+              className={`relative flex min-h-0 min-w-0 flex-col border-border ${
+                plantPanelOpen ? 'lg:border-r' : ''
+              }`}
+            >
+              {!plantPanelOpen && (
+                <div className="absolute right-3 top-3 z-10 hidden lg:block">
+                  <button
+                    type="button"
+                    className="flex size-8 items-center justify-center rounded-lg border border-border bg-surface-elevated text-muted-text shadow-sm transition-colors hover:bg-surface-hover hover:text-foreground"
+                    onClick={() => setPlantPanelOpen(true)}
+                    aria-label="Open plant model panel"
+                    title="Open plant model panel"
+                  >
+                    <PanelRightOpen className="size-4" />
+                  </button>
+                </div>
+              )}
+
               {error && (
-                <div className="px-5 pt-3 sm:px-8">
+                <div className="min-w-0 px-5 pt-3 sm:px-8">
                   <StatusMessage type="error" message={error} />
                 </div>
               )}
 
               <div
                 ref={listRef}
-                className="flex flex-1 flex-col gap-[18px] overflow-y-auto px-5 py-7 sm:px-8"
+                className="flex min-h-0 min-w-0 flex-1 flex-col gap-[18px] overflow-x-hidden overflow-y-auto px-5 py-7 sm:px-8"
                 aria-live="polite"
               >
                 {messages.map((message, index) => (
                   <div
                     key={`${message.role}-${index}`}
-                    className={`flex max-w-[960px] xl:max-w-[1100px] 2xl:max-w-[1240px] gap-3.5 ${
+                    className={`flex w-full max-w-[960px] min-w-0 gap-3.5 xl:max-w-[1100px] 2xl:max-w-[1240px] ${
                       message.role === 'user' ? 'flex-row-reverse self-end' : ''
                     }`}
                   >
@@ -503,7 +539,7 @@ export function PlantModelChat({
                       {message.role === 'user' ? initials : 'L'}
                     </div>
                     <div
-                      className={`rounded-xl px-3.5 py-2.5 text-[13.5px] leading-relaxed ${
+                      className={`min-w-0 break-words rounded-xl px-3.5 py-2.5 text-[13.5px] leading-relaxed ${
                         message.role === 'assistant'
                           ? 'border border-border bg-surface-elevated text-foreground'
                           : 'border border-[color-mix(in_srgb,var(--app-primary)_28%,transparent)] bg-[color-mix(in_srgb,var(--app-primary)_12%,transparent)] text-foreground'
@@ -512,14 +548,14 @@ export function PlantModelChat({
                       {message.role === 'assistant' ? (
                         <MarkdownContent content={message.content} className="plant-chat-md" />
                       ) : (
-                        <p className="m-0 whitespace-pre-wrap">{message.content}</p>
+                        <p className="m-0 whitespace-pre-wrap break-words">{message.content}</p>
                       )}
                     </div>
                   </div>
                 ))}
 
                 {loading && (
-                  <div className="flex max-w-[960px] xl:max-w-[1100px] 2xl:max-w-[1240px] gap-3.5">
+                  <div className="flex w-full max-w-[960px] min-w-0 gap-3.5 xl:max-w-[1100px] 2xl:max-w-[1240px]">
                     <div className="mt-0.5 grid size-[26px] shrink-0 place-items-center rounded-lg bg-gradient-to-br from-primary to-accent-2 text-[10px] font-bold text-white">
                       L
                     </div>
@@ -534,7 +570,7 @@ export function PlantModelChat({
                 )}
               </div>
 
-              <div className="border-t border-border px-5 py-4 sm:px-8 sm:pb-5">
+              <div className="min-w-0 border-t border-border px-5 py-4 sm:px-8 sm:pb-5">
                 <div className="flex flex-col gap-2 rounded-2xl border border-border bg-surface-elevated px-3 py-2.5 transition-[border-color] duration-150 focus-within:border-[color-mix(in_srgb,var(--app-primary)_28%,transparent)]">
                   <textarea
                     ref={threadInputRef}
@@ -553,7 +589,7 @@ export function PlantModelChat({
                     }}
                     onKeyDown={onComposerKeyDown}
                   />
-                  <div className="flex items-center justify-between gap-2">
+                  <div className="flex min-w-0 items-center justify-between gap-2">
                     <ComposerModelPicker
                       models={models}
                       value={selection}
@@ -590,96 +626,117 @@ export function PlantModelChat({
             </div>
 
             {/* Plant model side panel */}
-            <aside className="hidden min-h-0 flex-col bg-surface-elevated lg:flex">
-              <div className="border-b border-border px-5 pb-3.5 pt-[18px]">
-                <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.05em] text-muted">
-                  Building
-                </div>
-                <h3 className="m-0 text-[15px] font-semibold text-foreground">Plant model</h3>
-              </div>
-
-              <div className="flex flex-1 flex-col gap-3 overflow-y-auto px-5 py-4">
-                {plantRows.length === 0 ? (
-                  <p className="m-0 px-2.5 py-[30px] text-center text-[12.5px] leading-relaxed text-muted">
-                    As we talk through the system, the model takes shape here — structure, order, and
-                    the parameters that matter for control.
-                  </p>
-                ) : (
-                  plantRows.map((row) => (
-                    <div
-                      key={row.k}
-                      className="flex items-start justify-between gap-3 rounded-[10px] border border-border-subtle bg-surface-muted px-3 py-2.5"
-                    >
-                      <div className="text-[11.5px] font-semibold text-muted">{row.k}</div>
-                      <div className="text-right font-mono text-[12.5px] text-foreground">{row.v}</div>
+            {plantPanelOpen && (
+              <aside className="hidden min-h-0 min-w-0 flex-col overflow-hidden bg-surface-elevated lg:flex">
+                <div className="border-b border-border px-5 pb-3.5 pt-[18px]">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.05em] text-muted">
+                        Building
+                      </div>
+                      <h3 className="m-0 text-[15px] font-semibold text-foreground">Plant model</h3>
                     </div>
-                  ))
-                )}
-
-                {draft && (
-                  <div className="mt-1 overflow-hidden rounded-[10px] border border-border-subtle">
-                    <CodePreview value={draft.python_code} readOnly height={260} language="python" />
+                    <button
+                      type="button"
+                      className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-border bg-surface text-muted-text transition-colors hover:bg-surface-hover hover:text-foreground"
+                      onClick={() => setPlantPanelOpen(false)}
+                      aria-label="Collapse plant model panel"
+                      title="Collapse plant model panel"
+                    >
+                      <PanelRightClose className="size-4" />
+                    </button>
                   </div>
-                )}
-              </div>
+                </div>
 
-              <div className="px-5 pb-4 pt-1">
-                <div className="h-1.5 overflow-hidden rounded-full bg-surface-muted shadow-inner">
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-x-hidden overflow-y-auto px-5 py-4">
+                  {plantRows.length === 0 ? (
+                    <p className="m-0 px-2.5 py-[30px] text-center text-[12.5px] leading-relaxed text-muted">
+                      As we talk through the system, the model takes shape here — structure, order, and
+                      the parameters that matter for control.
+                    </p>
+                  ) : (
+                    plantRows.map((row) => (
+                      <div
+                        key={row.k}
+                        className="flex min-w-0 items-start justify-between gap-3 rounded-[10px] border border-border-subtle bg-surface-muted px-3 py-2.5"
+                      >
+                        <div className="shrink-0 text-[11.5px] font-semibold text-muted">{row.k}</div>
+                        <div className="min-w-0 break-all text-right font-mono text-[12.5px] text-foreground">
+                          {row.v}
+                        </div>
+                      </div>
+                    ))
+                  )}
+
+                  {draft && (
+                    <div className="mt-1 min-w-0 overflow-hidden rounded-[10px] border border-border-subtle">
+                      <CodePreview value={draft.python_code} readOnly height={260} language="python" />
+                    </div>
+                  )}
+                </div>
+
+                <div className="px-5 pb-4 pt-1">
+                  <div className="h-1.5 overflow-hidden rounded-full bg-surface-muted shadow-inner">
+                    <div
+                      className="h-full bg-gradient-to-r from-primary via-indigo-400 to-[var(--app-status-success-text)] shadow-[0_0_8px_rgba(99,102,241,0.4)] transition-[width] duration-500"
+                      style={{ width: `${progressPct}%` }}
+                    />
+                  </div>
                   <div
-                    className="h-full bg-gradient-to-r from-primary via-indigo-400 to-[var(--app-status-success-text)] shadow-[0_0_8px_rgba(99,102,241,0.4)] transition-[width] duration-500"
-                    style={{ width: `${progressPct}%` }}
-                  />
+                    className={`mt-1.5 text-[11px] ${
+                      progressPct >= 100 ? 'text-[var(--app-status-success-text)]' : 'text-muted'
+                    }`}
+                  >
+                    {progressPct >= 100
+                      ? 'Model complete — ready to confirm'
+                      : progressPct === 0
+                        ? 'Not started'
+                        : `${progressPct}% shaped`}
+                  </div>
                 </div>
-                <div
-                  className={`mt-1.5 text-[11px] ${
-                    progressPct >= 100 ? 'text-[var(--app-status-success-text)]' : 'text-muted'
-                  }`}
-                >
-                  {progressPct >= 100
-                    ? 'Model complete — ready to confirm'
-                    : progressPct === 0
-                      ? 'Not started'
-                      : `${progressPct}% shaped`}
-                </div>
-              </div>
 
-              <div className="border-t border-border px-5 pb-5 pt-4">
-                {finalResult && (
-                  <button
-                    type="button"
-                    className={`${btnBase} ${btnCompact} mb-2 w-full justify-center`}
-                    onClick={handleDownload}
-                  >
-                    Download dynamics.py
-                  </button>
-                )}
-                {finalResult ? (
-                  <button
-                    type="button"
-                    className={`${btnPrimary} w-full justify-center py-2.5 text-[13.5px]`}
-                    disabled={disabled}
-                    onClick={handleLaunch}
-                  >
-                    Save &amp; View in Case Studies →
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    className={`${btnPrimary} w-full justify-center py-2.5 text-[13.5px]`}
-                    disabled={!draft || disabled || loading}
-                    onClick={() => void handleConfirmDraft()}
-                  >
-                    Confirm system
-                  </button>
-                )}
-              </div>
-            </aside>
+                <div className="border-t border-border px-5 pb-5 pt-4">
+                  {finalResult && (
+                    <button
+                      type="button"
+                      className={`${btnBase} ${btnCompact} mb-2 w-full justify-center`}
+                      onClick={handleDownload}
+                    >
+                      Download dynamics.py
+                    </button>
+                  )}
+                  {finalResult ? (
+                    <button
+                      type="button"
+                      className={`${btnPrimary} w-full justify-center py-2.5 text-[13.5px]`}
+                      disabled={disabled}
+                      onClick={handleLaunch}
+                    >
+                      Save &amp; View in Case Studies →
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className={`${btnPrimary} w-full justify-center py-2.5 text-[13.5px]`}
+                      disabled={!draft || disabled || loading}
+                      onClick={() => void handleConfirmDraft()}
+                    >
+                      Confirm system
+                    </button>
+                  )}
+                </div>
+              </aside>
+            )}
           </div>
         )}
 
-        {/* Mobile confirm when complete or draft */}
-        {inChat && (
-          <div className="border-t border-border px-4 py-3 lg:hidden">
+        {/* Confirm bar: mobile always; desktop when plant panel is collapsed */}
+        {inChat && (finalResult || draft) && (
+          <div
+            className={`border-t border-border px-4 py-3 ${
+              plantPanelOpen ? 'lg:hidden' : ''
+            }`}
+          >
             {finalResult ? (
               <button
                 type="button"
@@ -689,7 +746,7 @@ export function PlantModelChat({
               >
                 Save &amp; View in Case Studies →
               </button>
-            ) : draft ? (
+            ) : (
               <button
                 type="button"
                 className={`${btnPrimary} w-full justify-center`}
@@ -698,7 +755,7 @@ export function PlantModelChat({
               >
                 Confirm system
               </button>
-            ) : null}
+            )}
           </div>
         )}
       </div>
