@@ -334,6 +334,7 @@ def _run_pipeline_thread(job_id: str, store: InMemoryAdaptiveJobStore) -> None:
     os.environ.setdefault("MPLBACKEND", "Agg")
     record = store.get(job_id)
     if record is None:
+        log.error("Adaptive pipeline aborted: job %s not found in store", job_id)
         return
     if record.cancel_requested:
         store.update(job_id, status="cancelled", stage="error", message="Cancelled before design")
@@ -645,6 +646,7 @@ def _run_pipeline_thread(job_id: str, store: InMemoryAdaptiveJobStore) -> None:
                 "Background PDF pre-generation failed for adaptive job %s: %s", job_id, pdf_exc
             )
     except Exception as exc:  # noqa: BLE001
+        log.exception("Adaptive pipeline thread failed for job %s: %s", job_id, exc)
         store.update(
             job_id,
             status="failed",

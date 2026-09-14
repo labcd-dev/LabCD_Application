@@ -763,6 +763,7 @@ def _run_tuning_thread(job_id: str, store: InMemoryJobStore) -> None:
     os.environ.setdefault("MPLBACKEND", "Agg")
     record = store.get(job_id)
     if record is None:
+        log.error("MPC tuning aborted: job %s not found in store", job_id)
         return
     if record.cancel_requested:
         store.update(job_id, status="cancelled", stage="error", message="Cancelled before start")
@@ -1384,6 +1385,7 @@ def _run_tuning_thread(job_id: str, store: InMemoryJobStore) -> None:
             }
         )
     except Exception as exc:  # noqa: BLE001
+        log.exception("MPC tuning exception for job %s: %s", job_id, exc)
         err_text = f"{type(exc).__name__}: {exc}"
         store.update(
             job_id,

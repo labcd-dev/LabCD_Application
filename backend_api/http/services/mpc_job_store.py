@@ -124,8 +124,9 @@ class InMemoryMPCJobStore:
 
             if is_redis_available():
                 redis_set_json(f"labcd:mpc_job:{record.job_id}", _record_to_dict(record), ex=86400 * 7)
-        except Exception:
-            pass
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).warning("Failed to sync job %s to redis: %s", record.job_id, exc)
 
     def _load_from_redis(self, job_id: str) -> JobRecord | None:
         try:
@@ -137,8 +138,9 @@ class InMemoryMPCJobStore:
                     rec = _dict_to_record(data)
                     self._jobs[job_id] = rec
                     return rec
-        except Exception:
-            pass
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).warning("Failed to load job %s from redis: %s", job_id, exc)
         return None
 
     def _sync_to_db(self, record: JobRecord) -> None:
