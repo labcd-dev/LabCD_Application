@@ -130,7 +130,6 @@ function buildPlantPreview(
   // otherwise prefer plant.metadata so the launch-pad card matches the artifact.
   const plantStates = asStringList(plantMeta.states)
   const plantEqs = asStringList(plantMeta.state_equations)
-  const plantInputs = asStringList(plantMeta.inputs)
   const plantUsable = usableStateEquations(plantEqs, plantStates)
 
   const dynStates = dyn ? asStringList(dyn.states) : []
