@@ -383,6 +383,53 @@ def _chain_fallback(states: List[str], inputs: List[str]) -> List[str]:
     return eqs
 
 
+def _usable_state_equations(eqs: Any, states: List[str]) -> bool:
+    """True when eqs is a non-empty list of non-blank strings aligned with states."""
+    if not isinstance(eqs, list) or not states:
+        return False
+    if len(eqs) != len(states):
+        return False
+    return all(isinstance(e, str) and e.strip() for e in eqs)
+
+
+def _looks_like_chain(eqs: List[str], states: List[str], inputs: List[str]) -> bool:
+    """True when eqs match the synthetic strict-feedback chain marker."""
+    if not _usable_state_equations(eqs, states):
+        return False
+    try:
+        return list(eqs) == _chain_fallback(states, inputs)
+    except Exception:
+        return False
+
+
+def _sanitize_assumptions_list(assumptions: Any) -> List[str]:
+    """Drop process-filler assumption strings; keep modelling assumptions."""
+    if not isinstance(assumptions, list):
+        return []
+    banned = (
+        "metadata inferred from python_code",
+        "review before control design",
+        "metadata inferred",
+        "state equations aligned with dynamics source",
+        "state equations derived from dynamics source",
+        "state_equations taken from python_code",
+        "failed numerical check",
+        "used fallback",
+    )
+    cleaned: List[str] = []
+    for item in assumptions:
+        if not isinstance(item, str):
+            continue
+        text = item.strip()
+        if not text:
+            continue
+        low = text.lower()
+        if any(b in low for b in banned):
+            continue
+        cleaned.append(text)
+    return cleaned or ["Continuous-time state-space dynamics"]
+
+
 
 @dataclass
 class DynamicsVerifyResult:
@@ -578,8 +625,9 @@ def reconcile_metadata_with_code(
 
     1. Run ``infer_metadata`` (partial merge + code extraction).
     2. Prefer code-extracted ``state_equations`` whenever parse succeeds.
-    3. If LLM equations remain, numerically verify; on failure replace with
-       code-extracted equations (or chain only as last resort).
+    3. If usable plant/LLM equations remain, keep them — never replace with
+       synthetic chain when real equations were already present.
+    4. Chain form is last resort only when nothing usable exists.
     """
     c = compiler or PlantCompiler()
     meta = c.infer_metadata(plant_output, pre_launch)
@@ -588,39 +636,24 @@ def reconcile_metadata_with_code(
     inputs = list(meta.get("inputs") or [])
     extracted = _extract_state_equations(user_code, states, inputs)
 
-    llm_eqs = None
     existing = plant_output.get("metadata") if isinstance(plant_output.get("metadata"), dict) else {}
-    if isinstance(existing.get("state_equations"), list) and len(existing["state_equations"]) == len(states):
+    llm_eqs = None
+    if _usable_state_equations(existing.get("state_equations"), states):
         llm_eqs = list(existing["state_equations"])
 
     if extracted and len(extracted) == len(states):
         # Code is source of truth for equations when we can parse them.
-        if llm_eqs is not None and llm_eqs != extracted:
-            # Keep extracted; note the correction
-            assumptions = list(meta.get("assumptions") or [])
-            note = "State equations aligned with dynamics source"
-            if note not in assumptions:
-                assumptions.append(note)
-            # Drop the generic "inferred" noise if we have a more specific note
-            assumptions = [a for a in assumptions if a and "metadata inferred" not in a.lower()]
-            meta["assumptions"] = assumptions or ["Continuous-time state-space dynamics"]
         meta["state_equations"] = extracted
     elif llm_eqs is not None:
-        # No extraction — verify LLM equations numerically
-        vr = verify_dynamics(user_code, {**meta, "state_equations": llm_eqs})
-        if not vr.ok:
-            meta["state_equations"] = _chain_fallback(states, inputs)
-            assumptions = list(meta.get("assumptions") or [])
-            note = "State equations derived from dynamics source"
-            if note not in assumptions:
-                assumptions.append(note)
-            meta["assumptions"] = assumptions
-        else:
-            meta["state_equations"] = llm_eqs
+        # Keep usable artifact/LLM equations even if numerical verify is soft-fail.
+        # Never invent strict-feedback chain over real equations.
+        meta["state_equations"] = llm_eqs
     else:
         meta["state_equations"] = _chain_fallback(states, inputs)
 
-    # Final numerical check when equations are not the synthetic chain marker alone
+    meta["assumptions"] = _sanitize_assumptions_list(meta.get("assumptions"))
+
+    # Final numerical check (informational; does not downgrade usable eqs to chain)
     vr2 = verify_dynamics(user_code, meta)
     meta["_verify"] = {
         "ok": vr2.ok,
@@ -628,7 +661,6 @@ def reconcile_metadata_with_code(
         "message": vr2.message,
     }
     if not vr2.ok and extracted and len(extracted) == len(states):
-        # Last attempt: force extracted
         meta["state_equations"] = extracted
         vr3 = verify_dynamics(user_code, meta)
         meta["_verify"] = {
@@ -980,12 +1012,11 @@ class PlantCompiler:
 
         # ---- state equations ------------------------------------------------------
         # Prefer equations parsed from python_code over LLM-supplied ones when
-        # extraction succeeds. LLM equations are a common drift source (e.g.
-        # synthetic chain with physical names). Numerical reconcile in
-        # reconcile_metadata_with_code will further verify.
+        # extraction succeeds. Usable LLM/artifact equations always beat chain.
+        # Synthetic chain is only used when nothing better exists.
         known_names = set(states) | set(inputs)
         ex_eqs = existing.get("state_equations")
-        equations_from_llm = isinstance(ex_eqs, list) and len(ex_eqs) == n_states
+        equations_from_llm = _usable_state_equations(ex_eqs, states)
         extracted = _extract_state_equations(user_code, states, inputs)
         if extracted and len(extracted) == n_states:
             state_equations = extracted
@@ -1011,26 +1042,11 @@ class PlantCompiler:
             "SISO" if len(inputs) <= 1 and len(outputs) <= 1 else "MIMO"
         )
 
-        # ---- assumptions (kept, plus an honest note when we had to infer) --------
+        # ---- assumptions (prefer artifact; never inject process-filler notes) ----
         ex_assumptions = existing.get("assumptions")
         assumptions_from_llm = isinstance(ex_assumptions, list) and bool(ex_assumptions)
         assumptions: List[str] = list(ex_assumptions) if assumptions_from_llm else []
-
-        inferred_something = not all(
-            [
-                states_from_llm,
-                meanings_from_llm,
-                inputs_from_llm,
-                outputs_from_llm,
-                equations_from_llm,
-                params_from_llm,
-                system_type_from_llm,
-            ]
-        )
-        if inferred_something:
-            pass
-        if not assumptions:
-            assumptions = ["Continuous-time state-space dynamics"]
+        assumptions = _sanitize_assumptions_list(assumptions)
 
         return {
             "states": states,
@@ -1180,22 +1196,31 @@ class {class_name}(BaseDynamics):
         never invent a strict-feedback chain over real equations.
         """
         meta = plant_output.get("metadata") if isinstance(plant_output.get("metadata"), dict) else {}
+        # Shallow copy so we never mutate the caller's stored plant.metadata
+        # when we only need a filled adaptive view.
+        meta = dict(meta)
         states = list(meta.get("states") or [])
         eqs = list(meta.get("state_equations") or [])
-        needs_fill = (
-            not states
-            or not isinstance(eqs, list)
-            or len(eqs) != len(states)
-            or not all(isinstance(e, str) and e.strip() for e in eqs)
-        )
+        needs_fill = not _usable_state_equations(eqs, states)
         if needs_fill:
             # Reconcile extracts equations from code (np.sin→sin, intermediates).
             try:
-                meta = reconcile_metadata_with_code(plant_output, pre_launch, compiler=self)
-                meta.pop("_verify", None)
+                filled = reconcile_metadata_with_code(plant_output, pre_launch, compiler=self)
+                filled.pop("_verify", None)
+                meta = filled
             except Exception:
                 meta = self.infer_metadata(plant_output, pre_launch)
-            plant_output["metadata"] = meta
+            # Do not write back into plant_output unless the caller had no usable eqs;
+            # artifact plant.metadata stays the source of truth when it was good.
+            if not _usable_state_equations(
+                (plant_output.get("metadata") or {}).get("state_equations")
+                if isinstance(plant_output.get("metadata"), dict)
+                else None,
+                list((plant_output.get("metadata") or {}).get("states") or [])
+                if isinstance(plant_output.get("metadata"), dict)
+                else [],
+            ):
+                plant_output["metadata"] = meta
 
         system_name = plant_output.get("system_name") or "System"
 
@@ -1206,7 +1231,7 @@ class {class_name}(BaseDynamics):
         eqs = align_equation_inputs(list(meta.get("state_equations") or []), inputs)
         params = dict(meta.get("parameters") or {})
         system_type = meta.get("system_type") or "SISO"
-        assumptions = list(meta.get("assumptions") or [])
+        assumptions = _sanitize_assumptions_list(meta.get("assumptions"))
 
         n = len(states)
         x0 = pre_launch.get("initial_state")

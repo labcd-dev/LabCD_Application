@@ -86,6 +86,32 @@ function formatParamValue(v: unknown): string {
   }
 }
 
+/** True when eqs is a non-empty list of non-blank strings aligned with states. */
+function usableStateEquations(eqs: unknown, states: string[]): boolean {
+  if (!Array.isArray(eqs) || states.length === 0) return false
+  if (eqs.length !== states.length) return false
+  return eqs.every((e) => typeof e === 'string' && e.trim().length > 0)
+}
+
+/** Detect synthetic strict-feedback chain: x2, x3, ..., -xn + u */
+function looksLikeChainEquations(
+  eqs: string[],
+  states: string[],
+  inputs: string[],
+): boolean {
+  if (!usableStateEquations(eqs, states)) return false
+  const inp0 = inputs[0] || 'u'
+  const n = states.length
+  for (let i = 0; i < n; i++) {
+    const expected =
+      i < n - 1 ? states[i + 1] : `-${states[i]} + ${inp0}`
+    if ((eqs[i] || '').replace(/\s+/g, ' ').trim() !== expected.replace(/\s+/g, ' ').trim()) {
+      return false
+    }
+  }
+  return true
+}
+
 function buildPlantPreview(
   artifactId: string,
   art: { system_name?: string; plant?: Record<string, unknown> },
@@ -100,8 +126,29 @@ function buildPlantPreview(
       ? (art.plant.metadata as Record<string, unknown>)
       : {}
 
-  // Prefer adaptive-spec dynamics (exactly what the pipeline uses); fall back to plant.metadata.
-  const src = dyn && Object.keys(dyn).length > 0 ? dyn : plantMeta
+  // Prefer adaptive-spec when its equations are usable and not synthetic chain;
+  // otherwise prefer plant.metadata so the launch-pad card matches the artifact.
+  const plantStates = asStringList(plantMeta.states)
+  const plantEqs = asStringList(plantMeta.state_equations)
+  const plantInputs = asStringList(plantMeta.inputs)
+  const plantUsable = usableStateEquations(plantEqs, plantStates)
+
+  const dynStates = dyn ? asStringList(dyn.states) : []
+  const dynEqs = dyn ? asStringList(dyn.state_equations) : []
+  const dynInputs = dyn ? asStringList(dyn.inputs) : []
+  const dynUsable = usableStateEquations(dynEqs, dynStates)
+  const dynIsChain = dynUsable && looksLikeChainEquations(dynEqs, dynStates, dynInputs)
+
+  let src: Record<string, unknown>
+  if (dyn && Object.keys(dyn).length > 0 && dynUsable && !(dynIsChain && plantUsable)) {
+    src = dyn
+  } else if (plantUsable || Object.keys(plantMeta).length > 0) {
+    src = plantMeta
+  } else if (dyn && Object.keys(dyn).length > 0) {
+    src = dyn
+  } else {
+    src = plantMeta
+  }
 
   const known = new Set<string>(ADAPTIVE_META_ORDER as unknown as string[])
   const extra: Record<string, unknown> = {}
@@ -117,6 +164,16 @@ function buildPlantPreview(
     (typeof art.system_name === 'string' && art.system_name) ||
     'Plant'
 
+  // Drop banned process-filler assumptions in the card
+  const rawAssumptions = asStringList(src.assumptions)
+  const assumptions = rawAssumptions.filter((a) => {
+    const low = a.toLowerCase()
+    return (
+      !low.includes('metadata inferred') &&
+      !low.includes('review before control design')
+    )
+  })
+
   return {
     artifactId,
     systemName,
@@ -127,7 +184,7 @@ function buildPlantPreview(
     stateEquations: asStringList(src.state_equations),
     parameters: asParamMap(src.parameters),
     systemType: typeof src.system_type === 'string' ? src.system_type : '',
-    assumptions: asStringList(src.assumptions),
+    assumptions,
     extra,
   }
 }
