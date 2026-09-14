@@ -325,7 +325,7 @@ export function PlantModelChat({
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden">
         {showBackToCaseStudies && (
           <div className="flex shrink-0 items-center border-b border-border px-5 py-2.5 sm:px-8">
-            <BackToCaseStudies to={caseStudiesHref} />
+            <BackToCaseStudies to={caseStudiesHref} label="Back to Case Studies" />
           </div>
         )}
 
