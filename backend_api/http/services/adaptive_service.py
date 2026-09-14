@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
+
+log = logging.getLogger(__name__)
 
 from backend_api.http.config import RESULTS_DIR
 
