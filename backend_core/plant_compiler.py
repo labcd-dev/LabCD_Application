@@ -116,6 +116,585 @@ def sanitize_python_code(python_code: str) -> str:
     return code.strip() + ("\n" if python_code.endswith("\n") else "")
 
 
+_TUPLE_LHS_RE = re.compile(r"^([A-Za-z_]\w*(?:\s*,\s*[A-Za-z_]\w*)*)\s*=\s*(.+)$")
+_NUMERIC_TOKEN_RE = re.compile(r"^[+-]?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$")
+_DOT_ASSIGN_RE = re.compile(r"^([A-Za-z_]\w*)_dot\s*=\s*(.+)$")
+# dtheta_dt = ..., di_dt = ...  (name is group 1)
+_D_NAME_DT_RE = re.compile(r"^d([A-Za-z_]\w*)_dt\s*=\s*(.+)$")
+# dtheta = ... (short form; avoid matching dtheta_dt which is handled above)
+_D_PREFIX_ASSIGN_RE = re.compile(r"^d([A-Za-z_]\w*)\s*=\s*(.+)$")
+_DX_INDEX_ASSIGN_RE = re.compile(r"^d[xX](?:dt)?\s*\[\s*(\d+)\s*\]\s*=\s*(.+)$")
+
+
+def _strip_comment(line: str) -> Tuple[str, Optional[str]]:
+    """Split ``line`` into (code, comment-or-None), both stripped."""
+    if "#" in line:
+        code, _, comment = line.partition("#")
+        return code.strip(), comment.strip()
+    return line.strip(), None
+
+
+def _extract_state_aliases(user_code: str) -> Tuple[Dict[int, str], Dict[str, str]]:
+    """Find ``name = x[i]`` (or tuple-unpack) lines; return index->name and name->meaning.
+
+    Meanings are only captured from single-name lines (``theta = x[0]  # pitch angle
+    (rad)``) since a shared trailing comment on a multi-name tuple line can't be
+    attributed to one variable.
+    """
+    idx_to_name: Dict[int, str] = {}
+    name_meaning: Dict[str, str] = {}
+    for raw in user_code.splitlines():
+        code_part, comment = _strip_comment(raw.strip())
+        if not code_part:
+            continue
+        m = _TUPLE_LHS_RE.match(code_part)
+        if not m:
+            continue
+        lhs = [n.strip() for n in m.group(1).split(",")]
+        rhs = [n.strip() for n in m.group(2).split(",")]
+        if len(lhs) != len(rhs):
+            continue
+        touched = False
+        for name, val in zip(lhs, rhs):
+            im = re.fullmatch(r"x\[(\d+)\]", val)
+            if im:
+                idx_to_name[int(im.group(1))] = name
+                touched = True
+        if touched and comment and len(lhs) == 1:
+            name_meaning[lhs[0]] = comment
+    return idx_to_name, name_meaning
+
+
+def _extract_input_aliases(user_code: str) -> Tuple[Dict[int, str], Dict[str, str]]:
+    """Find ``name = u[i]`` / ``name = u`` lines; return index->name and name->meaning."""
+    idx_to_input: Dict[int, str] = {}
+    input_meaning: Dict[str, str] = {}
+    for raw in user_code.splitlines():
+        code_part, comment = _strip_comment(raw.strip())
+        if not code_part:
+            continue
+        m = _TUPLE_LHS_RE.match(code_part)
+        if not m:
+            continue
+        lhs = [n.strip() for n in m.group(1).split(",")]
+        rhs = [n.strip() for n in m.group(2).split(",")]
+        if len(lhs) != len(rhs):
+            continue
+        for name, val in zip(lhs, rhs):
+            im = re.fullmatch(r"u\[(\d+)\]", val)
+            if im:
+                idx_to_input[int(im.group(1))] = name
+                if comment and len(lhs) == 1:
+                    input_meaning[name] = comment
+            elif val == "u" and len(lhs) == 1:
+                idx_to_input.setdefault(0, name)
+                if comment:
+                    input_meaning[name] = comment
+    return idx_to_input, input_meaning
+
+
+def _extract_numeric_parameters(user_code: str, exclude_names: set) -> Dict[str, Any]:
+    """Pull labelled numeric constants (``Iy = 469.0``, tuple form included) out of the body.
+
+    Supports semicolon-chained assignments on one line (``m = 0.5; l = 0.3``).
+    State/input aliases are skipped.
+    """
+    params: Dict[str, Any] = {}
+    for raw in user_code.splitlines():
+        code_part, _ = _strip_comment(raw.strip())
+        if not code_part:
+            continue
+        for stmt in code_part.split(";"):
+            stmt = stmt.strip()
+            if not stmt:
+                continue
+            m = _TUPLE_LHS_RE.match(stmt)
+            if not m:
+                continue
+            lhs = [n.strip() for n in m.group(1).split(",")]
+            rhs = [n.strip() for n in m.group(2).split(",")]
+            if len(lhs) != len(rhs):
+                continue
+            if not all(_NUMERIC_TOKEN_RE.match(v) for v in rhs):
+                continue
+            for name, val in zip(lhs, rhs):
+                if name in exclude_names:
+                    continue
+                params[name] = int(val) if re.fullmatch(r"[+-]?\d+", val) else float(val)
+    return params
+
+
+
+_NP_MATH_RE = re.compile(
+    r"\b(?:np|numpy)\.(sin|cos|tan|asin|acos|atan|atan2|exp|log|sqrt|abs|sign|"
+    r"sinh|cosh|tanh|pi|e)\b",
+    re.IGNORECASE,
+)
+
+
+def _to_sympy_expr(expr: str) -> str:
+    """Rewrite numpy-qualified math so Adaptive/sympy can parse the equation.
+
+    ``python_code`` correctly uses ``np.sin``; ``state_equations`` must use bare
+    ``sin`` / ``cos`` / ... (PlantCompiler.validate rejects ``np.*``).
+    """
+    out = _NP_MATH_RE.sub(
+        lambda m: "pi" if m.group(1).lower() == "pi" else (
+            "E" if m.group(1).lower() == "e" else m.group(1).lower()
+        ),
+        expr,
+    )
+    # abs -> Abs for sympy friendliness
+    out = re.sub(r"\babs\s*\(", "Abs(", out)
+    return out
+
+
+def _substitute_refs(expr: str, states: List[str], inputs: List[str]) -> str:
+    """Rewrite ``x[i]`` / ``u[i]`` to physical names and strip ``np.`` math prefixes."""
+    out = expr
+    for i, name in enumerate(states):
+        out = re.sub(rf"\bx\[{i}\]", name, out)
+    for j, name in enumerate(inputs):
+        out = re.sub(rf"\bu\[{j}\]", name, out)
+    return _to_sympy_expr(out)
+
+
+def _collect_simple_assignments(user_code: str) -> Dict[str, str]:
+    """Map local ``name = expr`` assignments (single target) in the dynamics body.
+
+    Handles semicolon-chained statements on one line (``m = 0.5; l = 0.3``).
+    Skips tuple unpacking and anything that is not a plain identifier target.
+    """
+    assigns: Dict[str, str] = {}
+    for raw in user_code.splitlines():
+        code_part, _ = _strip_comment(raw.strip())
+        if not code_part:
+            continue
+        # Split ``a = 1; b = 2`` so each binding is recorded separately.
+        for stmt in code_part.split(";"):
+            stmt = stmt.strip()
+            if not stmt or "," in stmt.split("=")[0]:
+                continue
+            m = re.match(r"^([A-Za-z_]\w*)\s*=\s*(.+)$", stmt)
+            if not m:
+                continue
+            name, expr = m.group(1), m.group(2).strip()
+            if name in {"def", "return", "if", "for", "while", "else", "elif"}:
+                continue
+            # Refuse RHS that still contains another assignment (malformed split)
+            if re.search(r"[^=<>!]=[^=]", expr):
+                continue
+            assigns[name] = expr
+    return assigns
+
+
+def _expand_expr(expr: str, assigns: Dict[str, str], *, max_depth: int = 8) -> str:
+    """Inline simple local names so state_equations are self-contained for sympy."""
+    out = expr
+    for _ in range(max_depth):
+        changed = False
+        # Longest names first to avoid partial replacements
+        for name in sorted(assigns.keys(), key=len, reverse=True):
+            if name not in out:
+                continue
+            # word-boundary replace
+            new_out = re.sub(rf"\b{re.escape(name)}\b", f"({assigns[name]})", out)
+            if new_out != out:
+                out = new_out
+                changed = True
+        if not changed:
+            break
+    return out
+
+
+def _extract_state_equations(
+    user_code: str, states: List[str], inputs: List[str]
+) -> List[str]:
+    """Find each state's derivative RHS from the dynamics body.
+
+    Recognised forms (in priority order per line):
+      - ``dx[i] = ...`` / ``dxdt[i] = ...``
+      - ``{name}_dot = ...``
+      - ``d{name}_dt = ...``  (e.g. ``dtheta_dt = omega``)
+      - ``d{name} = ...``     (short form; not ``d{name}_dt``)
+
+    Intermediate locals (``s = sin(theta)``; ``d2theta = ...``) are inlined so
+    the resulting equations are self-contained for sympy validation.
+
+    Returns a list aligned with ``states``, or ``[]`` if any state's derivative
+    can't be confidently located (caller may fall back to chain form).
+    """
+    by_name: Dict[str, str] = {}
+    by_index: Dict[int, str] = {}
+    state_set = set(states)
+    assigns = _collect_simple_assignments(user_code)
+
+    for raw in user_code.splitlines():
+        code_part, _ = _strip_comment(raw.strip())
+        if not code_part:
+            continue
+        m = _DX_INDEX_ASSIGN_RE.match(code_part)
+        if m:
+            by_index[int(m.group(1))] = m.group(2).strip()
+            continue
+        m = _DOT_ASSIGN_RE.match(code_part)
+        if m and m.group(1) in state_set:
+            by_name[m.group(1)] = m.group(2).strip()
+            continue
+        m = _D_NAME_DT_RE.match(code_part)
+        if m and m.group(1) in state_set:
+            by_name[m.group(1)] = m.group(2).strip()
+            continue
+        m = _D_PREFIX_ASSIGN_RE.match(code_part)
+        if m and m.group(1) in state_set and not m.group(1).endswith("_dt"):
+            by_name.setdefault(m.group(1), m.group(2).strip())
+
+    # Do not expand state/input names or pure numeric parameter bindings
+    # (keep "m", "g" as symbols so parameters stay visible in equations).
+    expand_map = {
+        k: v for k, v in assigns.items()
+        if k not in state_set
+        and k not in set(inputs)
+        and not _NUMERIC_TOKEN_RE.match((v or "").strip())
+    }
+
+    eqs: List[str] = []
+    for i, name in enumerate(states):
+        expr = by_name.get(name)
+        if expr is None:
+            expr = by_index.get(i)
+        if expr is None:
+            return []
+        expr = _expand_expr(expr, expand_map)
+        eqs.append(_substitute_refs(expr, states, inputs))
+    return eqs
+
+
+def _chain_fallback(states: List[str], inputs: List[str]) -> List[str]:
+    """Last-resort synthetic chain (``x2``, ``-xN + u``) when nothing was parseable."""
+    inp0 = inputs[0] if inputs else "u"
+    n = len(states)
+    eqs: List[str] = []
+    for i in range(n):
+        if i < n - 1:
+            eqs.append(states[i + 1])
+        else:
+            eqs.append(f"-{states[i]} + {inp0}")
+    return eqs
+
+
+def _usable_state_equations(eqs: Any, states: List[str]) -> bool:
+    """True when eqs is a non-empty list of non-blank strings aligned with states."""
+    if not isinstance(eqs, list) or not states:
+        return False
+    if len(eqs) != len(states):
+        return False
+    return all(isinstance(e, str) and e.strip() for e in eqs)
+
+
+def _looks_like_chain(eqs: List[str], states: List[str], inputs: List[str]) -> bool:
+    """True when eqs match the synthetic strict-feedback chain marker."""
+    if not _usable_state_equations(eqs, states):
+        return False
+    try:
+        return list(eqs) == _chain_fallback(states, inputs)
+    except Exception:
+        return False
+
+
+def _sanitize_assumptions_list(assumptions: Any) -> List[str]:
+    """Drop process-filler assumption strings; keep modelling assumptions."""
+    if not isinstance(assumptions, list):
+        return []
+    banned = (
+        "metadata inferred from python_code",
+        "review before control design",
+        "metadata inferred",
+        "state equations aligned with dynamics source",
+        "state equations derived from dynamics source",
+        "state_equations taken from python_code",
+        "failed numerical check",
+        "used fallback",
+    )
+    cleaned: List[str] = []
+    for item in assumptions:
+        if not isinstance(item, str):
+            continue
+        text = item.strip()
+        if not text:
+            continue
+        low = text.lower()
+        if any(b in low for b in banned):
+            continue
+        cleaned.append(text)
+    return cleaned or ["Continuous-time state-space dynamics"]
+
+
+
+@dataclass
+class DynamicsVerifyResult:
+    ok: bool
+    max_abs_err: float = 0.0
+    n_samples: int = 0
+    n_compared: int = 0
+    message: str = ""
+    diagnostics: Dict[str, Any] = field(default_factory=dict)
+
+
+def verify_dynamics(
+    python_code: str,
+    metadata: dict,
+    *,
+    n_samples: int = 24,
+    tol: float = 1e-5,
+    seed: int = 0,
+) -> DynamicsVerifyResult:
+    """Numerically compare ``dynamics(t,x,u)`` against metadata state_equations.
+
+    Builds a numpy-callable RHS from ``metadata["state_equations"]`` using the
+    same state/input/parameter names, samples random (t, x, u), and checks
+    ``np.allclose`` against the executed ``python_code``. Used to reject LLM
+    metadata that drifted from the code (the DC-motor chain-equation failure
+    mode).
+    """
+    if not isinstance(metadata, dict):
+        return DynamicsVerifyResult(ok=False, message="metadata is not a dict")
+    states = list(metadata.get("states") or [])
+    inputs = list(metadata.get("inputs") or [])
+    eqs = list(metadata.get("state_equations") or [])
+    params = dict(metadata.get("parameters") or {})
+    n = len(states)
+    if n == 0:
+        return DynamicsVerifyResult(ok=False, message="no states")
+    if len(eqs) != n:
+        return DynamicsVerifyResult(
+            ok=False,
+            message=f"state_equations length {len(eqs)} != states length {n}",
+            diagnostics={"states": states, "eqs": eqs},
+        )
+    if not all(isinstance(e, str) and e.strip() for e in eqs):
+        return DynamicsVerifyResult(ok=False, message="empty or non-string state_equations")
+
+    code = sanitize_python_code(python_code or "")
+    try:
+        loc: Dict[str, Any] = {"np": np, "numpy": np}
+        exec(code, loc)  # noqa: S102
+        dyn_fn = loc.get("dynamics")
+        if not callable(dyn_fn):
+            return DynamicsVerifyResult(ok=False, message="python_code has no callable dynamics")
+    except Exception as exc:  # noqa: BLE001
+        return DynamicsVerifyResult(ok=False, message=f"exec python_code failed: {exc}")
+
+    # Build lambdified RHS from equations. Prefer sympy; fall back to a careful
+    # eval with a restricted namespace if sympy is unavailable.
+    n_u = max(1, len(inputs))
+    try:
+        if sp is None:
+            raise RuntimeError("sympy unavailable")
+        sym_states = [sp.Symbol(s) for s in states]
+        sym_inputs = [sp.Symbol(inp) for inp in inputs]
+        sym_params = {sp.Symbol(k): float(v) for k, v in params.items() if isinstance(v, (int, float))}
+        # Also bind bare identifiers used as params
+        local_dict = {s.name: s for s in sym_states}
+        local_dict.update({s.name: s for s in sym_inputs})
+        local_dict.update({k: sp.Symbol(k) for k in params})
+        rhs_exprs = []
+        for eq in eqs:
+            expr = sp.sympify(eq, locals=local_dict)
+            expr = expr.subs(sym_params)
+            rhs_exprs.append(expr)
+        free_syms = set()
+        for e in rhs_exprs:
+            free_syms |= set(e.free_symbols)
+        expected = set(sym_states) | set(sym_inputs)
+        # Allow leftover param symbols that failed numeric conversion
+        leftover = free_syms - expected
+        if leftover:
+            # try to sub remaining params by name
+            for sym in list(leftover):
+                if sym.name in params and isinstance(params[sym.name], (int, float)):
+                    for i, e in enumerate(rhs_exprs):
+                        rhs_exprs[i] = e.subs(sym, float(params[sym.name]))
+                    leftover.discard(sym)
+        free_syms = set()
+        for e in rhs_exprs:
+            free_syms |= set(e.free_symbols)
+        leftover = free_syms - expected
+        if leftover:
+            return DynamicsVerifyResult(
+                ok=False,
+                message=f"state_equations have unknown free symbols: {sorted(s.name for s in leftover)}",
+                diagnostics={"leftover": [s.name for s in leftover]},
+            )
+        args = sym_states + sym_inputs
+        rhs_fn = sp.lambdify(args, rhs_exprs, modules=["numpy"])
+        use_sympy = True
+    except Exception as exc:  # noqa: BLE001
+        # Restricted eval fallback
+        use_sympy = False
+        sympy_err = str(exc)
+
+        def rhs_fn(*args_arr):  # type: ignore
+            env = {"np": np, "numpy": np}
+            for i, name in enumerate(states):
+                env[name] = float(args_arr[i])
+            for j, name in enumerate(inputs):
+                env[name] = float(args_arr[n + j])
+            for k, v in params.items():
+                if isinstance(v, (int, float)):
+                    env[k] = float(v)
+            # safe-ish math names
+            import math as _math
+            for fname in ("sin", "cos", "tan", "exp", "log", "sqrt", "abs"):
+                env[fname] = getattr(np, fname, getattr(_math, fname, None))
+            out = []
+            for eq in eqs:
+                out.append(float(eval(eq, {"__builtins__": {}}, env)))  # noqa: S307
+            return out
+
+    rng = np.random.default_rng(seed)
+    max_err = 0.0
+    n_ok = 0
+    samples = max(1, int(n_samples))
+    last_err = ""
+    for _ in range(samples):
+        t = float(rng.uniform(0.0, 1.0))
+        x = rng.uniform(-1.0, 1.0, size=n)
+        u = rng.uniform(-1.0, 1.0, size=n_u)
+        try:
+            try:
+                y_code = np.asarray(dyn_fn(t, x, u if n_u > 1 else float(u[0])), dtype=float).reshape(-1)
+            except Exception:
+                y_code = np.asarray(dyn_fn(t, x, u), dtype=float).reshape(-1)
+            if y_code.size != n:
+                return DynamicsVerifyResult(
+                    ok=False,
+                    message=f"dynamics returned size {y_code.size}, expected {n}",
+                )
+            args_vec = list(x.tolist()) + list(u[: len(inputs)].tolist() if inputs else [float(u[0])])
+            if len(inputs) == 0:
+                args_vec = list(x.tolist()) + [float(u[0])]
+            # Match input arity used by lambdify
+            if use_sympy:
+                y_meta = np.asarray(rhs_fn(*args_vec), dtype=float).reshape(-1)
+            else:
+                y_meta = np.asarray(rhs_fn(*args_vec), dtype=float).reshape(-1)
+            if y_meta.size != n:
+                return DynamicsVerifyResult(
+                    ok=False,
+                    message=f"metadata RHS returned size {y_meta.size}, expected {n}",
+                )
+            err = float(np.max(np.abs(y_code - y_meta)))
+            max_err = max(max_err, err)
+            if np.allclose(y_code, y_meta, atol=tol, rtol=tol):
+                n_ok += 1
+        except Exception as exc:  # noqa: BLE001
+            last_err = str(exc)
+            continue
+
+    if n_ok == 0 and last_err:
+        return DynamicsVerifyResult(
+            ok=False,
+            max_abs_err=max_err,
+            n_samples=samples,
+            n_compared=0,
+            message=f"sample evaluation failed: {last_err}",
+            diagnostics={"use_sympy": use_sympy},
+        )
+    ok = n_ok >= max(1, samples // 2) and max_err <= max(tol * 10, tol)
+    # stricter: require all successful samples within tol if we compared any
+    if n_ok > 0:
+        ok = max_err <= max(tol * 100, 1e-4) and n_ok >= samples // 2
+    return DynamicsVerifyResult(
+        ok=ok,
+        max_abs_err=max_err,
+        n_samples=samples,
+        n_compared=n_ok,
+        message="ok" if ok else f"max_abs_err={max_err:.3e} matched={n_ok}/{samples}",
+        diagnostics={"use_sympy": use_sympy, "tol": tol},
+    )
+
+
+def reconcile_metadata_with_code(
+    plant_output: dict,
+    pre_launch: dict | None = None,
+    *,
+    compiler: "PlantCompiler | None" = None,
+) -> Dict[str, Any]:
+    """Return metadata aligned with ``python_code``.
+
+    1. Run ``infer_metadata`` (partial merge + code extraction).
+    2. Prefer code-extracted ``state_equations`` whenever parse succeeds.
+    3. If usable plant/LLM equations remain, keep them — never replace with
+       synthetic chain when real equations were already present.
+    4. Chain form is last resort only when nothing usable exists.
+    """
+    c = compiler or PlantCompiler()
+    meta = c.infer_metadata(plant_output, pre_launch)
+    user_code = sanitize_python_code(plant_output.get("python_code") or "")
+    states = list(meta.get("states") or [])
+    inputs = list(meta.get("inputs") or [])
+    extracted = _extract_state_equations(user_code, states, inputs)
+
+    existing = plant_output.get("metadata") if isinstance(plant_output.get("metadata"), dict) else {}
+    llm_eqs = None
+    if _usable_state_equations(existing.get("state_equations"), states):
+        llm_eqs = list(existing["state_equations"])
+
+    if extracted and len(extracted) == len(states):
+        # Code is source of truth for equations when we can parse them.
+        meta["state_equations"] = extracted
+    elif llm_eqs is not None:
+        # Keep usable artifact/LLM equations even if numerical verify is soft-fail.
+        # Never invent strict-feedback chain over real equations.
+        meta["state_equations"] = llm_eqs
+    else:
+        meta["state_equations"] = _chain_fallback(states, inputs)
+
+    meta["assumptions"] = _sanitize_assumptions_list(meta.get("assumptions"))
+
+    # Final numerical check (informational; does not downgrade usable eqs to chain)
+    vr2 = verify_dynamics(user_code, meta)
+    meta["_verify"] = {
+        "ok": vr2.ok,
+        "max_abs_err": vr2.max_abs_err,
+        "message": vr2.message,
+    }
+    if not vr2.ok and extracted and len(extracted) == len(states):
+        meta["state_equations"] = extracted
+        vr3 = verify_dynamics(user_code, meta)
+        meta["_verify"] = {
+            "ok": vr3.ok,
+            "max_abs_err": vr3.max_abs_err,
+            "message": vr3.message,
+        }
+    return meta
+
+
+
+def _probe_state_count(user_code: str) -> int:
+    """Dynamically execute ``dynamics`` with a generous state vector to size the output."""
+    try:
+        probe_loc = {"np": np, "numpy": np}
+        exec(user_code, probe_loc)  # noqa: S102
+        dyn_fn = probe_loc.get("dynamics")
+        if callable(dyn_fn):
+            test_x = np.zeros(10)
+            try:
+                out = dyn_fn(0.0, test_x, 0.0)
+                out_size = np.asarray(out).size
+                if out_size > 0:
+                    return out_size
+            except TypeError:
+                out = dyn_fn(0.0, test_x, np.zeros(1))
+                out_size = np.asarray(out).size
+                if out_size > 0:
+                    return out_size
+    except Exception:
+        pass
+    return 0
+
+
 def align_equation_inputs(eqs: List[str], inputs: List[str]) -> List[str]:
     """If equations use bare ``u`` but the sole declared input is e.g. ``tau``, rewrite.
 
@@ -281,14 +860,14 @@ class PlantCompiler:
                 if not isinstance(eq, str) or not eq.strip():
                     errors.append(f"state_equations[{i}] is empty")
                     continue
-                np_hit = _NP_QUALIFIED_RE.search(eq)
-                if np_hit:
-                    errors.append(
-                        f"state_equations[{i}] not sympy-parseable: {eq!r} "
-                        f"(uses numpy-qualified '{np_hit.group(0)}' — rewrite with "
-                        f"bare sympy function names: sin, cos, exp, ... — no np./numpy. prefixes)"
+                # Auto-normalize np.sin → sin so code-extracted equations validate.
+                if _NP_QUALIFIED_RE.search(eq):
+                    eqs[i] = _to_sympy_expr(eq)
+                    eq = eqs[i]
+                    meta["state_equations"] = list(eqs)
+                    warnings.append(
+                        f"state_equations[{i}] rewritten to bare sympy names (stripped np./numpy.)"
                     )
-                    continue
                 try:
                     sp.sympify(eq, locals=local_dict)
                 except Exception as exc:  # noqa: BLE001
@@ -358,123 +937,116 @@ class PlantCompiler:
         plant_output: dict,
         pre_launch: dict | None = None,
     ) -> Dict[str, Any]:
-        """Synthesize a complete metadata dict when metadata is omitted by legacy LLM agent."""
-        existing = plant_output.get("metadata")
-        if isinstance(existing, dict) and existing.get("states"):
-            meta = dict(existing)
-            states = list(meta.get("states") or [])
-            n_states = len(states)
-            if not meta.get("state_meanings") or len(meta["state_meanings"]) != n_states:
-                meta["state_meanings"] = [f"State {s}" for s in states]
-            if not meta.get("inputs"):
-                meta["inputs"] = ["u"]
-            if not meta.get("outputs"):
-                meta["outputs"] = [states[0]] if states else ["x1"]
-            if not meta.get("parameters"):
-                meta["parameters"] = {}
-            if not meta.get("system_type"):
-                meta["system_type"] = "SISO" if len(meta["inputs"]) <= 1 and len(meta["outputs"]) <= 1 else "MIMO"
-            if not meta.get("assumptions"):
-                meta["assumptions"] = ["Continuous-time state-space dynamics"]
-            if not meta.get("state_equations") or len(meta["state_equations"]) != n_states:
-                eqs = []
-                inp0 = meta["inputs"][0]
-                for i in range(n_states):
-                    if i < n_states - 1:
-                        eqs.append(f"{states[i+1]}")
-                    else:
-                        eqs.append(f"-{states[i]} + {inp0}")
-                meta["state_equations"] = eqs
-            return meta
+        """Fill in metadata missing from AgentPlant's output.
 
+        Whatever the LLM already supplied is kept as-is (partial merge — this
+        never overwrites good data). Anything missing or shape-inconsistent
+        (wrong length, empty dict/list) is extracted from ``python_code``
+        itself: state names/meanings from ``name = x[i]  # meaning`` aliases,
+        parameters from labelled numeric assignments, and state equations from
+        ``name_dot = ...`` / ``dx[i] = ...`` lines. The synthetic ``x1``/``State
+        N``/chain-equation shape is only used when nothing better can be
+        parsed out of the code, and any inferred field is called out honestly
+        in ``assumptions`` rather than presented as if the LLM said it.
+        """
+        existing_raw = plant_output.get("metadata")
+        existing = dict(existing_raw) if isinstance(existing_raw, dict) else {}
         user_code = sanitize_python_code(plant_output.get("python_code") or "")
-        system_name = plant_output.get("system_name") or "System"
 
-        # 1. Infer number of states
-        inferred_n_states = 0
-        x_indices = [int(m) for m in re.findall(r"x\[(\d+)\]", user_code)]
-        if x_indices:
-            inferred_n_states = max(x_indices) + 1
-
-        if pre_launch and isinstance(pre_launch.get("initial_state"), list):
+        # ---- how many states are there? ------------------------------------
+        # Priority: existing metadata.states > python_code scan/probe >
+        # pre_launch.initial_state. Never let a mismatched pre_launch
+        # initial_state length inflate (or shrink) a known state count —
+        # that silently corrupts good metadata (dropped physical names,
+        # rewritten equations, synthetic chain).
+        ex_states = existing.get("states")
+        states_known_from_meta = isinstance(ex_states, list) and bool(ex_states)
+        n_states = len(ex_states) if states_known_from_meta else 0
+        if n_states == 0:
+            x_indices = [int(m) for m in re.findall(r"x\[(\d+)\]", user_code)]
+            if x_indices:
+                n_states = max(x_indices) + 1
+        if n_states == 0:
+            n_states = _probe_state_count(user_code)
+        if n_states == 0 and pre_launch and isinstance(pre_launch.get("initial_state"), list):
             pl_len = len(pre_launch["initial_state"])
             if pl_len > 0:
-                inferred_n_states = max(inferred_n_states, pl_len)
+                n_states = pl_len
+        n_states = max(1, n_states)
 
-        # Dynamic probe if needed
-        if inferred_n_states == 0:
-            try:
-                probe_loc = {"np": np, "numpy": np}
-                exec(user_code, probe_loc)
-                dyn_fn = probe_loc.get("dynamics")
-                if callable(dyn_fn):
-                    test_x = np.zeros(10)
-                    try:
-                        out = dyn_fn(0.0, test_x, 0.0)
-                        out_size = np.asarray(out).size
-                        if out_size > 0:
-                            inferred_n_states = out_size
-                    except TypeError:
-                        out = dyn_fn(0.0, test_x, np.zeros(1))
-                        out_size = np.asarray(out).size
-                        if out_size > 0:
-                            inferred_n_states = out_size
-            except Exception:
-                pass
+        # ---- states / meanings ----------------------------------------------
+        idx_to_name, name_meaning = _extract_state_aliases(user_code)
+        inferred_states = [idx_to_name.get(i, f"x{i+1}") for i in range(n_states)]
+        # Lock to metadata states whenever they were present; n_states above
+        # already prefers that length, so this no longer fails equality after
+        # a pre_launch length override.
+        states_from_llm = states_known_from_meta
+        states = list(ex_states) if states_from_llm else inferred_states
+        if states_from_llm:
+            n_states = len(states)
 
-        n_states = max(1, inferred_n_states)
-        states = [f"x{i+1}" for i in range(n_states)]
-        state_meanings = [f"State {i+1}" for i in range(n_states)]
-
-        # 2. Infer inputs
-        u_indices = [int(m) for m in re.findall(r"u\[(\d+)\]", user_code)]
-        if u_indices:
-            n_inputs = max(u_indices) + 1
-            inputs = [f"u{i+1}" for i in range(n_inputs)]
-        elif re.search(r"\bu\b", user_code):
-            inputs = ["u"]
+        ex_meanings = existing.get("state_meanings")
+        meanings_from_llm = isinstance(ex_meanings, list) and len(ex_meanings) == n_states
+        if meanings_from_llm:
+            state_meanings = list(ex_meanings)
         else:
-            inputs = ["u"]
+            state_meanings = [
+                name_meaning.get(states[i]) or f"State {states[i]}" for i in range(n_states)
+            ]
 
-        # 3. Outputs
-        outputs = [states[0]] if states else ["x1"]
-
-        # 4. State equations (RHS expressions parseable by sympy)
-        parsed_eqs: List[str] = []
-        try:
-            clean_body = re.sub(r"\bnp\.", "", user_code)
-            var_map: Dict[str, str] = {}
-            for line in clean_body.splitlines():
-                line = line.strip()
-                m = re.match(r"^([a-zA-Z_]\w*)\s*=\s*(.+)$", line)
-                if m:
-                    var_name, expr = m.group(1), m.group(2)
-                    for xi in range(n_states):
-                        expr = re.sub(rf"\bx\[{xi}\]", f"x{xi+1}", expr)
-                    for ui in range(len(inputs)):
-                        expr = re.sub(rf"\bu\[{ui}\]", inputs[ui], expr)
-                    var_map[var_name] = expr
-
-            for i in range(n_states):
-                cand = None
-                for key in (f"dx{i}", f"dx_{i+1}", f"x{i}_dot", f"dx{i+1}"):
-                    if key in var_map:
-                        cand = var_map[key]
-                        break
-                if cand:
-                    parsed_eqs.append(cand)
-        except Exception:
-            pass
-
-        if len(parsed_eqs) == n_states:
-            state_equations = parsed_eqs
+        # ---- inputs -----------------------------------------------------------
+        idx_to_input, _input_meaning = _extract_input_aliases(user_code)
+        if idx_to_input:
+            n_inputs = max(idx_to_input) + 1
+            inferred_inputs = [idx_to_input.get(i, f"u{i+1}") for i in range(n_inputs)]
         else:
-            state_equations = []
-            for i in range(n_states):
-                if i < n_states - 1:
-                    state_equations.append(f"x{i+2}")
-                else:
-                    state_equations.append(f"-x{n_states} + {inputs[0]}")
+            inferred_inputs = ["u"]
+        ex_inputs = existing.get("inputs")
+        inputs_from_llm = isinstance(ex_inputs, list) and bool(ex_inputs)
+        inputs = list(ex_inputs) if inputs_from_llm else inferred_inputs
+
+        # ---- outputs ------------------------------------------------------------
+        ex_outputs = existing.get("outputs")
+        outputs_from_llm = isinstance(ex_outputs, list) and bool(ex_outputs)
+        outputs = list(ex_outputs) if outputs_from_llm else ([states[0]] if states else ["x1"])
+
+        # ---- state equations ------------------------------------------------------
+        # Prefer equations parsed from python_code over LLM-supplied ones when
+        # extraction succeeds. Usable LLM/artifact equations always beat chain.
+        # Synthetic chain is only used when nothing better exists.
+        known_names = set(states) | set(inputs)
+        ex_eqs = existing.get("state_equations")
+        equations_from_llm = _usable_state_equations(ex_eqs, states)
+        extracted = _extract_state_equations(user_code, states, inputs)
+        if extracted and len(extracted) == n_states:
+            state_equations = extracted
+            # Treat as code-derived unless identical to LLM
+            if not (equations_from_llm and list(ex_eqs) == extracted):
+                equations_from_llm = False
+        elif equations_from_llm:
+            state_equations = list(ex_eqs)
+        else:
+            state_equations = _chain_fallback(states, inputs)
+
+        # ---- parameters -----------------------------------------------------------
+        ex_params = existing.get("parameters")
+        params_from_llm = isinstance(ex_params, dict) and bool(ex_params)
+        parameters = dict(ex_params) if params_from_llm else _extract_numeric_parameters(
+            user_code, known_names
+        )
+
+        # ---- system type --------------------------------------------------------
+        ex_system_type = existing.get("system_type")
+        system_type_from_llm = bool(ex_system_type)
+        system_type = ex_system_type if system_type_from_llm else (
+            "SISO" if len(inputs) <= 1 and len(outputs) <= 1 else "MIMO"
+        )
+
+        # ---- assumptions (prefer artifact; never inject process-filler notes) ----
+        ex_assumptions = existing.get("assumptions")
+        assumptions_from_llm = isinstance(ex_assumptions, list) and bool(ex_assumptions)
+        assumptions: List[str] = list(ex_assumptions) if assumptions_from_llm else []
+        assumptions = _sanitize_assumptions_list(assumptions)
 
         return {
             "states": states,
@@ -482,9 +1054,9 @@ class PlantCompiler:
             "inputs": inputs,
             "outputs": outputs,
             "state_equations": state_equations,
-            "parameters": {},
-            "system_type": "SISO" if len(inputs) <= 1 and len(outputs) <= 1 else "MIMO",
-            "assumptions": ["Continuous-time state-space dynamics"],
+            "parameters": parameters,
+            "system_type": system_type,
+            "assumptions": assumptions,
         }
 
     def generate_mpc_plugin(self, plant_output: dict, pre_launch: dict) -> str:
@@ -617,11 +1189,38 @@ class {class_name}(BaseDynamics):
         return source
 
     def generate_adaptive_spec(self, plant_output: dict, pre_launch: dict) -> dict:
-        """Return a system_spec-compatible dict for AgentAdaptive."""
-        meta = plant_output.get("metadata") or {}
-        if not meta or not meta.get("states"):
-            meta = self.infer_metadata(plant_output, pre_launch)
-            plant_output["metadata"] = meta
+        """Return a system_spec-compatible dict for AgentAdaptive.
+
+        Prefer stored metadata equations. Only reconcile/extract from
+        ``python_code`` when equations are missing or length-mismatched —
+        never invent a strict-feedback chain over real equations.
+        """
+        meta = plant_output.get("metadata") if isinstance(plant_output.get("metadata"), dict) else {}
+        # Shallow copy so we never mutate the caller's stored plant.metadata
+        # when we only need a filled adaptive view.
+        meta = dict(meta)
+        states = list(meta.get("states") or [])
+        eqs = list(meta.get("state_equations") or [])
+        needs_fill = not _usable_state_equations(eqs, states)
+        if needs_fill:
+            # Reconcile extracts equations from code (np.sin→sin, intermediates).
+            try:
+                filled = reconcile_metadata_with_code(plant_output, pre_launch, compiler=self)
+                filled.pop("_verify", None)
+                meta = filled
+            except Exception:
+                meta = self.infer_metadata(plant_output, pre_launch)
+            # Do not write back into plant_output unless the caller had no usable eqs;
+            # artifact plant.metadata stays the source of truth when it was good.
+            if not _usable_state_equations(
+                (plant_output.get("metadata") or {}).get("state_equations")
+                if isinstance(plant_output.get("metadata"), dict)
+                else None,
+                list((plant_output.get("metadata") or {}).get("states") or [])
+                if isinstance(plant_output.get("metadata"), dict)
+                else [],
+            ):
+                plant_output["metadata"] = meta
 
         system_name = plant_output.get("system_name") or "System"
 
@@ -632,7 +1231,7 @@ class {class_name}(BaseDynamics):
         eqs = align_equation_inputs(list(meta.get("state_equations") or []), inputs)
         params = dict(meta.get("parameters") or {})
         system_type = meta.get("system_type") or "SISO"
-        assumptions = list(meta.get("assumptions") or [])
+        assumptions = _sanitize_assumptions_list(meta.get("assumptions"))
 
         n = len(states)
         x0 = pre_launch.get("initial_state")

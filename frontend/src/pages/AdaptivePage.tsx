@@ -26,6 +26,169 @@ import { GradeDesignModal } from '../components/GradeDesignModal'
 import { usePipeline } from '../context/PipelineContext'
 import { btnBase, btnCompact, btnPrimary, fieldInput, fieldLabel } from '../lib/classes'
 
+
+/** Keys Adaptive consumes from artifact adaptive-spec / plant.metadata */
+const ADAPTIVE_META_ORDER = [
+  'states',
+  'state_meanings',
+  'inputs',
+  'outputs',
+  'state_equations',
+  'parameters',
+  'system_type',
+  'assumptions',
+] as const
+
+const ADAPTIVE_META_LABELS: Record<string, string> = {
+  states: 'States',
+  state_meanings: 'State meanings',
+  inputs: 'Inputs',
+  outputs: 'Outputs',
+  state_equations: 'State equations',
+  parameters: 'Parameters',
+  system_type: 'System type',
+  assumptions: 'Assumptions',
+}
+
+type PlantPreview = {
+  artifactId: string
+  systemName: string
+  states: string[]
+  stateMeanings: string[]
+  inputs: string[]
+  outputs: string[]
+  stateEquations: string[]
+  parameters: Record<string, unknown>
+  systemType: string
+  assumptions: string[]
+  extra: Record<string, unknown>
+}
+
+function asStringList(v: unknown): string[] {
+  if (!Array.isArray(v)) return []
+  return v.map((x) => (typeof x === 'string' ? x : String(x ?? ''))).filter((s) => s.length > 0)
+}
+
+function asParamMap(v: unknown): Record<string, unknown> {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return {}
+  return { ...(v as Record<string, unknown>) }
+}
+
+function formatParamValue(v: unknown): string {
+  if (typeof v === 'number' && Number.isFinite(v)) {
+    return Number.isInteger(v) ? String(v) : String(v)
+  }
+  if (typeof v === 'string') return v
+  try {
+    return JSON.stringify(v)
+  } catch {
+    return String(v)
+  }
+}
+
+/** True when eqs is a non-empty list of non-blank strings aligned with states. */
+function usableStateEquations(eqs: unknown, states: string[]): boolean {
+  if (!Array.isArray(eqs) || states.length === 0) return false
+  if (eqs.length !== states.length) return false
+  return eqs.every((e) => typeof e === 'string' && e.trim().length > 0)
+}
+
+/** Detect synthetic strict-feedback chain: x2, x3, ..., -xn + u */
+function looksLikeChainEquations(
+  eqs: string[],
+  states: string[],
+  inputs: string[],
+): boolean {
+  if (!usableStateEquations(eqs, states)) return false
+  const inp0 = inputs[0] || 'u'
+  const n = states.length
+  for (let i = 0; i < n; i++) {
+    const expected =
+      i < n - 1 ? states[i + 1] : `-${states[i]} + ${inp0}`
+    if ((eqs[i] || '').replace(/\s+/g, ' ').trim() !== expected.replace(/\s+/g, ' ').trim()) {
+      return false
+    }
+  }
+  return true
+}
+
+function buildPlantPreview(
+  artifactId: string,
+  art: { system_name?: string; plant?: Record<string, unknown> },
+  adaptiveSpec: Record<string, unknown> | null,
+): PlantPreview {
+  const dyn =
+    adaptiveSpec && typeof adaptiveSpec.dynamics === 'object' && adaptiveSpec.dynamics
+      ? (adaptiveSpec.dynamics as Record<string, unknown>)
+      : null
+  const plantMeta =
+    art.plant && typeof art.plant.metadata === 'object' && art.plant.metadata
+      ? (art.plant.metadata as Record<string, unknown>)
+      : {}
+
+  // Prefer adaptive-spec when its equations are usable and not synthetic chain;
+  // otherwise prefer plant.metadata so the launch-pad card matches the artifact.
+  const plantStates = asStringList(plantMeta.states)
+  const plantEqs = asStringList(plantMeta.state_equations)
+  const plantInputs = asStringList(plantMeta.inputs)
+  const plantUsable = usableStateEquations(plantEqs, plantStates)
+
+  const dynStates = dyn ? asStringList(dyn.states) : []
+  const dynEqs = dyn ? asStringList(dyn.state_equations) : []
+  const dynInputs = dyn ? asStringList(dyn.inputs) : []
+  const dynUsable = usableStateEquations(dynEqs, dynStates)
+  const dynIsChain = dynUsable && looksLikeChainEquations(dynEqs, dynStates, dynInputs)
+
+  let src: Record<string, unknown>
+  if (dyn && Object.keys(dyn).length > 0 && dynUsable && !(dynIsChain && plantUsable)) {
+    src = dyn
+  } else if (plantUsable || Object.keys(plantMeta).length > 0) {
+    src = plantMeta
+  } else if (dyn && Object.keys(dyn).length > 0) {
+    src = dyn
+  } else {
+    src = plantMeta
+  }
+
+  const known = new Set<string>(ADAPTIVE_META_ORDER as unknown as string[])
+  const extra: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(src)) {
+    if (!known.has(k) && v != null && k !== 'x0' && k !== 'references' && k !== 'uncertainty'
+        && k !== 'disturbance' && k !== 'sim_time' && k !== 'solver_step' && k !== 'source') {
+      extra[k] = v
+    }
+  }
+
+  const systemName =
+    (typeof adaptiveSpec?.system_name === 'string' && adaptiveSpec.system_name) ||
+    (typeof art.system_name === 'string' && art.system_name) ||
+    'Plant'
+
+  // Drop banned process-filler assumptions in the card
+  const rawAssumptions = asStringList(src.assumptions)
+  const assumptions = rawAssumptions.filter((a) => {
+    const low = a.toLowerCase()
+    return (
+      !low.includes('metadata inferred') &&
+      !low.includes('review before control design')
+    )
+  })
+
+  return {
+    artifactId,
+    systemName,
+    states: asStringList(src.states),
+    stateMeanings: asStringList(src.state_meanings),
+    inputs: asStringList(src.inputs),
+    outputs: asStringList(src.outputs),
+    stateEquations: asStringList(src.state_equations),
+    parameters: asParamMap(src.parameters),
+    systemType: typeof src.system_type === 'string' ? src.system_type : '',
+    assumptions,
+    extra,
+  }
+}
+
 export function AdaptivePage() {
   const [searchParams] = useSearchParams()
   const pipeline = usePipeline()
@@ -56,28 +219,61 @@ export function AdaptivePage() {
   const [diagnosisApplyUsed, setDiagnosisApplyUsed] = useState(false)
   const [downloadingPdf, setDownloadingPdf] = useState(false)
 
+  /** Plant metadata Adaptive will consume from the compiled artifact */
+  const [plantPreview, setPlantPreview] = useState<PlantPreview | null>(null)
+  const [plantPreviewLoading, setPlantPreviewLoading] = useState(false)
+  const [plantPreviewError, setPlantPreviewError] = useState<string | null>(null)
+
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // Prepopulate from compiled artifact if available
+  // Prepopulate sim knobs + plant metadata preview from compiled artifact
   useEffect(() => {
     const artifactId = sessionStorage.getItem('labcd_last_artifact_id')
-    if (!artifactId) return
+    if (!artifactId) {
+      setPlantPreview(null)
+      setPlantPreviewError(null)
+      return
+    }
     let active = true
-    plantArtifactApi
-      .getArtifact(artifactId)
-      .then((art) => {
-        if (!active || !art?.pre_launch) return
-        if (typeof art.pre_launch.total_simulation_time === 'number') {
-          setSimTime(art.pre_launch.total_simulation_time)
+    setPlantPreviewLoading(true)
+    setPlantPreviewError(null)
+
+    Promise.all([
+      plantArtifactApi.getArtifact(artifactId),
+      plantArtifactApi.getAdaptiveSpec(artifactId).catch(() => null),
+    ])
+      .then(([art, adaptiveSpec]) => {
+        if (!active) return
+        if (art?.pre_launch) {
+          if (typeof art.pre_launch.total_simulation_time === 'number') {
+            setSimTime(art.pre_launch.total_simulation_time)
+          }
+          if (typeof art.pre_launch.solver_sample_time === 'number') {
+            setSolverStep(art.pre_launch.solver_sample_time)
+          }
+          if (Array.isArray(art.pre_launch.initial_state) && art.pre_launch.initial_state.length > 0) {
+            setX0Str(art.pre_launch.initial_state.join(', '))
+          }
         }
-        if (typeof art.pre_launch.solver_sample_time === 'number') {
-          setSolverStep(art.pre_launch.solver_sample_time)
-        }
-        if (Array.isArray(art.pre_launch.initial_state) && art.pre_launch.initial_state.length > 0) {
-          setX0Str(art.pre_launch.initial_state.join(', '))
-        }
+        setPlantPreview(
+          buildPlantPreview(
+            artifactId,
+            art as { system_name?: string; plant?: Record<string, unknown> },
+            adaptiveSpec as Record<string, unknown> | null,
+          ),
+        )
       })
-      .catch(() => {})
+      .catch((err: unknown) => {
+        if (!active) return
+        setPlantPreview(null)
+        setPlantPreviewError(
+          err instanceof Error ? err.message : 'Could not load plant artifact metadata',
+        )
+      })
+      .finally(() => {
+        if (active) setPlantPreviewLoading(false)
+      })
+
     return () => {
       active = false
     }
@@ -513,6 +709,182 @@ export function AdaptivePage() {
             </div>
 
             <div className="mt-6 space-y-6">
+              {/* Plant model from compiled artifact (what Adaptive will use) */}
+              <div>
+                <label className="text-xs font-bold uppercase tracking-wider text-cyan-600 dark:text-cyan-400 block mb-2">
+                  Plant model (from artifact)
+                </label>
+                <div className="rounded-xl border border-border bg-surface-muted/30 p-4 space-y-3">
+                  {plantPreviewLoading && (
+                    <div className="flex items-center gap-2 text-xs text-muted-text">
+                      <Loader2 className="size-3.5 animate-spin" />
+                      Loading plant metadata…
+                    </div>
+                  )}
+                  {!plantPreviewLoading && plantPreviewError && (
+                    <div className="flex items-start gap-2 text-xs text-amber-600 dark:text-amber-400">
+                      <AlertCircle className="size-3.5 shrink-0 mt-0.5" />
+                      <span>{plantPreviewError}</span>
+                    </div>
+                  )}
+                  {!plantPreviewLoading && !plantPreviewError && !plantPreview && (
+                    <p className="text-xs text-muted-text leading-relaxed">
+                      No compiled plant artifact found. Open{' '}
+                      <Link to="/design" className="text-cyan-600 dark:text-cyan-400 underline-offset-2 hover:underline">
+                        Plant Model Chat
+                      </Link>
+                      , confirm the plant, run Pre-Launch, then return here so Adaptive
+                      receives the real states, equations, and parameters.
+                    </p>
+                  )}
+                  {!plantPreviewLoading && plantPreview && (
+                    <>
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-2">
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-foreground truncate">
+                            {plantPreview.systemName}
+                          </div>
+                          <div className="mt-0.5 font-mono text-[10px] text-muted-text truncate">
+                            artifact: {plantPreview.artifactId}
+                          </div>
+                        </div>
+                        {plantPreview.systemType ? (
+                          <span className="rounded-md border border-cyan-500/30 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-cyan-700 dark:text-cyan-300">
+                            {plantPreview.systemType}
+                          </span>
+                        ) : null}
+                      </div>
+
+                      <dl className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                        {plantPreview.states.length > 0 && (
+                          <div className="sm:col-span-2">
+                            <dt className="text-[10px] font-semibold uppercase tracking-wide text-muted-text">
+                              {ADAPTIVE_META_LABELS.states}
+                            </dt>
+                            <dd className="mt-0.5 font-mono text-xs text-foreground break-words">
+                              {plantPreview.states.join(', ')}
+                            </dd>
+                          </div>
+                        )}
+                        {plantPreview.stateMeanings.length > 0 && (
+                          <div className="sm:col-span-2">
+                            <dt className="text-[10px] font-semibold uppercase tracking-wide text-muted-text">
+                              {ADAPTIVE_META_LABELS.state_meanings}
+                            </dt>
+                            <dd className="mt-0.5 text-xs text-foreground leading-relaxed">
+                              <ol className="list-decimal list-inside space-y-0.5 font-mono">
+                                {plantPreview.states.map((s, i) => (
+                                  <li key={`${s}-${i}`}>
+                                    <span className="text-cyan-600 dark:text-cyan-400">{s}</span>
+                                    {plantPreview.stateMeanings[i]
+                                      ? ` — ${plantPreview.stateMeanings[i]}`
+                                      : ''}
+                                  </li>
+                                ))}
+                              </ol>
+                            </dd>
+                          </div>
+                        )}
+                        {plantPreview.inputs.length > 0 && (
+                          <div>
+                            <dt className="text-[10px] font-semibold uppercase tracking-wide text-muted-text">
+                              {ADAPTIVE_META_LABELS.inputs}
+                            </dt>
+                            <dd className="mt-0.5 font-mono text-xs text-foreground break-words">
+                              {plantPreview.inputs.join(', ')}
+                            </dd>
+                          </div>
+                        )}
+                        {plantPreview.outputs.length > 0 && (
+                          <div>
+                            <dt className="text-[10px] font-semibold uppercase tracking-wide text-muted-text">
+                              {ADAPTIVE_META_LABELS.outputs}
+                            </dt>
+                            <dd className="mt-0.5 font-mono text-xs text-foreground break-words">
+                              {plantPreview.outputs.join(', ')}
+                            </dd>
+                          </div>
+                        )}
+                        {plantPreview.stateEquations.length > 0 && (
+                          <div className="sm:col-span-2">
+                            <dt className="text-[10px] font-semibold uppercase tracking-wide text-muted-text">
+                              {ADAPTIVE_META_LABELS.state_equations}
+                            </dt>
+                            <dd className="mt-1 max-h-40 overflow-y-auto rounded-lg border border-border/70 bg-surface/60 p-2.5">
+                              <ul className="space-y-1 font-mono text-[11px] leading-snug text-foreground">
+                                {plantPreview.stateEquations.map((eq, i) => (
+                                  <li key={i} className="break-all">
+                                    <span className="text-cyan-600 dark:text-cyan-400">
+                                      {plantPreview.states[i] ?? `x${i + 1}`}_dot
+                                    </span>
+                                    {' = '}
+                                    {eq}
+                                  </li>
+                                ))}
+                              </ul>
+                            </dd>
+                          </div>
+                        )}
+                        {Object.keys(plantPreview.parameters).length > 0 && (
+                          <div className="sm:col-span-2">
+                            <dt className="text-[10px] font-semibold uppercase tracking-wide text-muted-text">
+                              {ADAPTIVE_META_LABELS.parameters}
+                            </dt>
+                            <dd className="mt-1 flex flex-wrap gap-1.5">
+                              {Object.entries(plantPreview.parameters).map(([k, v]) => (
+                                <span
+                                  key={k}
+                                  className="inline-flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-0.5 font-mono text-[11px] text-foreground"
+                                >
+                                  <span className="text-cyan-600 dark:text-cyan-400">{k}</span>
+                                  <span className="text-muted-text">=</span>
+                                  <span>{formatParamValue(v)}</span>
+                                </span>
+                              ))}
+                            </dd>
+                          </div>
+                        )}
+                        {plantPreview.assumptions.length > 0 && (
+                          <div className="sm:col-span-2">
+                            <dt className="text-[10px] font-semibold uppercase tracking-wide text-muted-text">
+                              {ADAPTIVE_META_LABELS.assumptions}
+                            </dt>
+                            <dd className="mt-0.5 text-xs text-muted-text leading-relaxed">
+                              <ul className="list-disc list-inside space-y-0.5">
+                                {plantPreview.assumptions.map((a, i) => (
+                                  <li key={i}>{a}</li>
+                                ))}
+                              </ul>
+                            </dd>
+                          </div>
+                        )}
+                        {Object.keys(plantPreview.extra).length > 0 &&
+                          Object.entries(plantPreview.extra).map(([k, v]) => (
+                            <div key={k} className="sm:col-span-2">
+                              <dt className="text-[10px] font-semibold uppercase tracking-wide text-muted-text">
+                                {k.replace(/_/g, ' ')}
+                              </dt>
+                              <dd className="mt-0.5 font-mono text-[11px] text-foreground break-all whitespace-pre-wrap">
+                                {typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean'
+                                  ? String(v)
+                                  : JSON.stringify(v, null, 2)}
+                              </dd>
+                            </div>
+                          ))}
+                      </dl>
+
+                      {plantPreview.states.length === 0 &&
+                        plantPreview.stateEquations.length === 0 && (
+                          <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                            Artifact loaded, but no states / equations were found. Re-compile
+                            the plant so Adaptive receives a complete system_spec.
+                          </p>
+                        )}
+                    </>
+                  )}
+                </div>
+              </div>
+
               {/* 1. Desired Reference Trajectory */}
               <div>
                 <label className="text-xs font-bold uppercase tracking-wider text-cyan-600 dark:text-cyan-400 block mb-2">

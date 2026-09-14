@@ -47,13 +47,21 @@ def _sympify(expr_str, symbol_map):
     return sp.sympify(expr_str, locals=local_dict)
 
 
-def _parse_system(states, dynamics, inputs, outputs):
+def _parse_system(states, dynamics, inputs, outputs, parameters=None):
     # real=True actually matters here. skip it and differentiating x*Abs(x)
     # (a common drag term) gives re(x)/im(x) junk instead of the clean sign(x) you'd expect
+    # parameters (optional) go into the symbol map so equations like
+    # ``(Kt*i - b*omega)/J`` parse before numerical substitution.
     state_syms = list(sp.symbols(states, real=True)) if len(states) > 1 else [sp.Symbol(states[0], real=True)]
-    input_syms = list(sp.symbols(inputs, real=True)) if len(inputs) > 1 else [sp.Symbol(inputs[0], real=True)]
+    input_syms = list(sp.symbols(inputs, real=True)) if len(inputs) > 1 else (
+        [sp.Symbol(inputs[0], real=True)] if inputs else []
+    )
     symbol_map = {str(s): s for s in state_syms + input_syms}
-    output_syms = [symbol_map[name] for name in outputs]
+    if isinstance(parameters, dict):
+        for name in parameters:
+            if isinstance(name, str) and name and name not in symbol_map:
+                symbol_map[name] = sp.Symbol(name, real=True)
+    output_syms = [symbol_map[name] for name in outputs if name in symbol_map]
     dyn_exprs = [_sympify(e, symbol_map) for e in dynamics]
     return state_syms, input_syms, output_syms, dyn_exprs, symbol_map
 
@@ -328,6 +336,78 @@ def _verify_structure(structure):
     return out
 
 
+def _strict_feedback_violations(structure):
+    """Return a list of human-readable reasons the plant is not strict-feedback.
+
+    Strict-feedback (for our backstepping designer) requires, with states
+    x[0..n-1] and scalar input u:
+      - dynamics[i] may depend on x[0..i+1] only (i < n-1), and on x[*] + u
+        only at i == n-1
+      - u must not appear before the last equation
+      - g_i = ∂f_i/∂x_{i+1} (or ∂f_{n-1}/∂u) is not identically zero
+    """
+    states = list(structure.get("states") or [])
+    dynamics = list(structure.get("dynamics") or [])
+    inputs = list(structure.get("inputs") or [])
+    outputs = list(structure.get("outputs") or [])
+    reasons = []
+    if not states or not dynamics or len(dynamics) != len(states):
+        reasons.append(
+            "state_equations length must match states for a strict-feedback chain")
+        return reasons
+    if len(inputs) != 1:
+        reasons.append(
+            "backstepping requires exactly one input; got %d" % len(inputs))
+        return reasons
+    if outputs != [states[0]]:
+        reasons.append(
+            "backstepping requires outputs == [states[0]]; got outputs=%s with "
+            "states[0]=%r" % (outputs, states[0]))
+        # still continue structural checks for better diagnostics
+
+    try:
+        state_syms, input_syms, _out, dyn_exprs, _smap = _parse_system(
+            states, dynamics, inputs, outputs)
+    except Exception as exc:
+        reasons.append("could not parse dynamics for strict-feedback check: %s" % exc)
+        return reasons
+
+    u = input_syms[0]
+    n = len(state_syms)
+    for i, expr in enumerate(dyn_exprs):
+        # u must not appear before the final equation
+        if i < n - 1 and expr.has(u):
+            reasons.append(
+                "dynamics[%d] (%s_dot) depends on input %s; in strict-feedback "
+                "the input may appear only in the last equation"
+                % (i, states[i], inputs[0]))
+        # no dependence on states beyond the next virtual control
+        for j in range(i + 2, n):
+            if expr.has(state_syms[j]):
+                reasons.append(
+                    "dynamics[%d] (%s_dot) depends on states[%d]=%s, beyond the "
+                    "next chain state states[%d]=%s"
+                    % (i, states[i], j, states[j], i + 1, states[i + 1]))
+        # control coefficient must be non-zero
+        next_var = state_syms[i + 1] if i < n - 1 else u
+        try:
+            g = sp.simplify(sp.diff(expr, next_var))
+        except Exception:
+            g = None
+        if g is None or g == 0 or g == sp.S.Zero:
+            if i < n - 1:
+                reasons.append(
+                    "dynamics[%d] (%s_dot) has zero coefficient on next state "
+                    "%s (g_%d ≡ 0); not a strict-feedback chain"
+                    % (i, states[i], states[i + 1], i))
+            else:
+                reasons.append(
+                    "dynamics[%d] (%s_dot) has zero coefficient on input %s "
+                    "(g_%d ≡ 0); control does not appear in the last equation"
+                    % (i, states[i], inputs[0], i))
+    return reasons
+
+
 def _validate_method(method, structure):
     # unlike _verify_structure, THIS is the model's own call, it picked method.
     # here's why the caller gives it one more turn to reconsider on failure
@@ -337,7 +417,19 @@ def _validate_method(method, structure):
             raise ValueError(
                 "method='smc' requires a square system (#inputs == #outputs); "
                 "got %d input(s) and %d output(s)." % (len(inputs), len(outputs)))
-    elif outputs != [states[0]]:
-        raise ValueError(
-            "method='backstepping' requires outputs == [states[0]]; got "
-            "outputs=%s with states[0]=%r." % (outputs, states[0]))
+    elif method == "backstepping":
+        if not states:
+            raise ValueError("method='backstepping' requires a non-empty states list.")
+        if outputs != [states[0]]:
+            raise ValueError(
+                "method='backstepping' requires outputs == [states[0]]; got "
+                "outputs=%s with states[0]=%r." % (outputs, states[0]))
+        violations = _strict_feedback_violations(structure)
+        if violations:
+            raise ValueError(
+                "method='backstepping' requires a strict-feedback chain, but the "
+                "plant fails that test:\n  - "
+                + "\n  - ".join(violations)
+                + "\nPick method='smc' instead when the chain test fails.")
+    else:
+        raise ValueError("method must be \"smc\" or \"backstepping\", got %r" % method)
