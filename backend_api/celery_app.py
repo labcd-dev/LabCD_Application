@@ -28,12 +28,7 @@ celery.conf.update(
     worker_prefetch_multiplier=1,  # Fair task distribution for heavy compute tasks
     task_acks_late=True,  # Re-queue task if worker crashes
     broker_connection_retry_on_startup=True,
-    task_default_queue="default",
-    task_routes={
-        "backend_api.tasks.mpc_tasks.*": {"queue": "compute"},
-        "backend_api.tasks.adaptive_tasks.*": {"queue": "compute"},
-        "backend_api.tasks.workflow_tasks.*": {"queue": "default"},
-    },
+    task_default_queue="celery",
 )
 
 # Auto-discover tasks in backend_api.tasks
