@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import {
   AlertCircle,
-  ArrowLeft,
   CheckCircle2,
   Loader2,
   Play,
@@ -24,6 +23,7 @@ import { AdaptiveTuningPriorities } from '../components/adaptive/AdaptiveTuningP
 import { DesignCompletedToast } from '../components/DesignCompletedToast'
 import { GradeDesignModal } from '../components/GradeDesignModal'
 import { usePipeline } from '../context/PipelineContext'
+import { BackToCaseStudies } from '../components/BackToCaseStudies'
 import { btnBase, btnCompact, btnPrimary, fieldInput, fieldLabel } from '../lib/classes'
 
 
@@ -585,13 +585,8 @@ export function AdaptivePage() {
 
       {/* Top Bar */}
       <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-border bg-surface-elevated/85 px-6 backdrop-blur-md shadow-xs">
-        <div className="flex items-center gap-3 text-xs">
-          <Link
-            to="/case-studies"
-            className="flex items-center gap-1.5 text-muted-text hover:text-foreground transition-colors font-medium"
-          >
-            <ArrowLeft className="size-3.5" /> Case Studies &amp; Projects
-          </Link>
+        <div className="flex min-w-0 items-center gap-3 text-xs">
+          <BackToCaseStudies />
           <span className="text-muted/40">/</span>
           <span className="font-semibold text-cyan-600 dark:text-cyan-400 flex items-center gap-1.5">
             <Zap className="size-3.5 text-cyan-500" />

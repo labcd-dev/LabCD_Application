@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import {
   AlertCircle,
-  ArrowLeft,
   Compass,
   Play,
   RotateCcw,
@@ -27,6 +26,7 @@ import { MpcDashboard } from '../components/mpc/MpcDashboard'
 import { DesignCompletedToast } from '../components/DesignCompletedToast'
 import { GradeDesignModal } from '../components/GradeDesignModal'
 import { usePipeline } from '../context/PipelineContext'
+import { BackToCaseStudies } from '../components/BackToCaseStudies'
 import { btnBase, btnCompact, btnPrimary } from '../lib/classes'
 
 export function MpcPage() {
@@ -534,13 +534,8 @@ export function MpcPage() {
 
       {/* Top Bar */}
       <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-border bg-surface-elevated/85 px-6 backdrop-blur-md">
-        <div className="flex items-center gap-3 text-xs">
-          <Link
-            to="/case-studies"
-            className="flex items-center gap-1.5 text-muted-text hover:text-foreground transition-colors"
-          >
-            <ArrowLeft className="size-3.5" /> Case Studies &amp; Projects
-          </Link>
+        <div className="flex min-w-0 items-center gap-3 text-xs">
+          <BackToCaseStudies />
           <span className="text-muted">/</span>
           <span className="font-semibold text-purple-600 dark:text-purple-400 flex items-center gap-1.5">
             <Compass className="size-3.5 text-purple-600 dark:text-purple-400" />

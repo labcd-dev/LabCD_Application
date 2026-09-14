@@ -12,6 +12,7 @@ import {
   Shield,
   Sun,
 } from 'lucide-react'
+import { BackToCaseStudies } from './BackToCaseStudies'
 import { SupportFabs } from './SupportFabs'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
@@ -115,7 +116,12 @@ export function AppShell({ children, topbarActions }: AppShellProps) {
   const isProfile = location.pathname === '/profile'
   const isMpc = location.pathname.startsWith('/mpc')
   const isAdaptive = location.pathname.startsWith('/adaptive')
+  const isSilo = location.pathname.startsWith('/silo')
+  const isMulo = location.pathname.startsWith('/mulo')
   const isFullBleed = isProfile || isDesign || isMpc || isAdaptive
+  const isContinuingChat =
+    isDesign && new URLSearchParams(location.search).has('conversation')
+  const showCaseStudiesBack = isContinuingChat || isMpc || isAdaptive || isSilo || isMulo
   const initials = userInitials(user)
   const label = sectionLabel(location.pathname)
   const sidebarWidth = sidebarOpen ? SIDEBAR_EXPANDED_WIDTH : SIDEBAR_COLLAPSED_WIDTH
@@ -316,11 +322,11 @@ export function AppShell({ children, topbarActions }: AppShellProps) {
       >
         <header className="sticky top-0 z-[100] flex h-14 shrink-0 items-center justify-between border-b border-border bg-surface-elevated/85 px-4 sm:px-6 backdrop-blur-[12px] shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
           {/* Left: Sidebar Toggle + Breadcrumb */}
-          <div className="flex items-center gap-3">
+          <div className="flex min-w-0 items-center gap-3">
             {!sidebarOpen && (
               <button
                 type="button"
-                className="flex size-8 items-center justify-center rounded-lg border border-border bg-surface text-muted-text hover:bg-surface-hover hover:text-foreground transition-colors"
+                className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-border bg-surface text-muted-text hover:bg-surface-hover hover:text-foreground transition-colors"
                 onClick={() => setSidebarOpen(true)}
                 aria-label="Open sidebar"
                 title="Open sidebar"
@@ -328,10 +334,11 @@ export function AppShell({ children, topbarActions }: AppShellProps) {
                 <Menu className="size-4" />
               </button>
             )}
-            <div className="flex items-center gap-2 text-[13px] text-muted-text">
-              <span className="font-bold text-foreground tracking-tight">LabCD</span>
-              <span className="text-muted/50">/</span>
-              <span className="capitalize font-medium text-foreground/90">{label}</span>
+            {showCaseStudiesBack && <BackToCaseStudies />}
+            <div className="flex min-w-0 items-center gap-2 text-[13px] text-muted-text">
+              <span className="shrink-0 font-bold text-foreground tracking-tight">LabCD</span>
+              <span className="shrink-0 text-muted/50">/</span>
+              <span className="truncate capitalize font-medium text-foreground/90">{label}</span>
             </div>
           </div>
 
@@ -389,7 +396,7 @@ export function AppShell({ children, topbarActions }: AppShellProps) {
         </header>
 
         <main
-          className={`flex min-h-0 flex-1 flex-col overflow-y-auto ${
+          className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto ${
             isFullBleed ? '' : 'p-4 sm:p-6 lg:p-8 xl:p-10'
           }`}
         >
