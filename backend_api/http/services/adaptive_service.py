@@ -672,6 +672,22 @@ def _run_pipeline_thread(job_id: str, store: InMemoryAdaptiveJobStore) -> None:
 
 
 def _start_pipeline_async(job_id: str, store: InMemoryAdaptiveJobStore) -> None:
+    try:
+        from backend_api.http.services.redis_client import is_redis_available
+
+        if is_redis_available():
+            from backend_api.tasks.adaptive_tasks import run_adaptive_pipeline_task
+
+            run_adaptive_pipeline_task.delay(job_id)
+            log.info("Dispatched Adaptive job %s to Celery worker queue", job_id)
+            return
+    except Exception as exc:
+        log.warning(
+            "Failed to dispatch Adaptive job %s to Celery (%s); falling back to ThreadPoolExecutor",
+            job_id,
+            exc,
+        )
+
     job_executor.submit(_run_pipeline_thread, job_id, store)
 
 

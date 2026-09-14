@@ -51,12 +51,60 @@ class Job:
         if status is not None:
             self.status = status
         self.updated_at = utc_iso(utcnow())
+        try:
+            from backend_api.http.services.redis_client import is_redis_available, redis_set_json
+
+            if is_redis_available():
+                safe_meta = make_serializable(
+                    {k: v for k, v in self.metadata.items() if k not in INTERNAL_METADATA_KEYS}
+                )
+                payload = {
+                    "id": self.id,
+                    "module": self.module,
+                    "status": self.status.value,
+                    "created_at": self.created_at,
+                    "updated_at": self.updated_at,
+                    "metadata": safe_meta,
+                    "error": self.error,
+                    "cancel_requested": self.cancel_requested,
+                    "user_id": self.user_id,
+                }
+                redis_set_json(f"labcd:job:{self.id}", payload, ex=86400 * 7)
+        except Exception:
+            pass
 
 
 class JobStore:
     def __init__(self) -> None:
         self._jobs: Dict[str, Job] = {}
         self._lock = threading.Lock()
+
+    def _sync_to_redis(self, job: Job) -> None:
+        job.touch()
+
+    def _load_from_redis(self, job_id: str) -> Optional[Job]:
+        try:
+            from backend_api.http.services.redis_client import is_redis_available, redis_get_json
+
+            if is_redis_available():
+                data = redis_get_json(f"labcd:job:{job_id}")
+                if data and isinstance(data, dict):
+                    job = Job(
+                        id=data["id"],
+                        module=data["module"],
+                        status=JobStatus(data.get("status", "pending")),
+                        created_at=data.get("created_at") or utc_iso(utcnow()),
+                        updated_at=data.get("updated_at") or utc_iso(utcnow()),
+                        metadata=data.get("metadata") or {},
+                        error=data.get("error"),
+                        cancel_requested=bool(data.get("cancel_requested")),
+                        user_id=data.get("user_id"),
+                    )
+                    self._jobs[job_id] = job
+                    return job
+        except Exception:
+            pass
+        return None
 
     def create(
         self,
@@ -68,11 +116,14 @@ class JobStore:
         job = Job(id=job_id, module=module, metadata=metadata or {}, user_id=user_id)
         with self._lock:
             self._jobs[job_id] = job
+            self._sync_to_redis(job)
         return job
 
     def get(self, job_id: str) -> Job:
         with self._lock:
             job = self._jobs.get(job_id)
+            if job is None:
+                job = self._load_from_redis(job_id)
         if job is None:
             raise KeyError(job_id)
         return job
@@ -93,6 +144,18 @@ class JobStore:
         job = self.get(job_id)
         if job.status in {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED}:
             raise ValueError(f"Job {job_id} cannot be cancelled (status: {job.status.value})")
+
+        try:
+            from backend_api.http.services.redis_client import is_redis_available, get_redis_client, redis_publish
+
+            if is_redis_available():
+                client = get_redis_client()
+                if client:
+                    client.set(f"labcd:job:{job_id}:cancel", "1", ex=86400 * 7)
+                redis_publish(f"labcd:job:{job_id}:events", {"event": "status", "data": {"status": "cancelled"}})
+        except Exception:
+            pass
+
         job.cancel_requested = True
         if job.module == "silo":
             monitor = job.metadata.get("monitor")
@@ -109,6 +172,23 @@ class JobStore:
             )
         job.touch()
         return job
+
+    def is_cancel_requested(self, job_id: str) -> bool:
+        try:
+            from backend_api.http.services.redis_client import is_redis_available, get_redis_client
+
+            if is_redis_available():
+                client = get_redis_client()
+                if client and client.get(f"labcd:job:{job_id}:cancel") == "1":
+                    return True
+        except Exception:
+            pass
+
+        try:
+            job = self.get(job_id)
+            return bool(job and job.cancel_requested)
+        except Exception:
+            return False
 
 
 job_store = JobStore()

@@ -1833,6 +1833,22 @@ def diagnosis_chat(
 
 
 def _start_tuning_async(job_id: str, store: InMemoryJobStore) -> None:
+    try:
+        from backend_api.http.services.redis_client import is_redis_available
+
+        if is_redis_available():
+            from backend_api.tasks.mpc_tasks import run_mpc_tuning_task
+
+            run_mpc_tuning_task.delay(job_id)
+            log.info("Dispatched MPC job %s to Celery worker queue", job_id)
+            return
+    except Exception as exc:
+        log.warning(
+            "Failed to dispatch MPC job %s to Celery (%s); falling back to ThreadPoolExecutor",
+            job_id,
+            exc,
+        )
+
     job_executor.submit(_run_tuning_thread, job_id, store)
 
 
