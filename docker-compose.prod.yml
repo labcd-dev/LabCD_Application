@@ -8,7 +8,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -40,6 +40,8 @@ services:
       args:
         VITE_API_BASE_URL: /api/v1
         VITE_GA_MEASUREMENT_ID: ${VITE_GA_MEASUREMENT_ID:-}
+    ports:
+      - "3000:80"
     depends_on:
       - api
     restart: unless-stopped
@@ -51,6 +53,8 @@ services:
       DOZZLE_AUTH_TTL: 48h
       DOZZLE_NO_ANALYTICS: "true"
       DOZZLE_HOSTNAME: labcd-vps
+    ports:
+      - "8080:8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./deploy/dozzle:/data
@@ -61,21 +65,5 @@ services:
         max-size: "10m"
         max-file: "3"
 
-  caddy:
-    image: caddy:2-alpine
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      - frontend
-      - dozzle
-    restart: unless-stopped
-
 volumes:
   postgres_data:
-  caddy_data:
-  caddy_config:
