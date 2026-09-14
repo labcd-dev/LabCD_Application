@@ -782,6 +782,25 @@ export function PlantModelChat({
                     ))
                   )}
 
+                  {metadataEntries.length > 0 && (
+                    <>
+                      <div className="mt-1 text-[11px] font-semibold uppercase tracking-[0.05em] text-muted">
+                        Model details
+                      </div>
+                      {metadataEntries.map(([key, value]) => (
+                        <div
+                          key={key}
+                          className="min-w-0 rounded-[10px] border border-border-subtle bg-surface-muted px-3 py-2.5"
+                        >
+                          <div className="mb-1.5 text-[11.5px] font-semibold text-muted">
+                            {humanizeMetadataKey(key)}
+                          </div>
+                          <MetadataValue value={value} />
+                        </div>
+                      ))}
+                    </>
+                  )}
+
                   {draft && (
                     <div className="mt-1 min-w-0 overflow-hidden rounded-[10px] border border-border-subtle">
                       <CodePreview value={draft.python_code} readOnly height={260} language="python" />
@@ -795,28 +814,6 @@ export function PlantModelChat({
                       className="h-full bg-gradient-to-r from-primary via-indigo-400 to-[var(--app-status-success-text)] shadow-[0_0_8px_rgba(99,102,241,0.4)] transition-[width] duration-500"
                       style={{ width: `${progressPct}%` }}
                     />
-                {metadataEntries.length > 0 && (
-                  <>
-                    <div className="mt-1 text-[11px] font-semibold uppercase tracking-[0.05em] text-muted">
-                      Model details
-                    </div>
-                    {metadataEntries.map(([key, value]) => (
-                      <div
-                        key={key}
-                        className="min-w-0 rounded-[10px] border border-border-subtle bg-surface-muted px-3 py-2.5"
-                      >
-                        <div className="mb-1.5 text-[11.5px] font-semibold text-muted">
-                          {humanizeMetadataKey(key)}
-                        </div>
-                        <MetadataValue value={value} />
-                      </div>
-                    ))}
-                  </>
-                )}
-
-                {draft && (
-                  <div className="mt-1 overflow-hidden rounded-[10px] border border-border-subtle">
-                    <CodePreview value={draft.python_code} readOnly height={260} language="python" />
                   </div>
                   <div
                     className={`mt-1.5 text-[11px] ${
