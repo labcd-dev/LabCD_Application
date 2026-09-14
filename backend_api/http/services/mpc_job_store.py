@@ -5,9 +5,12 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+import logging
 from threading import Lock
 from typing import Any, Literal
 from uuid import uuid4
+
+log = logging.getLogger(__name__)
 
 JobStatus = Literal[
     "queued",
