@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from backend_api.PlantModelChat.agent import (
     PlantModelAgent,
@@ -19,6 +19,67 @@ from backend_api.http.schemas.plant_model import (
 )
 
 
+def _metadata_is_complete(meta: Any, required_keys: tuple[str, ...]) -> bool:
+    """True when ``meta`` already has everything PlantCompiler needs, so
+    there's no need to run the (heavier) inference fallback at all.
+    """
+    if not isinstance(meta, dict):
+        return False
+    if not all(key in meta for key in required_keys):
+        return False
+
+    states = meta.get("states")
+    if not isinstance(states, list) or not states:
+        return False
+    n_states = len(states)
+    for key in ("state_meanings", "state_equations"):
+        value = meta.get(key)
+        if not isinstance(value, list) or len(value) != n_states:
+            return False
+    if not isinstance(meta.get("inputs"), list) or not meta["inputs"]:
+        return False
+    if not isinstance(meta.get("outputs"), list) or not meta["outputs"]:
+        return False
+    if not isinstance(meta.get("parameters"), dict):
+        return False
+    if not meta.get("system_type"):
+        return False
+    if not isinstance(meta.get("assumptions"), list) or not meta["assumptions"]:
+        return False
+    return True
+
+
+def _resolved_metadata(payload: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Return metadata aligned with ``python_code`` for sidebar / complete.
+
+    Always runs ``reconcile_metadata_with_code`` when the compiler is
+    available: that partial-merges LLM metadata, extracts equations from
+    code (including ``dtheta_dt``-style assignments), and numerically
+    verifies so drifted LLM ``state_equations`` cannot pass through.
+    """
+    if not payload:
+        return None
+    meta = payload.get("metadata")
+    try:
+        from backend_core.plant_compiler import reconcile_metadata_with_code
+    except Exception:
+        return meta if isinstance(meta, dict) else None
+
+    try:
+        reconciled = reconcile_metadata_with_code(
+            {
+                "system_name": payload.get("system_name"),
+                "python_code": payload.get("python_code") or "",
+                "metadata": meta if isinstance(meta, dict) else None,
+            }
+        )
+        # Internal diagnostics only — not part of the public metadata schema.
+        reconciled.pop("_verify", None)
+        return reconciled
+    except Exception:
+        return meta if isinstance(meta, dict) else None
+
+
 def _to_agent_session_state(
     state: PlantModelSessionState | None,
 ) -> AgentSessionState | None:
@@ -30,6 +91,8 @@ def _to_agent_session_state(
             "system_name": state.latest_draft.system_name,
             "python_code": state.latest_draft.python_code,
         }
+        if state.latest_draft.metadata:
+            latest["metadata"] = state.latest_draft.metadata
     return AgentSessionState(draft_count=state.draft_count, latest_draft=latest)
 
 
@@ -39,6 +102,9 @@ def _from_agent_session_state(state: AgentSessionState) -> PlantModelSessionStat
         latest = PlantModelResult(
             system_name=state.latest_draft["system_name"],
             python_code=state.latest_draft["python_code"],
+            # Resolved (not just passed through) so the sidebar has usable
+            # metadata on drafts too, not only on the final "complete" result.
+            metadata=_resolved_metadata(state.latest_draft),
         )
     return PlantModelSessionState(draft_count=state.draft_count, latest_draft=latest)
 
@@ -68,6 +134,9 @@ def run_plant_model_chat(request: PlantModelChatRequest) -> PlantModelChatRespon
     history = [{"role": m.role, "content": m.content} for m in request.messages]
     reply, final_payload = agent.step(history, request.user_message.strip())
 
+    # NOTE: this also resolves metadata for session_state.latest_draft (via
+    # _from_agent_session_state), so the sidebar has real metadata to show
+    # while a draft is still in progress, not only once the plant is confirmed.
     session_state = _from_agent_session_state(export_session_state(agent))
     status = _infer_status(
         prev_draft_count=prev_draft_count,
@@ -77,17 +146,10 @@ def run_plant_model_chat(request: PlantModelChatRequest) -> PlantModelChatRespon
 
     final_result = None
     if final_payload is not None:
-        meta = final_payload.get("metadata")
-        if not meta:
-            try:
-                from backend_core.plant_compiler import PlantCompiler
-                meta = PlantCompiler().infer_metadata(final_payload)
-            except Exception:
-                meta = None
         final_result = PlantModelResult(
             system_name=final_payload["system_name"],
             python_code=final_payload["python_code"],
-            metadata=meta,
+            metadata=_resolved_metadata(final_payload),
         )
 
     usage_totals = agent.total_usage

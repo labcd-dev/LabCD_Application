@@ -1,17 +1,18 @@
 """PlantModelAgent: LabCD's plant-model chatbot.
 
-Driven by ``promptTemplate.yaml``. The model always returns one of
-three JSON shapes:
+Two-call architecture
+---------------------
+1. **Primary agent** (``plant_model_agent.yaml``) — conversation only.
+   Emits continue / draft / complete with ``system_name`` + ``python_code``.
+   Never emits structured metadata.
 
-- ``{"status": "continue", "reply": "..."}``
-- ``{"status": "draft", "reply": "...", "system_name": "...", "python_code": "...", "metadata": {...}}``
-- ``{"status": "complete", "system_name": "...", "python_code": "...", "metadata": {...}}``
-
-Product rule: once the plant is known, the agent sketches draft dynamics
-code and iterates with the user until they accept it (or a max-draft limit
-is hit). No hardcoded user-facing strings are ever returned by this agent —
-every message shown to the user comes from the model (or is the raw model
-text if JSON parsing fails after a repair attempt).
+2. **Metadata agent** (``plant_model_metadata.yaml``) — after every successful
+   draft or complete, a second LLM call reads the finished ``python_code`` and
+   emits the full metadata object forced to match identifiers and arithmetic
+   in the code. A numerical verifier checks ``state_equations`` against
+   ``dynamics()``; one repair retry is allowed on failure. If the LLM still
+   fails, equations are taken deterministically from the code (no generic
+   "Metadata inferred..." assumption strings).
 """
 
 from __future__ import annotations
@@ -23,48 +24,25 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from labcd_agents import BaseAgent, PromptLibrary, extract_json_from_response
 
-PROMPTS_DIR = Path(__file__).parent
-PROMPT_FILE_NAME = "promptTemplate"
+PROMPTS_DIR = Path(__file__).parent / "prompts"
+PROMPT_FILE_NAME = "plant_model_agent"
+METADATA_PROMPT_FILE_NAME = "plant_model_metadata"
 
-REQUIRED_CODE_KEYS = ("system_name", "python_code", "metadata")
+REQUIRED_CODE_KEYS = ("system_name", "python_code")
 REQUIRED_METADATA_KEYS = (
-    "states", "state_meanings", "inputs", "outputs",
-    "state_equations", "parameters", "system_type", "assumptions",
+    "states",
+    "state_meanings",
+    "inputs",
+    "outputs",
+    "state_equations",
+    "parameters",
+    "system_type",
+    "assumptions",
 )
 
-# After this many draft turns in one conversation, accept the latest draft
-# as complete even without an explicit "finish" from the user.
 DEFAULT_MAX_DRAFTS = 5
-
-# Soft floor: do not accept complete before this many user turns unless the
-# user message itself is an explicit accept/finish after a draft was shown.
 DEFAULT_MIN_USER_TURNS_BEFORE_COMPLETION = 2
-
-
-@dataclass
-class PlantModelSessionState:
-    """Serializable draft counter + latest draft for HTTP / UI session restore."""
-
-    draft_count: int = 0
-    latest_draft: Optional[Dict[str, Any]] = None
-
-
-def apply_session_state(agent: "PlantModelAgent", state: Optional[PlantModelSessionState]) -> None:
-    """Restore draft counter and latest draft onto an agent instance."""
-    if state is None:
-        return
-    agent._draft_count = max(0, int(state.draft_count or 0))
-    if state.latest_draft is not None:
-        agent._latest_draft = dict(state.latest_draft)
-    else:
-        agent._latest_draft = None
-
-
-def export_session_state(agent: "PlantModelAgent") -> PlantModelSessionState:
-    """Snapshot agent draft state for the next HTTP turn or UI restore."""
-    latest = dict(agent._latest_draft) if agent._latest_draft is not None else None
-    return PlantModelSessionState(draft_count=int(agent._draft_count), latest_draft=latest)
-
+DEFAULT_METADATA_MAX_RETRIES = 1
 
 _REPAIR_NOTE = (
     "\n\nIMPORTANT — internal note: your previous reply was not valid JSON in one of "
@@ -80,22 +58,17 @@ _FORCE_DRAFT_NOTE = (
     'finish. Otherwise emit status "continue" with one concrete question. Output ONLY JSON.'
 )
 
-_METADATA_VALIDATE_NOTE_PREFIX = (
-    "\n\nIMPORTANT — internal note: metadata validation failed. Do not emit status "
-    '"complete". Fix the listed issues and resubmit status "draft" with corrected '
-    "state_equations (bare sympy names only: sin, cos, exp, ... — no np./numpy./math. "
-    "prefixes). Output ONLY JSON.\n\nValidation errors:\n"
-)
-
-_DIGIT_RE = re.compile(r"\d")
 _FINISH_RE = re.compile(
     r"\b(finish|done|confirm|confirm\s+system|accept|accept\s+draft|ship\s*it|looks?\s+good|totally\s+good|finalize|finalise|"
     r"good\s+to\s+go|that'?s\s+(fine|good|ok|okay)|perfect|approved)\b",
     re.IGNORECASE,
 )
 
-# Common Greek / unit glyphs the model likes to emit inside python_code.
-# Mapped to plain ASCII so dynamics.py stays executable and editor-safe.
+_FORBIDDEN_ASSUMPTION_SNIPPETS = (
+    "metadata inferred from python_code",
+    "review before control design",
+)
+
 _ASCII_REPLACEMENTS = (
     ("θ", "theta"),
     ("Θ", "Theta"),
@@ -131,30 +104,91 @@ _ASCII_REPLACEMENTS = (
     ("→", "->"),
     ("←", "<-"),
     ("°", " deg"),
-    ("\u00a0", " "),  # non-breaking space
+    ("\u00a0", " "),
 )
 
 
+@dataclass
+class PlantModelSessionState:
+    draft_count: int = 0
+    # Widened so a nested "metadata" dict can round-trip.
+    latest_draft: Dict[str, Any] | None = None
+
+
+def apply_session_state(
+    agent: PlantModelAgent,
+    state: PlantModelSessionState | None,
+) -> None:
+    if state is None:
+        agent.reset_conversation_state()
+        return
+    agent._draft_count = max(0, state.draft_count)
+    agent._latest_draft = dict(state.latest_draft) if state.latest_draft else None
+
+
+def export_session_state(agent: PlantModelAgent) -> PlantModelSessionState:
+    latest = agent._latest_draft
+    return PlantModelSessionState(
+        draft_count=agent._draft_count,
+        latest_draft=dict(latest) if latest else None,
+    )
+
+
 def _to_ascii(text: str) -> str:
-    """Replace common non-ASCII science glyphs, then strip any remaining non-ASCII."""
     if not text:
         return text
     out = text
     for src, dst in _ASCII_REPLACEMENTS:
         out = out.replace(src, dst)
-    # Drop anything still outside printable ASCII (keep tab/newline).
     return "".join(ch if (32 <= ord(ch) <= 126) or ch in "\n\r\t" else "?" for ch in out)
 
 
-class PlantModelAgent(BaseAgent):
-    """Plant-model chatbot with continue / draft / complete structured turns.
+def _sanitize_assumptions(assumptions: Any) -> List[str]:
+    """Drop forbidden generic filler; keep real modelling assumptions."""
+    if not isinstance(assumptions, list):
+        return ["Continuous-time state-space dynamics"]
+    cleaned: List[str] = []
+    for item in assumptions:
+        if not isinstance(item, str):
+            continue
+        low = item.strip().lower()
+        if not low:
+            continue
+        if any(bad in low for bad in _FORBIDDEN_ASSUMPTION_SNIPPETS):
+            continue
+        cleaned.append(item.strip())
+    return cleaned or ["Continuous-time state-space dynamics"]
 
-    Args:
-        max_drafts: after this many draft responses in one conversation,
-            the latest draft is auto-accepted as complete.
-        min_user_turns_before_completion: soft floor before accepting
-            complete (bypassed when the user explicitly accepts a draft).
-    """
+
+def _metadata_shape_ok(meta: Any) -> bool:
+    if not isinstance(meta, dict):
+        return False
+    for key in REQUIRED_METADATA_KEYS:
+        if key not in meta:
+            return False
+    states = meta.get("states")
+    if not isinstance(states, list) or not states:
+        return False
+    n = len(states)
+    if not isinstance(meta.get("state_meanings"), list) or len(meta["state_meanings"]) != n:
+        return False
+    if not isinstance(meta.get("state_equations"), list) or len(meta["state_equations"]) != n:
+        return False
+    if not all(isinstance(e, str) and e.strip() for e in meta["state_equations"]):
+        return False
+    if not isinstance(meta.get("inputs"), list) or not meta["inputs"]:
+        return False
+    if not isinstance(meta.get("outputs"), list) or not meta["outputs"]:
+        return False
+    if not isinstance(meta.get("parameters"), dict):
+        return False
+    if not meta.get("system_type"):
+        return False
+    return True
+
+
+class PlantModelAgent(BaseAgent):
+    """Plant-model chatbot: primary code agent + second-call metadata agent."""
 
     def __init__(
         self,
@@ -165,25 +199,31 @@ class PlantModelAgent(BaseAgent):
         prompts_dir: Path = PROMPTS_DIR,
         max_drafts: int = DEFAULT_MAX_DRAFTS,
         min_user_turns_before_completion: int = DEFAULT_MIN_USER_TURNS_BEFORE_COMPLETION,
+        metadata_max_retries: int = DEFAULT_METADATA_MAX_RETRIES,
         **base_agent_kwargs: Any,
     ) -> None:
         super().__init__(model=model, temperature=temperature, provider=provider, **base_agent_kwargs)
         self.prompt_library = PromptLibrary(str(prompts_dir))
         self._system_prompt: str = self.prompt_library.get_key(PROMPT_FILE_NAME, "system_prompt")
-        self._user_prompt_template: str = self.prompt_library.get_key(PROMPT_FILE_NAME, "user_prompt_template")
+        self._user_prompt_template: str = self.prompt_library.get_key(
+            PROMPT_FILE_NAME, "user_prompt_template"
+        )
+        self._metadata_system_prompt: str = self.prompt_library.get_key(
+            METADATA_PROMPT_FILE_NAME, "system_prompt"
+        )
+        self._metadata_user_template: str = self.prompt_library.get_key(
+            METADATA_PROMPT_FILE_NAME, "user_prompt_template"
+        )
         self.max_drafts = max(1, max_drafts)
         self.min_user_turns_before_completion = max(1, min_user_turns_before_completion)
+        self.metadata_max_retries = max(0, int(metadata_max_retries))
         self._draft_count = 0
         self._latest_draft: Optional[Dict[str, Any]] = None
 
     def reset_conversation_state(self) -> None:
-        """Clear draft counter / latest draft (call on UI reset)."""
         self._draft_count = 0
         self._latest_draft = None
 
-    # ------------------------------------------------------------------
-    # Prompt rendering
-    # ------------------------------------------------------------------
     @staticmethod
     def format_history(messages: Iterable[Dict[str, str]]) -> str:
         lines = []
@@ -199,20 +239,11 @@ class PlantModelAgent(BaseAgent):
             .replace("{{user_message}}", user_message)
         )
 
-    # ------------------------------------------------------------------
-    # Turn execution
-    # ------------------------------------------------------------------
     def step(
         self,
         history_messages: Iterable[Dict[str, str]],
         user_message: str,
     ) -> Tuple[str, Optional[Dict[str, Any]]]:
-        """Run one turn. Returns ``(display_text, final_result_or_None)``.
-
-        ``display_text`` is always model-authored (reply field, or a rendered
-        draft summary built only from model fields). Never a fixed template
-        string invented by this class.
-        """
         history_messages = list(history_messages)
         history_text = self.format_history(history_messages)
         user_prompt = self.render_user_prompt(history_text, user_message)
@@ -225,7 +256,6 @@ class PlantModelAgent(BaseAgent):
         )
         parsed = self._parse_structured_response(response_text)
 
-        # Repair invalid JSON once.
         if parsed is None:
             response_text, _ = self.invoke_llm(
                 system_prompt=self._system_prompt + _REPAIR_NOTE,
@@ -233,22 +263,12 @@ class PlantModelAgent(BaseAgent):
             )
             parsed = self._parse_structured_response(response_text)
             if parsed is None:
-                # Last resort: show the model's raw text, never a canned line.
                 return response_text.strip() or "(empty model response)", None
 
-        # User explicitly accepts ("done"/"finish"/…) → complete immediately.
-        # Do NOT gate this on sympy validation: Pre-Launch re-validates and can
-        # send errors back. Blocking here is what trapped users in a draft loop
-        # when the model re-emitted status "draft" with a "finalized" reply.
-        if user_accepts:
-            candidate = None
-            if isinstance(parsed, dict) and self._has_code(parsed):
-                candidate = self._sanitize_code_fields(parsed)
-            elif self._latest_draft is not None:
-                candidate = dict(self._latest_draft)
-            if candidate is not None:
-                return self._accept_complete(candidate)
-            # No code yet — fall through so the model can still produce a draft.
+        if user_accepts and self._latest_draft is not None and parsed.get("status") != "complete":
+            if parsed.get("status") == "complete" and self._has_code(parsed):
+                return self._accept_complete(parsed)
+            return self._accept_complete(self._latest_draft)
 
         status = parsed.get("status")
 
@@ -256,7 +276,6 @@ class PlantModelAgent(BaseAgent):
             reply = _to_ascii((parsed.get("reply") or "").strip())
             if reply:
                 return reply, None
-            # Model sent continue without reply — one forced repair, then raw.
             response_text, _ = self.invoke_llm(
                 system_prompt=self._system_prompt + _FORCE_DRAFT_NOTE,
                 user_prompt=user_prompt,
@@ -268,52 +287,23 @@ class PlantModelAgent(BaseAgent):
             if status == "continue":
                 reply = (parsed.get("reply") or "").strip()
                 return reply or response_text.strip(), None
-            # fall through if repair produced draft/complete
 
         if status == "draft" and self._has_code(parsed):
             parsed = self._sanitize_code_fields(parsed)
-            # Soft validate: one repair attempt if equations don't parse, but always
-            # keep a draft so the user can still say "done" afterward.
-            meta_errors = self._validate_plant_payload(parsed)
-            if meta_errors and not user_accepts:
-                repaired_display, repaired_final = self._repair_invalid_metadata(
-                    user_prompt, response_text, meta_errors
-                )
-                # Repair may have stored a new _latest_draft; if it returned a
-                # final (shouldn't), pass it through. Otherwise show repair result.
-                if repaired_final is not None:
-                    return repaired_display, repaired_final
-                if self._latest_draft is not None:
-                    return repaired_display, None
-                # Fall through and store the original draft if repair produced nothing.
             self._draft_count += 1
-            self._latest_draft = {
-                "system_name": parsed["system_name"],
-                "python_code": parsed["python_code"],
-            }
-            if "metadata" in parsed and isinstance(parsed["metadata"], dict):
-                self._latest_draft["metadata"] = parsed["metadata"]
+            self._latest_draft = self._draft_payload_with_metadata(parsed)
             display = self._format_draft_display(parsed)
-            if meta_errors:
-                display += (
-                    "\n\n_Note: metadata may fail Pre-Launch validation:_ "
-                    + "; ".join(meta_errors[:3])
-                )
             if self._draft_count >= self.max_drafts:
                 return display, dict(self._latest_draft)
             return display, None
 
         if status == "complete" and self._has_code(parsed):
-            parsed = self._sanitize_code_fields(parsed)
-            # Accept if user is finishing, or min turns satisfied, or we already drafted.
-            # Sympy validation is NOT a gate here — Pre-Launch handles that.
             if (
                 user_accepts
                 or self._latest_draft is not None
                 or user_turns >= self.min_user_turns_before_completion
             ):
                 return self._accept_complete(parsed)
-            # Premature complete: force a draft instead of inventing text.
             response_text, _ = self.invoke_llm(
                 system_prompt=self._system_prompt + _FORCE_DRAFT_NOTE,
                 user_prompt=(
@@ -327,22 +317,15 @@ class PlantModelAgent(BaseAgent):
             if parsed.get("status") == "draft" and self._has_code(parsed):
                 parsed = self._sanitize_code_fields(parsed)
                 self._draft_count += 1
-                self._latest_draft = {
-                    "system_name": parsed["system_name"],
-                    "python_code": parsed["python_code"],
-                }
-                if "metadata" in parsed and isinstance(parsed["metadata"], dict):
-                    self._latest_draft["metadata"] = parsed["metadata"]
+                self._latest_draft = self._draft_payload_with_metadata(parsed)
                 return self._format_draft_display(parsed), None
             if parsed.get("status") == "continue":
                 reply = (parsed.get("reply") or "").strip()
                 return reply or response_text.strip(), None
             if parsed.get("status") == "complete" and self._has_code(parsed):
-                # Model insists — accept rather than loop forever.
                 return self._accept_complete(parsed)
             return response_text.strip(), None
 
-        # Unknown shape: show model text only.
         reply = (parsed.get("reply") or "").strip()
         if reply:
             return reply, None
@@ -350,22 +333,133 @@ class PlantModelAgent(BaseAgent):
 
     def _accept_complete(self, payload: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
         payload = self._sanitize_code_fields(payload)
-        final = {
-            "system_name": payload["system_name"],
-            "python_code": payload["python_code"],
-        }
-        if "metadata" in payload and isinstance(payload["metadata"], dict):
-            final["metadata"] = payload["metadata"]
+        final = self._draft_payload_with_metadata(payload)
         self._latest_draft = final
-        parts = [f"Model ready — **{final['system_name']}**."]
-        meta_block = self._format_metadata_block(final.get("metadata"))
-        if meta_block:
-            parts.append(meta_block)
-        return "\n\n".join(parts), final
+        return f"Model ready — **{final['system_name']}**.", final
+
+    def _draft_payload_with_metadata(self, parsed: Dict[str, Any]) -> Dict[str, Any]:
+        """Attach metadata via the second LLM call (verified)."""
+        out: Dict[str, Any] = {
+            "system_name": parsed["system_name"],
+            "python_code": parsed["python_code"],
+        }
+        meta = self._generate_metadata(parsed["system_name"], parsed["python_code"])
+        if meta:
+            out["metadata"] = meta
+        return out
+
+    def _generate_metadata(self, system_name: str, python_code: str) -> Optional[Dict[str, Any]]:
+        """Second LLM call + numerical verify; deterministic extract on failure."""
+        repair_section = ""
+        last_meta: Optional[Dict[str, Any]] = None
+        attempts = 1 + self.metadata_max_retries
+
+        for attempt in range(attempts):
+            user_prompt = (
+                self._metadata_user_template
+                .replace("{{system_name}}", system_name or "System")
+                .replace("{{python_code}}", python_code or "")
+                .replace("{{repair_section}}", repair_section)
+            )
+            try:
+                response_text, _ = self.invoke_llm(
+                    system_prompt=self._metadata_system_prompt,
+                    user_prompt=user_prompt,
+                )
+            except Exception:  # noqa: BLE001
+                break
+            meta = self._parse_metadata_response(response_text)
+            if meta is None:
+                repair_section = (
+                    "Previous metadata reply was not valid JSON with the required keys. "
+                    "Reply again with ONLY the metadata object."
+                )
+                continue
+            meta["assumptions"] = _sanitize_assumptions(meta.get("assumptions"))
+            last_meta = meta
+            if not _metadata_shape_ok(meta):
+                repair_section = (
+                    "Previous metadata failed shape checks (states / state_equations "
+                    "length mismatch or missing keys). Fix lengths and required keys."
+                )
+                continue
+            ok, message = self._verify_metadata(python_code, meta)
+            if ok:
+                return meta
+            repair_section = (
+                f"Numerical verification failed: {message}. "
+                "state_equations must match the arithmetic in python_code exactly "
+                "(copy each derivative RHS; include all parameters)."
+            )
+
+        # Deterministic fallback from code — never emit the banned assumption phrase.
+        return self._deterministic_metadata(system_name, python_code, seed=last_meta)
+
+    @staticmethod
+    def _verify_metadata(python_code: str, meta: Dict[str, Any]) -> Tuple[bool, str]:
+        try:
+            from backend_core.plant_compiler import verify_dynamics
+
+            result = verify_dynamics(python_code, meta)
+            return bool(result.ok), result.message or ("ok" if result.ok else "verify failed")
+        except Exception as exc:  # noqa: BLE001
+            # If verifier is unavailable, accept shape-ok LLM metadata.
+            return True, f"verify skipped ({exc})"
+
+    @staticmethod
+    def _deterministic_metadata(
+        system_name: str,
+        python_code: str,
+        seed: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Extract metadata from code without generic 'inferred' assumptions."""
+        try:
+            from backend_core.plant_compiler import reconcile_metadata_with_code
+        except Exception:
+            return seed if _metadata_shape_ok(seed) else None
+
+        plant = {
+            "system_name": system_name,
+            "python_code": python_code,
+            "metadata": seed if isinstance(seed, dict) else None,
+        }
+        try:
+            meta = reconcile_metadata_with_code(plant)
+        except Exception:
+            return seed if _metadata_shape_ok(seed) else None
+        meta.pop("_verify", None)
+        meta["assumptions"] = _sanitize_assumptions(meta.get("assumptions"))
+        # Prefer physics-flavoured default over any residual process notes
+        process_notes = (
+            "state_equations taken from python_code",
+            "failed numerical check",
+            "used fallback",
+            "metadata inferred",
+        )
+        cleaned = [
+            a for a in meta["assumptions"]
+            if not any(p in a.lower() for p in process_notes)
+        ]
+        meta["assumptions"] = cleaned or ["Continuous-time state-space dynamics"]
+        return meta if _metadata_shape_ok(meta) else (seed if _metadata_shape_ok(seed) else meta)
+
+    @staticmethod
+    def _parse_metadata_response(text: str) -> Optional[Dict[str, Any]]:
+        try:
+            data = extract_json_from_response(text)
+        except Exception:  # noqa: BLE001
+            return None
+        if not isinstance(data, dict):
+            return None
+        # Some models wrap as {"metadata": {...}}
+        if "states" not in data and isinstance(data.get("metadata"), dict):
+            data = data["metadata"]
+        if "states" not in data:
+            return None
+        return data
 
     @staticmethod
     def _sanitize_code_fields(data: Dict[str, Any]) -> Dict[str, Any]:
-        """Ensure system_name, python_code, and metadata strings are pure ASCII."""
         out = dict(data)
         if isinstance(out.get("system_name"), str):
             out["system_name"] = _to_ascii(out["system_name"])
@@ -373,70 +467,12 @@ class PlantModelAgent(BaseAgent):
             out["python_code"] = _to_ascii(out["python_code"])
         if isinstance(out.get("reply"), str):
             out["reply"] = _to_ascii(out["reply"])
-        meta = out.get("metadata")
-        if isinstance(meta, dict):
-            out["metadata"] = PlantModelAgent._sanitize_metadata(meta)
+        # Primary agent must not carry metadata even if the model ignored instructions.
+        out.pop("metadata", None)
         return out
 
     @staticmethod
-    def _sanitize_metadata(meta: Dict[str, Any]) -> Dict[str, Any]:
-        """Recursively ASCII-sanitize string fields inside metadata."""
-        cleaned: Dict[str, Any] = {}
-        for key, value in meta.items():
-            if isinstance(value, str):
-                cleaned[key] = _to_ascii(value)
-            elif isinstance(value, list):
-                cleaned[key] = [
-                    _to_ascii(v) if isinstance(v, str) else v for v in value
-                ]
-            elif isinstance(value, dict):
-                cleaned[key] = {
-                    (_to_ascii(k) if isinstance(k, str) else k): (
-                        _to_ascii(v) if isinstance(v, str) else v
-                    )
-                    for k, v in value.items()
-                }
-            else:
-                cleaned[key] = value
-        return cleaned
-
-    @staticmethod
-    def _format_metadata_block(meta: Any) -> str:
-        """Render full metadata (state_equations, parameters, assumptions) for chat."""
-        if not isinstance(meta, dict):
-            return ""
-        states = meta.get("states") or []
-        meanings = meta.get("state_meanings") or []
-        inputs = meta.get("inputs") or []
-        outputs = meta.get("outputs") or []
-        eqs = meta.get("state_equations") or []
-        params = meta.get("parameters") or {}
-        system_type = meta.get("system_type") or "?"
-        assumptions = meta.get("assumptions") or []
-        lines = [
-            f"**Metadata** (type={system_type}, states={states}, inputs={inputs}, "
-            f"outputs={outputs})",
-        ]
-        if meanings:
-            lines.append("State meanings: " + "; ".join(
-                f"{s}: {m}" for s, m in zip(states, meanings)
-            ))
-        if eqs:
-            lines.append("State equations (sympy RHS):")
-            for i, eq in enumerate(eqs):
-                sname = states[i] if i < len(states) else f"x{i}"
-                lines.append(f"- `{sname}' = {eq}`")
-        if params:
-            lines.append("Parameters: " + ", ".join(f"{k}={v}" for k, v in params.items()))
-        if assumptions:
-            lines.append("Assumptions:")
-            for a in assumptions:
-                lines.append(f"- {a}")
-        return "\n".join(lines)
-
-    @staticmethod
     def _format_draft_display(parsed: Dict[str, Any]) -> str:
-        """Build the chat message for a draft turn from model fields only."""
         reply = (parsed.get("reply") or "").strip()
         name = parsed.get("system_name", "draft")
         code = parsed.get("python_code", "")
@@ -445,96 +481,13 @@ class PlantModelAgent(BaseAgent):
             parts.append(reply)
         parts.append(f"**Draft: {name}**")
         parts.append(f"```python\n{code}\n```")
-        meta_block = PlantModelAgent._format_metadata_block(parsed.get("metadata"))
-        if meta_block:
-            parts.append(meta_block)
         parts.append("_Say what to change, or click **Confirm system** (or reply **finish**) to accept this draft._")
         return "\n\n".join(parts)
 
     @staticmethod
     def _has_code(data: Dict[str, Any]) -> bool:
-        """True if system_name + python_code present; metadata preferred but legacy OK."""
-        if not all(
-            isinstance(data.get(k), str) and data[k].strip()
-            for k in ("system_name", "python_code")
-        ):
-            return False
-        meta = data.get("metadata")
-        if meta is None:
-            # Legacy fallback: accept without metadata (warn downstream).
-            return True
-        if not isinstance(meta, dict):
-            return False
-        for key in REQUIRED_METADATA_KEYS:
-            if key not in meta:
-                return False
-        return True
+        return all(isinstance(data.get(k), str) and data[k].strip() for k in REQUIRED_CODE_KEYS)
 
-    @staticmethod
-    def _validate_plant_payload(data: Dict[str, Any]) -> List[str]:
-        """Run PlantCompiler.validate; return error strings (empty if OK / legacy)."""
-        meta = data.get("metadata")
-        if meta is None:
-            return []
-        try:
-            from backend_core.plant_compiler import PlantCompiler
-        except ImportError:  # pragma: no cover
-            return []
-        result = PlantCompiler().validate(
-            {
-                "system_name": data.get("system_name"),
-                "python_code": data.get("python_code"),
-                "metadata": meta,
-            }
-        )
-        return list(result.errors) if not result.ok else []
-
-    def _repair_invalid_metadata(
-        self,
-        user_prompt: str,
-        response_text: str,
-        errors: List[str],
-    ) -> Tuple[str, Optional[Dict[str, Any]]]:
-        """Ask the model to fix non-parseable metadata; always store a draft if possible."""
-        err_block = "\n".join(f"- {e}" for e in errors)
-        note = _METADATA_VALIDATE_NOTE_PREFIX + err_block
-        response_text, _ = self.invoke_llm(
-            system_prompt=self._system_prompt + note,
-            user_prompt=(
-                f"{user_prompt}\n\n(Your previous reply failed metadata validation.\n"
-                f"Rejected payload excerpt:\n{response_text[:2000]}\n)"
-            ),
-        )
-        parsed = self._parse_structured_response(response_text)
-        if parsed is None:
-            return response_text.strip() or "(empty model response)", None
-        status = parsed.get("status")
-        if status in ("draft", "complete") and self._has_code(parsed):
-            parsed = self._sanitize_code_fields(parsed)
-            self._draft_count += 1
-            self._latest_draft = {
-                "system_name": parsed["system_name"],
-                "python_code": parsed["python_code"],
-            }
-            if "metadata" in parsed and isinstance(parsed["metadata"], dict):
-                self._latest_draft["metadata"] = parsed["metadata"]
-            still_bad = self._validate_plant_payload(parsed)
-            display = self._format_draft_display(parsed)
-            if still_bad:
-                display += (
-                    "\n\n_Metadata still fails validation — Pre-Launch will flag this:_ "
-                    + "; ".join(still_bad[:3])
-                )
-            # Never auto-complete from a repair turn.
-            return display, None
-        if status == "continue":
-            reply = (parsed.get("reply") or "").strip()
-            return reply or response_text.strip(), None
-        return response_text.strip() or "(empty model response)", None
-
-    # ------------------------------------------------------------------
-    # Parsing
-    # ------------------------------------------------------------------
     @staticmethod
     def _parse_structured_response(text: str) -> Optional[Dict[str, Any]]:
         try:
@@ -546,7 +499,6 @@ class PlantModelAgent(BaseAgent):
         status = data.get("status")
         if status in ("continue", "draft", "complete"):
             return data
-        # Legacy: bare final object without status.
         if all(k in data for k in REQUIRED_CODE_KEYS) and "reply" not in data:
             out = dict(data)
             out["status"] = "complete"

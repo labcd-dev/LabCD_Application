@@ -47,13 +47,21 @@ def _sympify(expr_str, symbol_map):
     return sp.sympify(expr_str, locals=local_dict)
 
 
-def _parse_system(states, dynamics, inputs, outputs):
+def _parse_system(states, dynamics, inputs, outputs, parameters=None):
     # real=True actually matters here. skip it and differentiating x*Abs(x)
     # (a common drag term) gives re(x)/im(x) junk instead of the clean sign(x) you'd expect
+    # parameters (optional) go into the symbol map so equations like
+    # ``(Kt*i - b*omega)/J`` parse before numerical substitution.
     state_syms = list(sp.symbols(states, real=True)) if len(states) > 1 else [sp.Symbol(states[0], real=True)]
-    input_syms = list(sp.symbols(inputs, real=True)) if len(inputs) > 1 else [sp.Symbol(inputs[0], real=True)]
+    input_syms = list(sp.symbols(inputs, real=True)) if len(inputs) > 1 else (
+        [sp.Symbol(inputs[0], real=True)] if inputs else []
+    )
     symbol_map = {str(s): s for s in state_syms + input_syms}
-    output_syms = [symbol_map[name] for name in outputs]
+    if isinstance(parameters, dict):
+        for name in parameters:
+            if isinstance(name, str) and name and name not in symbol_map:
+                symbol_map[name] = sp.Symbol(name, real=True)
+    output_syms = [symbol_map[name] for name in outputs if name in symbol_map]
     dyn_exprs = [_sympify(e, symbol_map) for e in dynamics]
     return state_syms, input_syms, output_syms, dyn_exprs, symbol_map
 

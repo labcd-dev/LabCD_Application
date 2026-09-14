@@ -39,6 +39,8 @@ def _session_state_to_dict(state: PlantModelSessionState | None) -> dict[str, An
             "system_name": state.latest_draft.system_name,
             "python_code": state.latest_draft.python_code,
         }
+        if state.latest_draft.metadata:
+            latest["metadata"] = state.latest_draft.metadata
     return {"draft_count": state.draft_count, "latest_draft": latest}
 
 
@@ -48,9 +50,11 @@ def _session_state_from_dict(raw: dict[str, Any] | None) -> PlantModelSessionSta
     latest_raw = raw.get("latest_draft")
     latest = None
     if isinstance(latest_raw, dict) and latest_raw.get("system_name") and latest_raw.get("python_code"):
+        metadata = latest_raw.get("metadata")
         latest = PlantModelResult(
             system_name=str(latest_raw["system_name"]),
             python_code=str(latest_raw["python_code"]),
+            metadata=metadata if isinstance(metadata, dict) else None,
         )
     return PlantModelSessionState(
         draft_count=int(raw.get("draft_count") or 0),
@@ -83,15 +87,36 @@ def conversation_to_detail(
     *,
     include_owner: bool = False,
 ) -> dict[str, Any]:
+    session_state = _session_state_from_dict(conversation.session_state)
+
     final_result = None
     if conversation.final_system_name and conversation.final_python_code:
-        meta = None
+        # The confirmed result's system_name/python_code always mirror the
+        # latest draft at the moment it was persisted (see
+        # PlantModelAgent._accept_complete), so reuse that draft's metadata --
+        # real LLM metadata or already-inferred -- instead of discarding it
+        # and inferring from scratch with no context every time the
+        # conversation is reopened.
+        existing_metadata = None
+        latest = session_state.latest_draft if session_state else None
+        if (
+            latest is not None
+            and latest.system_name == conversation.final_system_name
+            and latest.python_code == conversation.final_python_code
+        ):
+            existing_metadata = latest.metadata
+
+        meta = existing_metadata
         try:
-            from backend_core.plant_compiler import PlantCompiler
-            meta = PlantCompiler().infer_metadata({
-                "system_name": conversation.final_system_name,
-                "python_code": conversation.final_python_code,
-            })
+            from backend_api.http.services.plant_model_service import _resolved_metadata
+
+            meta = _resolved_metadata(
+                {
+                    "system_name": conversation.final_system_name,
+                    "python_code": conversation.final_python_code,
+                    "metadata": existing_metadata,
+                }
+            )
         except Exception:
             pass
         final_result = PlantModelResult(
@@ -109,7 +134,7 @@ def conversation_to_detail(
         "status": conversation.status,
         "llm_model": conversation.llm_model,
         "messages": messages,
-        "session_state": _session_state_from_dict(conversation.session_state),
+        "session_state": session_state,
         "final_result": final_result,
         "created_at": conversation.created_at,
         "updated_at": conversation.updated_at,
