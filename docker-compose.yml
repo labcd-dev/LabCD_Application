@@ -39,6 +39,7 @@ services:
     env_file:
       - .env
     environment:
+      - PYTHONPATH=/app
       - RESULTS_DIR=/app/results
       - UPLOADS_DIR=/app/uploads
       - LABCD_ARTIFACTS_DIR=/app/artifacts
@@ -66,10 +67,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.api
-    command: ["celery", "-A", "backend_api.celery_app", "worker", "--loglevel=info", "-Q", "celery,compute,default", "-c", "4"]
+    command: ["python", "-m", "celery", "-A", "backend_api.celery_app", "worker", "--loglevel=info", "-Q", "celery,compute,default", "-c", "4"]
     env_file:
       - .env
     environment:
+      - PYTHONPATH=/app
       - RESULTS_DIR=/app/results
       - UPLOADS_DIR=/app/uploads
       - LABCD_ARTIFACTS_DIR=/app/artifacts

@@ -2,7 +2,9 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-ENV DEBIAN_FRONTEND=noninteractive
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONPATH=/app
+
 
 # graphviz / octave: plant & diagram tooling (own layer so TeX rebuilds
 # do not re-download these when only the TeX step is invalidated).
