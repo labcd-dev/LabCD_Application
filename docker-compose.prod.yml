@@ -67,6 +67,7 @@ services:
       OMP_NUM_THREADS: "1"
       OPENBLAS_NUM_THREADS: "1"
       MKL_NUM_THREADS: "1"
+      C_FORCE_ROOT: "true"
     volumes:
       - ./results:/app/results
       - ./uploads:/app/uploads

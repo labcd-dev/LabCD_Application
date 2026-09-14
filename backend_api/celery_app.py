@@ -11,13 +11,19 @@ from backend_api.http.config import CELERY_BROKER_URL, CELERY_RESULT_BACKEND
 
 log = logging.getLogger(__name__)
 
+CELERY_TASK_MODULES = [
+    "backend_api.tasks.mpc_tasks",
+    "backend_api.tasks.adaptive_tasks",
+    "backend_api.tasks.workflow_tasks",
+]
+
 celery = Celery(
     "labcd",
     broker=CELERY_BROKER_URL,
     backend=CELERY_RESULT_BACKEND,
+    include=CELERY_TASK_MODULES,
 )
 app = celery
-
 
 celery.conf.update(
     task_serializer="json",
@@ -31,7 +37,11 @@ celery.conf.update(
     task_acks_late=True,  # Re-queue task if worker crashes
     broker_connection_retry_on_startup=True,
     task_default_queue="celery",
+    include=CELERY_TASK_MODULES,
 )
 
-# Auto-discover tasks in backend_api.tasks
-celery.autodiscover_tasks(["backend_api.tasks"])
+# Explicitly import task modules so @celery.task registers them into the worker registry
+import backend_api.tasks.adaptive_tasks  # noqa: F401, E402
+import backend_api.tasks.mpc_tasks  # noqa: F401, E402
+import backend_api.tasks.workflow_tasks  # noqa: F401, E402
+
