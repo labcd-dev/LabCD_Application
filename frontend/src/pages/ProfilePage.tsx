@@ -9,7 +9,7 @@ import {
   User,
   UserCircle,
 } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { authApi, creditsApi } from '../api/endpoints'
 import type {
   AuthSessionInfo,
@@ -24,7 +24,8 @@ import { useTheme, type ThemeMode } from '../context/ThemeContext'
 import { btnBase, btnPrimary, fieldInput, fieldLabel } from '../lib/classes'
 import { passwordMeetsPolicy, passwordPolicyError } from '../lib/passwordStrength'
 import { getThemeOfDay } from '../lib/themeOfDay'
-import { formatDate, formatDateTime } from '../lib/formatDateTime'
+import { formatDate, formatDateTime, formatTimeUntil } from '../lib/formatDateTime'
+import { formatCredits } from '../lib/formatCredits'
 
 type ProfileSection =
   | 'account'
@@ -78,19 +79,21 @@ function userInitials(user: { display_name: string | null; email: string }): str
   return source.slice(0, 2).toUpperCase()
 }
 
-function formatCredits(value: number | string): string {
-  const n = typeof value === 'number' ? value : Number(value)
-  if (!Number.isFinite(n)) return String(value)
-  return n.toLocaleString(undefined, { maximumFractionDigits: 2 })
+function isProfileSection(value: string | null): value is ProfileSection {
+  return SECTIONS.some((item) => item.id === value)
 }
 
 export function ProfilePage() {
   const { user, refreshUser, logout } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { theme, setTheme, themeOfDayName } = useTheme()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const [section, setSection] = useState<ProfileSection>('account')
+  const requestedSection = searchParams.get('section')
+  const [section, setSection] = useState<ProfileSection>(() =>
+    isProfileSection(requestedSection) ? requestedSection : 'account',
+  )
   const [displayName, setDisplayName] = useState('')
   const [email, setEmail] = useState('')
   const [emailPassword, setEmailPassword] = useState('')
@@ -155,6 +158,12 @@ export function ProfilePage() {
     setSelectedTheme(user.theme)
     void loadSessions()
   }, [user])
+
+  useEffect(() => {
+    if (isProfileSection(requestedSection) && requestedSection !== section) {
+      setSection(requestedSection)
+    }
+  }, [requestedSection, section])
 
   useEffect(() => {
     if (section === 'credits') {
@@ -642,6 +651,9 @@ export function ProfilePage() {
                     balance when hard gating is enabled.
                   </p>
                   {creditsError && <StatusMessage type="error" message={creditsError} />}
+                  {credits?.used_up && credits.used_up_message && (
+                    <StatusMessage type="warning" message={credits.used_up_message} />
+                  )}
                   {creditsLoading && !credits ? (
                     <p className="m-0 text-sm text-muted-text">Loading credits…</p>
                   ) : credits ? (
@@ -664,8 +676,15 @@ export function ProfilePage() {
                           </p>
                           <p className="mt-1 mb-0 text-xs text-muted">
                             Allotment {formatCredits(credits.daily_allotment)}
-                            {credits.daily_date ? ` · ${credits.daily_date}` : ''}
                           </p>
+                          {credits.daily_reset_at ? (
+                            <p className="mt-1 mb-0 text-xs text-muted">
+                              Resets {formatDateTime(credits.daily_reset_at)}
+                              {formatTimeUntil(credits.daily_reset_at)
+                                ? ` · ${formatTimeUntil(credits.daily_reset_at)}`
+                                : ''}
+                            </p>
+                          ) : null}
                         </div>
                         <div className="rounded-xl border border-border-subtle bg-surface-muted px-4 py-3">
                           <p className="m-0 text-[11px] font-semibold uppercase tracking-[0.05em] text-muted">

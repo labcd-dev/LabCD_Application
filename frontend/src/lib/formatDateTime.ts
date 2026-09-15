@@ -78,6 +78,22 @@ export function formatClock(
   })
 }
 
+export function formatTimeUntil(
+  value: string | Date | null | undefined,
+  fallback = '',
+): string {
+  const date = parseApiDate(value)
+  if (!date) return fallback
+  const minutes = Math.max(0, Math.round((date.getTime() - Date.now()) / 60_000))
+  if (minutes < 1) return 'soon'
+  if (minutes < 60) return `in ${minutes} min`
+  const hours = Math.floor(minutes / 60)
+  const rest = minutes % 60
+  if (hours < 24) return rest ? `in ${hours}h ${rest}m` : `in ${hours}h`
+  const days = Math.floor(hours / 24)
+  return days === 1 ? 'in 1 day' : `in ${days} days`
+}
+
 export function localizeLeadingTimestamp(text: string): string {
   return text.replace(/^\[([^\]]+)\]/, (_match, raw: string) => {
     const formatted = formatClock(raw, raw)

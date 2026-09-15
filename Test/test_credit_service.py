@@ -117,8 +117,32 @@ def test_hard_gate_blocks_zero_balance(db):
     db.commit()
     # Prevent ensure_daily_reset from refilling: set allotment to 0 for this test.
     credit_service.update_settings(db, daily_allotment=Decimal("0"), hard_gate_enabled=True)
-    with pytest.raises(credit_service.InsufficientCreditsError):
+    with pytest.raises(credit_service.InsufficientCreditsError, match="Credits used up"):
         credit_service.assert_can_start_job(db, user.id)
+
+
+def test_next_daily_reset_at_is_next_utc_midnight():
+    now = datetime(2026, 9, 16, 21, 30, tzinfo=timezone.utc)
+    assert credit_service.next_daily_reset_at(now) == datetime(2026, 9, 17, 0, 0, tzinfo=timezone.utc)
+
+
+def test_dashboard_reports_reset_time_and_used_up(db):
+    user = _user(db)
+    account = credit_service.get_or_create_account(db, user.id)
+    account.daily_balance = Decimal("0.00")
+    account.bonus_balance = Decimal("0.00")
+    account.daily_date = date.today()
+    db.add(account)
+    db.commit()
+    credit_service.update_settings(db, daily_allotment=Decimal("0"), hard_gate_enabled=True)
+
+    data = credit_service.get_dashboard(db, user)
+    assert data["used_up"] is True
+    assert data["used_up_message"] is not None
+    assert "Credits used up" in data["used_up_message"]
+    assert isinstance(data["daily_reset_at"], datetime)
+    assert data["daily_reset_at"].tzinfo is not None
+    assert data["daily_reset_at"] > datetime.now(timezone.utc)
 
 
 def test_compute_credits_formula_ceil(db):

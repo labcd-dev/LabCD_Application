@@ -20,7 +20,10 @@ class CreditDashboardOut(BaseModel):
     spendable: Decimal
     daily_allotment: Decimal
     daily_date: str | None = None
+    daily_reset_at: datetime
     today_spent: Decimal
+    used_up: bool = False
+    used_up_message: str | None = None
     referral_code: str | None = None
     referral_link: str | None = None
     hard_gate_enabled: bool
@@ -84,6 +87,9 @@ class AdminUserCreditsOut(BaseModel):
     daily_balance: Decimal
     spendable: Decimal
     daily_date: str | None = None
+    daily_reset_at: datetime | None = None
+    used_up: bool = False
+    used_up_message: str | None = None
     referral_code: str | None = None
     referred_by_user_id: int | None = None
     new_user_bonus_granted_at: datetime | None = None
