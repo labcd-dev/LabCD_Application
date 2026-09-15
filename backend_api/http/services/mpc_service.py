@@ -174,6 +174,7 @@ def ensure_llm_configured(model: str | None = None) -> None:
                         api_key=_key,
                         temperature=0.3,
                         max_retries=2,
+                        request_timeout=60,
                     )
 
                 configure_llm(_oai_factory)
@@ -203,6 +204,7 @@ def ensure_llm_configured(model: str | None = None) -> None:
                         api_key=_key,
                         temperature=0.3,
                         max_retries=2,
+                        request_timeout=60,
                     )
 
                 configure_llm(_groq_factory)
@@ -1952,9 +1954,9 @@ def submit_job(
 
     job_store.update(
         job_id,
-        status="running",
-        stage="actor" if options.get("use_ui_graph", True) else "scenarist",
-        message="Job queued; starting tuning",
+        status="queued",
+        stage="queued",
+        message="Job queued in compute line; waiting for available worker...",
     )
     _start_tuning_async(job_id, job_store)
     latest = job_store.get(job_id)

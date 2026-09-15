@@ -362,6 +362,14 @@ def _run_pipeline_thread(job_id: str, store: InMemoryAdaptiveJobStore) -> None:
 
     on_event = _make_on_event(job_id, store)
 
+    store.update(
+        job_id,
+        status="designing",
+        stage="design",
+        message="Worker acquired; starting controller synthesis",
+    )
+    on_event({"kind": "stage_start", "stage": "design", "text": "Worker allocated. Starting Adaptive synthesis pipeline..."})
+
     def should_stop() -> bool:
         return store.is_cancel_requested(job_id)
 
@@ -778,16 +786,16 @@ def submit_job(
     if options.get("skip_clarify"):
         job_store.update(
             job_id,
-            status="designing",
-            stage="design",
-            message="Clarifier skipped; starting design",
+            status="queued",
+            stage="queued",
+            message="Job queued in compute line; waiting for available worker...",
         )
         _start_pipeline_async(job_id, job_store)
         return AdaptiveJobCreateResponse(
             job_id=job_id,
-            status="designing",
-            stage="design",
-            message="Job started (clarify skipped)",
+            status="queued",
+            stage="queued",
+            message="Job queued in compute line; waiting for available worker...",
         )
 
     messages = clarifier.start_conversation(spec if spec else {"dynamics": {}})
@@ -898,9 +906,9 @@ def _apply_clarify_result(
             last_clarifier_reply=reply,
             clarification_record=clarification_record,
             clarifier_usage=merged_usage,
-            status="designing",
-            stage="design",
-            message="Clarifier complete; starting design",
+            status="queued",
+            stage="queued",
+            message="Clarification complete; job queued in compute line...",
         )
         _start_pipeline_async(job_id, store)
         return

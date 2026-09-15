@@ -1,13 +1,17 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
   AlertCircle,
   CheckCircle2,
+  Clock,
+  Cpu,
   Loader2,
+  MessageSquare,
   Play,
   RotateCcw,
   Sparkles,
   StopCircle,
+  Timer,
   Zap,
 } from 'lucide-react'
 import { adaptiveApi, plantArtifactApi } from '../api/endpoints'
@@ -223,6 +227,56 @@ export function AdaptivePage() {
   const [plantPreviewError, setPlantPreviewError] = useState<string | null>(null)
 
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [elapsedSec, setElapsedSec] = useState(0)
+  const [lastActiveTs, setLastActiveTs] = useState<number>(Date.now())
+
+  const formatTimer = (totalSeconds: number) => {
+    const mins = Math.floor(totalSeconds / 60)
+    const secs = totalSeconds % 60
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+  }
+
+  // Active elapsed timer
+  useEffect(() => {
+    if (!job) {
+      setElapsedSec(0)
+      return
+    }
+    const isActive =
+      job.status === 'queued' ||
+      job.status === 'clarifying' ||
+      job.status === 'designing' ||
+      job.status === 'building' ||
+      job.status === 'tuning' ||
+      job.status === 'reporting'
+    if (!isActive) return
+
+    const startTs = job.created_at ? new Date(job.created_at).getTime() : Date.now()
+    const updateElapsed = () => {
+      setElapsedSec(Math.max(0, Math.floor((Date.now() - startTs) / 1000)))
+    }
+    updateElapsed()
+    const timer = setInterval(updateElapsed, 1000)
+    return () => clearInterval(timer)
+  }, [job?.job_id, job?.status, job?.created_at])
+
+  // Track activity to detect stalls (>45s) when in active computing stages
+  useEffect(() => {
+    if (job) {
+      setLastActiveTs(Date.now())
+    }
+  }, [job?.round, job?.stage, job?.status, job?.progress?.length])
+
+  const isStalled = useMemo(() => {
+    if (!job) return false
+    const isComputing =
+      job.status === 'designing' ||
+      job.status === 'building' ||
+      job.status === 'tuning' ||
+      job.status === 'reporting'
+    if (!isComputing) return false
+    return Date.now() - lastActiveTs > 45000
+  }, [job?.status, lastActiveTs, elapsedSec])
 
   // Prepopulate sim knobs + plant metadata preview from compiled artifact
   useEffect(() => {
@@ -598,29 +652,46 @@ export function AdaptivePage() {
 
         <div className="flex items-center gap-2.5">
           {job && (
-            <span
-              className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
-                job.status === 'completed'
-                  ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                  : job.status === 'failed' || job.status === 'cancelled'
-                  ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
-                  : 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/30'
-              }`}
-            >
+            <>
+              {(job.status === 'queued' ||
+                job.status === 'clarifying' ||
+                job.status === 'designing' ||
+                job.status === 'building' ||
+                job.status === 'tuning' ||
+                job.status === 'reporting') && (
+                <span className="flex items-center gap-1 font-mono text-xs text-muted-text bg-surface-muted px-2.5 py-0.5 rounded-full border border-border">
+                  <Timer className="size-3 text-cyan-500" />
+                  {formatTimer(elapsedSec)}
+                </span>
+              )}
               <span
-                className={`size-1.5 rounded-full ${
+                className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
                   job.status === 'completed'
-                    ? 'bg-emerald-400'
-                    : job.status === 'failed'
-                    ? 'bg-rose-400'
-                    : 'bg-cyan-400 animate-pulse'
+                    ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                    : job.status === 'failed' || job.status === 'cancelled'
+                    ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
+                    : job.status === 'queued'
+                    ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                    : 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/30'
                 }`}
-              />
-              {job.status.toUpperCase()}
-            </span>
+              >
+                <span
+                  className={`size-1.5 rounded-full ${
+                    job.status === 'completed'
+                      ? 'bg-emerald-400'
+                      : job.status === 'failed'
+                      ? 'bg-rose-400'
+                      : job.status === 'queued'
+                      ? 'bg-amber-400 animate-ping'
+                      : 'bg-cyan-400 animate-pulse'
+                  }`}
+                />
+                {job.status === 'queued' ? 'QUEUED IN LINE' : job.status.toUpperCase()}
+              </span>
+            </>
           )}
 
-          {job && job.status !== 'completed' && job.status !== 'failed' && (
+          {job && job.status !== 'completed' && job.status !== 'failed' && job.status !== 'cancelled' && (
             <button
               type="button"
               onClick={handleCancel}
@@ -650,6 +721,37 @@ export function AdaptivePage() {
             <div>
               <span className="font-semibold block">Error in Adaptive pipeline:</span>
               {error}
+            </div>
+          </div>
+        )}
+
+        {/* Clarification Callout Notice */}
+        {job && job.status === 'clarifying' && job.clarify_pending && (
+          <div className="relative overflow-hidden rounded-2xl border border-cyan-500/40 bg-gradient-to-r from-cyan-500/15 via-cyan-500/5 to-transparent p-4 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-cyan-500/20 text-cyan-600 dark:text-cyan-400">
+                <MessageSquare className="size-5" />
+              </div>
+              <div className="flex-1">
+                <span className="text-sm font-bold text-cyan-700 dark:text-cyan-300 block">
+                  Clarification Dialogue Active
+                </span>
+                <p className="text-xs text-muted-text">
+                  The adaptive control agent requires additional specifications to synthesize the Lyapunov controller. Please submit your answers in the interactive chat below or click Finish Clarifier to proceed with defaults.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Stalled Notice (>45s active computation without update) */}
+        {isStalled && (
+          <div className="flex items-center justify-between rounded-xl border border-sky-500/30 bg-sky-500/10 px-4 py-2.5 text-xs text-sky-700 dark:text-sky-300">
+            <div className="flex items-center gap-2">
+              <Cpu className="size-4 animate-spin text-sky-500 shrink-0" />
+              <span>
+                Adaptive Lyapunov synthesis and differential simulation in progress ({formatTimer(elapsedSec)} elapsed). The solver is actively computing; please stand by...
+              </span>
             </div>
           </div>
         )}
@@ -1027,6 +1129,86 @@ export function AdaptivePage() {
           </div>
         )}
 
+        {/* Dedicated Compute Queue Waiting View */}
+        {job && job.status === 'queued' && (
+          <div className="relative overflow-hidden rounded-2xl border border-amber-500/30 bg-surface-elevated p-8 shadow-md">
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 animate-pulse" />
+            
+            <div className="max-w-3xl mx-auto text-center space-y-6 py-6">
+              {/* Animated Pulse Icon */}
+              <div className="relative mx-auto flex h-20 w-20 items-center justify-center">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400/20 duration-1000" />
+                <span className="absolute inline-flex h-16 w-16 rounded-full bg-amber-500/20" />
+                <div className="relative flex h-12 w-12 items-center justify-center rounded-full bg-amber-500 text-white shadow-lg shadow-amber-500/30">
+                  <Clock className="size-6 animate-spin" style={{ animationDuration: '6s' }} />
+                </div>
+              </div>
+
+              {/* Title & Status */}
+              <div>
+                <div className="inline-flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-600 dark:text-amber-400">
+                  <span className="size-2 rounded-full bg-amber-500 animate-pulse" />
+                  Cluster Standing By · Position in Queue
+                </div>
+                <h2 className="mt-3 text-2xl font-bold text-foreground tracking-tight">
+                  Task Queued on Compute Cluster
+                </h2>
+                <p className="mt-2 text-sm text-muted-text max-w-xl mx-auto leading-relaxed">
+                  Your adaptive control synthesis job is queued in the worker pipeline. All 8 parallel worker slots are currently processing active simulations.
+                </p>
+              </div>
+
+              {/* Metric Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-left pt-2">
+                <div className="rounded-xl border border-border bg-surface-muted/60 p-4">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-muted-text block">Queue Timer</span>
+                  <div className="mt-1 flex items-baseline gap-1 font-mono text-xl font-bold text-foreground">
+                    <Timer className="size-4 text-amber-500 self-center" />
+                    <span>{formatTimer(elapsedSec)}</span>
+                  </div>
+                  <span className="text-[10.5px] text-muted-text mt-0.5 block">Waiting for free worker</span>
+                </div>
+
+                <div className="rounded-xl border border-border bg-surface-muted/60 p-4">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-muted-text block">Cluster Concurrency</span>
+                  <div className="mt-1 flex items-baseline gap-1 font-mono text-xl font-bold text-foreground">
+                    <Cpu className="size-4 text-cyan-500 self-center" />
+                    <span>8 Workers</span>
+                  </div>
+                  <span className="text-[10.5px] text-muted-text mt-0.5 block">Parallel Celery pool active</span>
+                </div>
+
+                <div className="rounded-xl border border-border bg-surface-muted/60 p-4">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-muted-text block">Job Reference</span>
+                  <div className="mt-1 font-mono text-sm font-bold text-foreground truncate">
+                    {job.job_id.slice(0, 12)}...
+                  </div>
+                  <span className="text-[10.5px] text-muted-text mt-0.5 block">Autonomous state preserved</span>
+                </div>
+              </div>
+
+              {/* Automatic Transition Note */}
+              <div className="rounded-xl border border-border bg-surface-muted/30 p-3.5 text-xs text-muted-text flex items-center justify-center gap-2">
+                <CheckCircle2 className="size-4 text-emerald-500 shrink-0" />
+                <span>
+                  <strong>No refresh needed:</strong> This screen will automatically transition to the live synthesis dashboard the instant your worker begins.
+                </span>
+              </div>
+
+              {/* Action */}
+              <div className="pt-2 flex items-center justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={handleCancel}
+                  className="inline-flex items-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 px-5 py-2.5 text-xs font-semibold text-rose-600 dark:text-rose-300 hover:bg-rose-500/20 transition-colors"
+                >
+                  <StopCircle className="size-4" /> Cancel Task &amp; Return to Setup
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Clarifier Mode when questions pending */}
         {job && job.status === 'clarifying' && job.clarify_pending && (
           <AdaptiveClarifierChat
@@ -1036,8 +1218,8 @@ export function AdaptivePage() {
           />
         )}
 
-        {/* Active Job View: Adaptive Dashboard (Standardized with MPC) */}
-        {job && (!job.clarify_pending || job.status !== 'clarifying') && (
+        {/* Active Job View: Adaptive Dashboard (Standardized with MPC, only when not queued) */}
+        {job && job.status !== 'queued' && (!job.clarify_pending || job.status !== 'clarifying') && (
           <AdaptiveDashboard
             job={job}
             results={results}
@@ -1054,6 +1236,7 @@ export function AdaptivePage() {
             onDownloadReport={async () => {
               if (jobId && !downloadingPdf) {
                 setDownloadingPdf(true)
+                setError(null)
                 try {
                   await adaptiveApi.downloadReportPdf(jobId)
                 } catch (err) {
