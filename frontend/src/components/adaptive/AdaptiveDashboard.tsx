@@ -26,6 +26,7 @@ import type {
 } from '../../api/types'
 import { adaptiveApi } from '../../api/endpoints'
 import { btnBase, btnCompact } from '../../lib/classes'
+import { formatTickValue, generateNiceTicks } from '../../lib/svgPlotAxis'
 import { AdaptiveAgentFlowStrip } from './AdaptiveAgentFlowStrip'
 import { AdaptiveConvergenceCharts } from './AdaptiveConvergenceCharts'
 import { AdaptiveDiagnosisChat } from './AdaptiveDiagnosisChat'
@@ -388,7 +389,23 @@ export function AdaptiveDashboard({
     return null
   }, [results])
 
-  // Plot coordinates for Oscilloscope SVG
+  // Plot coordinates for Oscilloscope SVG (padded layout matches MPC)
+  const PLOT_W = 720
+  const PLOT_H = 260
+  const PAD_LEFT = 68
+  const PAD_RIGHT = 24
+  const PAD_TOP = 18
+  const PAD_BOTTOM = 48
+  const plotInnerW = PLOT_W - PAD_LEFT - PAD_RIGHT
+  const plotInnerH = PLOT_H - PAD_TOP - PAD_BOTTOM
+
+  const yAxisTitle = useMemo(() => {
+    if (selectedSignal === 'states') return 'State Response x(t) [units]'
+    if (selectedSignal === 'control') return 'Actuator Effort u(t) [effort]'
+    if (selectedSignal === 'disturbance') return 'Disturbance Estimate d̂(t) [units]'
+    return 'Tracking Error e(t) [units]'
+  }, [selectedSignal])
+
   const plotData = useMemo(() => {
     if (!normalizedSeries || !normalizedSeries.t || !normalizedSeries.t.length) return null
     const t = normalizedSeries.t
@@ -437,8 +454,8 @@ export function AdaptiveDashboard({
       for (let i = 0; i < arr.length; i++) {
         const y = arr[i]
         if (!Number.isFinite(y) || !Number.isFinite(t[i])) continue
-        const normX = ((t[i] - tMin) / tRange) * 600
-        const normY = 200 - ((y - yMin) / yRange) * 180 - 10
+        const normX = PAD_LEFT + ((t[i] - tMin) / tRange) * plotInnerW
+        const normY = PAD_TOP + plotInnerH - ((y - yMin) / yRange) * plotInnerH
         d += `${started ? 'L' : 'M'} ${normX.toFixed(1)} ${normY.toFixed(1)} `
         started = true
       }
@@ -457,8 +474,10 @@ export function AdaptiveDashboard({
       yRange,
       primaryPath: toSvg(primaryY),
       referencePath: referenceY.length ? toSvg(referenceY) : '',
+      xTicks: generateNiceTicks(tMin, tMax, 7),
+      yTicks: generateNiceTicks(yMin, yMax, 6),
     }
-  }, [normalizedSeries, selectedSignal])
+  }, [normalizedSeries, selectedSignal, plotInnerW, plotInnerH])
 
   // Multi-Agent Reasoning Telemetry — only real progress events with content
   const reasoningLogs = useMemo(() => {
@@ -624,10 +643,10 @@ title('LabCD Adaptive Closed-Loop Response'); legend('show', 'Location', 'best')
   }
 
   const hoverX = plotData && hoverIndex !== null
-    ? ((plotData.t[hoverIndex] - plotData.tMin) / plotData.tRange) * 600
+    ? PAD_LEFT + ((plotData.t[hoverIndex] - plotData.tMin) / plotData.tRange) * plotInnerW
     : null
   const hoverY = plotData && hoverIndex !== null && plotData.primaryY[hoverIndex] !== undefined
-    ? 200 - ((plotData.primaryY[hoverIndex] - plotData.yMin) / plotData.yRange) * 180 - 10
+    ? PAD_TOP + plotInnerH - ((plotData.primaryY[hoverIndex] - plotData.yMin) / plotData.yRange) * plotInnerH
     : null
 
   return (
@@ -1067,21 +1086,127 @@ title('LabCD Adaptive Closed-Loop Response'); legend('show', 'Location', 'best')
                   <div>
                     <div className="relative rounded-xl border border-border/80 bg-surface p-2.5">
                       <svg
-                        viewBox="0 0 600 200"
-                        className="w-full h-52 overflow-visible cursor-crosshair"
+                        viewBox={`0 0 ${PLOT_W} ${PLOT_H}`}
+                        className="w-full h-56 overflow-visible cursor-crosshair select-none"
                         onMouseMove={(e) => {
                           const rect = e.currentTarget.getBoundingClientRect()
-                          const xPct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
+                          const svgX = ((e.clientX - rect.left) / rect.width) * PLOT_W
+                          const xPct = Math.max(0, Math.min(1, (svgX - PAD_LEFT) / plotInnerW))
                           const idx = Math.round(xPct * (plotData.t.length - 1))
                           setHoverIndex(idx)
                         }}
                         onMouseLeave={() => setHoverIndex(null)}
                       >
-                        {/* Grid Lines */}
-                        <line x1="0" y1="20" x2="600" y2="20" stroke="var(--app-border)" strokeDasharray="3 3" strokeOpacity={0.5} />
-                        <line x1="0" y1="70" x2="600" y2="70" stroke="var(--app-border)" strokeOpacity={0.5} />
-                        <line x1="0" y1="120" x2="600" y2="120" stroke="var(--app-border)" strokeDasharray="3 3" strokeOpacity={0.5} />
-                        <line x1="0" y1="170" x2="600" y2="170" stroke="var(--app-border)" strokeOpacity={0.5} />
+                        <rect
+                          x={PAD_LEFT}
+                          y={PAD_TOP}
+                          width={plotInnerW}
+                          height={plotInnerH}
+                          fill="var(--app-surface)"
+                          stroke="var(--app-border)"
+                          strokeWidth="1"
+                          rx="4"
+                        />
+
+                        {/* Y grid + tick labels */}
+                        {plotData.yTicks.map((val) => {
+                          const yPos = PAD_TOP + plotInnerH - ((val - plotData.yMin) / plotData.yRange) * plotInnerH
+                          return (
+                            <g key={`y-${val}`}>
+                              <line
+                                x1={PAD_LEFT}
+                                y1={yPos}
+                                x2={PAD_LEFT + plotInnerW}
+                                y2={yPos}
+                                stroke="var(--app-border)"
+                                strokeWidth="1"
+                                strokeDasharray="3 3"
+                                opacity="0.45"
+                              />
+                              <line
+                                x1={PAD_LEFT - 4}
+                                y1={yPos}
+                                x2={PAD_LEFT}
+                                y2={yPos}
+                                stroke="var(--app-border)"
+                                strokeWidth="1.2"
+                              />
+                              <text
+                                x={PAD_LEFT - 8}
+                                y={yPos + 3.5}
+                                textAnchor="end"
+                                fontSize="10"
+                                fontFamily="monospace"
+                                fill="currentColor"
+                                className="text-muted-text"
+                              >
+                                {formatTickValue(val)}
+                              </text>
+                            </g>
+                          )
+                        })}
+
+                        {/* X grid + tick labels */}
+                        {plotData.xTicks.map((tVal) => {
+                          const xPos = PAD_LEFT + ((tVal - plotData.tMin) / plotData.tRange) * plotInnerW
+                          return (
+                            <g key={`x-${tVal}`}>
+                              <line
+                                x1={xPos}
+                                y1={PAD_TOP}
+                                x2={xPos}
+                                y2={PAD_TOP + plotInnerH}
+                                stroke="var(--app-border)"
+                                strokeWidth="1"
+                                strokeDasharray="3 3"
+                                opacity="0.35"
+                              />
+                              <line
+                                x1={xPos}
+                                y1={PAD_TOP + plotInnerH}
+                                x2={xPos}
+                                y2={PAD_TOP + plotInnerH + 5}
+                                stroke="var(--app-border)"
+                                strokeWidth="1.2"
+                              />
+                              <text
+                                x={xPos}
+                                y={PAD_TOP + plotInnerH + 18}
+                                textAnchor="middle"
+                                fontSize="10"
+                                fontFamily="monospace"
+                                fill="currentColor"
+                                className="text-muted-text"
+                              >
+                                {tVal.toFixed(2)}s
+                              </text>
+                            </g>
+                          )
+                        })}
+
+                        {/* Axis titles (same wording pattern as MPC) */}
+                        <text
+                          x={PAD_LEFT + plotInnerW / 2}
+                          y={PLOT_H - 8}
+                          textAnchor="middle"
+                          fontSize="11"
+                          fontWeight="600"
+                          fill="currentColor"
+                          className="text-muted-text"
+                        >
+                          Time t (seconds)
+                        </text>
+                        <g transform={`translate(16, ${PAD_TOP + plotInnerH / 2}) rotate(-90)`}>
+                          <text
+                            textAnchor="middle"
+                            fontSize="11"
+                            fontWeight="600"
+                            fill="currentColor"
+                            className="text-muted-text"
+                          >
+                            {yAxisTitle}
+                          </text>
+                        </g>
 
                         {/* Reference Trajectory */}
                         {plotData.referencePath && (
@@ -1108,9 +1233,9 @@ title('LabCD Adaptive Closed-Loop Response'); legend('show', 'Location', 'best')
                           <>
                             <line
                               x1={hoverX}
-                              y1="0"
+                              y1={PAD_TOP}
                               x2={hoverX}
-                              y2="200"
+                              y2={PAD_TOP + plotInnerH}
                               stroke="rgba(8, 145, 178, 0.4)"
                               strokeWidth="1.5"
                               strokeDasharray="2 2"
