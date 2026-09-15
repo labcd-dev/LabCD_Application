@@ -335,10 +335,17 @@ export function AdminUserDetailPage() {
       {canCredits && credits && (
         <div className={cardPanel}>
           <h2 className="m-0 mb-4 text-lg font-semibold text-foreground">Credits</h2>
+          {credits.used_up && credits.used_up_message && (
+            <StatusMessage type="warning" message={credits.used_up_message} />
+          )}
           <dl className="mb-4 space-y-3">
             <DetailRow label="Spendable" value={String(credits.spendable)} />
             <DetailRow label="Daily" value={String(credits.daily_balance)} />
             <DetailRow label="Bonus" value={String(credits.bonus_balance)} />
+            <DetailRow
+              label="Daily reset"
+              value={credits.daily_reset_at ? formatDateTime(credits.daily_reset_at) : '—'}
+            />
             <DetailRow label="Referral code" value={credits.referral_code ?? '—'} />
             <DetailRow
               label="Referred by"

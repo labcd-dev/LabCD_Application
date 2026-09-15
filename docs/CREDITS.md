@@ -7,7 +7,7 @@ LabCD meters design/LLM jobs against a dual-balance credit wallet.
 - **Bonus balance** — persists (new-user bonus, referral bonuses, admin adjusts).
 - **Daily balance** — reset each UTC day to the configured allotment; unused daily credits do not roll over.
 - **Spendable** = bonus + daily. Debits take daily first, then bonus.
-- **Hard gate** — when enabled, job starts return HTTP 402 if spendable ≤ 0.
+- **Hard gate** — when enabled, job starts return HTTP 402 if spendable ≤ 0, with a “Credits used up” message that includes the next daily reset time (00:00 UTC).
 
 Defaults (editable in **Admin → Credits**):
 
@@ -33,6 +33,7 @@ Charge formula: `max(min_charge, ceil(tokens/1000 * per_1k + minutes * per_minut
 - [ ] Admin → Credits: change allotment/bonuses/rates/hard-gate and Save; reload confirms values.
 - [ ] Admin → Users → user detail: Credits panel shows balances; Adjust amount applies and appears in ledger.
 - [ ] Register with `?ref=CODE` from an existing user’s referral code; after verify, inviter and invitee bonus balances increase once.
-- [ ] Profile → Credits: spendable / daily / bonus, ledger, usage sessions, copy invite link.
-- [ ] With hard gate on and balance forced to 0 (admin adjust), starting a job returns “Insufficient credits”.
+- [ ] Profile → Credits: spendable / daily / bonus, **next reset time**, ledger, usage sessions, copy invite link.
+- [ ] When spendable is 0, Profile → Credits and the header credit chip show “Credits used up” plus the reset time.
+- [ ] With hard gate on and balance forced to 0 (admin adjust), starting a job returns “Credits used up” (HTTP 402) including the daily reset time.
 - [ ] After a UTC day change (or set `daily_date` back one day in DB), next balance read refills daily without changing bonus.

@@ -1529,7 +1529,10 @@ export interface CreditDashboard {
   spendable: number | string
   daily_allotment: number | string
   daily_date: string | null
+  daily_reset_at: string
   today_spent: number | string
+  used_up: boolean
+  used_up_message: string | null
   referral_code: string | null
   referral_link: string | null
   hard_gate_enabled: boolean
@@ -1588,6 +1591,9 @@ export interface AdminUserCredits {
   daily_balance: number | string
   spendable: number | string
   daily_date: string | null
+  daily_reset_at: string | null
+  used_up: boolean
+  used_up_message: string | null
   referral_code: string | null
   referred_by_user_id: number | null
   new_user_bonus_granted_at: string | null

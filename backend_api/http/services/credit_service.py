@@ -6,7 +6,7 @@ import math
 import secrets
 import string
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 
@@ -57,9 +57,10 @@ ZERO = Decimal("0.00")
 class InsufficientCreditsError(Exception):
     """Raised when hard gate blocks a new job."""
 
-    def __init__(self, message: str = "Insufficient credits to start a new job.") -> None:
-        super().__init__(message)
-        self.message = message
+    def __init__(self, message: str | None = None) -> None:
+        text = message or credits_used_up_message()
+        super().__init__(text)
+        self.message = text
 
 
 @dataclass(frozen=True)
@@ -80,6 +81,21 @@ def _utcnow() -> datetime:
 
 def _today_utc() -> date:
     return _utcnow().date()
+
+
+def next_daily_reset_at(now: datetime | None = None) -> datetime:
+    """UTC midnight that starts the next daily allotment day."""
+    current = now or _utcnow()
+    tomorrow = current.date() + timedelta(days=1)
+    return datetime(tomorrow.year, tomorrow.month, tomorrow.day, tzinfo=timezone.utc)
+
+
+def credits_used_up_message(reset_at: datetime | None = None) -> str:
+    when = reset_at or next_daily_reset_at()
+    return (
+        "Credits used up. Daily credits reset at "
+        f"{when.strftime('%H:%M')} UTC on {when.date().isoformat()}."
+    )
 
 
 def _as_decimal(value: Any, default: Decimal) -> Decimal:
@@ -339,7 +355,7 @@ def assert_can_start_job(db: Session, user_id: int) -> UserCreditAccount:
     ensure_daily_reset(db, account)
     settings = get_settings(db)
     if settings.hard_gate_enabled and spendable(account) <= ZERO:
-        raise InsufficientCreditsError()
+        raise InsufficientCreditsError(credits_used_up_message())
     return account
 
 
@@ -655,14 +671,20 @@ def get_dashboard(db: Session, user: User) -> dict[str, Any]:
         .all()
     )
     today_spent = _money(sum((-row[0] for row in today_spent_rows), ZERO))
+    spendable_amount = spendable(account)
+    reset_at = next_daily_reset_at()
+    used_up = spendable_amount <= ZERO
 
     return {
         "bonus_balance": account.bonus_balance,
         "daily_balance": account.daily_balance,
-        "spendable": spendable(account),
+        "spendable": spendable_amount,
         "daily_allotment": settings.daily_allotment,
         "daily_date": account.daily_date.isoformat() if account.daily_date else None,
+        "daily_reset_at": reset_at,
         "today_spent": today_spent,
+        "used_up": used_up,
+        "used_up_message": credits_used_up_message(reset_at) if used_up else None,
         "referral_code": user.referral_code,
         "referral_link": referral_link(user.referral_code),
         "hard_gate_enabled": settings.hard_gate_enabled,
@@ -746,11 +768,17 @@ def account_summary(db: Session, user_id: int) -> dict[str, Any]:
     account = get_or_create_account(db, user_id)
     ensure_daily_reset(db, account, commit=True)
     db.refresh(account)
+    spendable_amount = spendable(account)
+    reset_at = next_daily_reset_at()
+    used_up = spendable_amount <= ZERO
     return {
         "bonus_balance": account.bonus_balance,
         "daily_balance": account.daily_balance,
-        "spendable": spendable(account),
+        "spendable": spendable_amount,
         "daily_date": account.daily_date.isoformat() if account.daily_date else None,
+        "daily_reset_at": reset_at,
+        "used_up": used_up,
+        "used_up_message": credits_used_up_message(reset_at) if used_up else None,
     }
 
 

@@ -13,6 +13,7 @@ import {
   Sun,
 } from 'lucide-react'
 import { BackToCaseStudies } from './BackToCaseStudies'
+import { CreditBalanceChip } from './CreditBalanceChip'
 import { SupportFabs } from './SupportFabs'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
@@ -344,6 +345,7 @@ export function AppShell({ children, topbarActions }: AppShellProps) {
 
           {/* Right: Help + Theme Toggle + CTA */}
           <div className="flex items-center gap-2.5">
+            <CreditBalanceChip />
             {/* Help / Tutorials */}
             <Link
               to="/tutorials"
