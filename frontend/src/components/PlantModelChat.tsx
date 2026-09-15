@@ -9,7 +9,6 @@ import {
   PanelRightOpen,
   Sparkles,
 } from 'lucide-react'
-import { BackToCaseStudies } from './BackToCaseStudies'
 import { plantModelApi, triggerBlobDownload } from '../api/endpoints'
 import type {
   PlantModelChatMessage,
@@ -246,8 +245,6 @@ export function PlantModelChat({
   const threadInputRef = useRef<HTMLTextAreaElement>(null)
 
   const inChat = messages.length > 0 || finalResult !== null
-  const fromCaseStudies = Boolean(searchParams.get('conversation'))
-  const showBackToCaseStudies = inChat || fromCaseStudies
   const chatDisabled = disabled || loading
   const draft = finalResult ?? sessionState?.latest_draft ?? null
   const resolvedModel = resolveChatModel(selection, models)
@@ -437,12 +434,6 @@ export function PlantModelChat({
   return (
     <div className="relative flex min-h-0 min-w-0 flex-1 overflow-x-hidden">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden">
-        {showBackToCaseStudies && (
-          <div className="flex shrink-0 items-center border-b border-border px-5 py-2.5 sm:px-8">
-            <BackToCaseStudies to={caseStudiesHref} label="Back to Case Studies" />
-          </div>
-        )}
-
         {/* Landing */}
         {!inChat && (
           <div className="relative flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-4 py-8 sm:px-6 sm:py-12">
