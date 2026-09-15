@@ -170,6 +170,15 @@ class JobStore:
                     },
                 }
             )
+        # Project History should leave "running" as soon as the user cancels.
+        project_id = job.metadata.get("project_id")
+        if project_id is not None:
+            try:
+                from backend_api.http.services.project_service import sync_project_cancelled
+
+                sync_project_cancelled(project_id, job_id, error="Cancelled by user")
+            except Exception:
+                pass
         job.touch()
         return job
 

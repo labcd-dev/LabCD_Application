@@ -568,6 +568,13 @@ def _coerce_project_id(val: Any) -> int | None:
         return None
 
 
+def _sync_project_cancelled(record: Any, job_id: str, *, error: str = "Cancelled by user") -> None:
+    if record is None or not getattr(record, "project_id", None):
+        return
+    from backend_api.http.services.project_service import sync_project_cancelled
+
+    sync_project_cancelled(record.project_id, job_id, error=error)
+
 
 def _series_list(raw: Any) -> list[Any]:
     """JSON-safe metric series; drop non-finite floats for plotting clients."""
@@ -767,6 +774,7 @@ def _run_tuning_thread(job_id: str, store: InMemoryJobStore) -> None:
         return
     if record.cancel_requested:
         store.update(job_id, status="cancelled", stage="error", message="Cancelled before start")
+        _sync_project_cancelled(store.get(job_id), job_id, error="Cancelled before start")
         return
 
     options = record.options or {}
@@ -901,6 +909,7 @@ def _run_tuning_thread(job_id: str, store: InMemoryJobStore) -> None:
 
         if store.is_cancel_requested(job_id):
             store.update(job_id, status="cancelled", stage="error", message="Cancelled")
+            _sync_project_cancelled(store.get(job_id), job_id)
             return
 
         current_state = dict(state)
@@ -908,6 +917,7 @@ def _run_tuning_thread(job_id: str, store: InMemoryJobStore) -> None:
         for output in graph.stream(state):
             if store.is_cancel_requested(job_id):
                 store.update(job_id, status="cancelled", stage="error", message="Cancelled")
+                _sync_project_cancelled(store.get(job_id), job_id)
                 return
 
             for node_name, node_update in output.items():
@@ -1294,6 +1304,16 @@ def _run_tuning_thread(job_id: str, store: InMemoryJobStore) -> None:
 
         # Only pass JobRecord fields that exist (older stores may lack series attrs)
         rec_cur = store.get(job_id)
+        # Honour cancel even if the graph finished its last step after cancel was requested.
+        if (rec_cur and rec_cur.status == "cancelled") or store.is_cancel_requested(job_id):
+            if not (rec_cur and rec_cur.status == "cancelled"):
+                store.update(job_id, status="cancelled", stage="error", message="Cancelled")
+            _sync_project_cancelled(store.get(job_id), job_id)
+            from backend_api.http.services import credit_service
+
+            credit_service.end_job_usage(job_id=job_id, cancel=True)
+            return
+
         final_series = series_data if series_data is not None else (rec_cur.series if rec_cur else None)
         final_baseline = baseline_series_data if baseline_series_data is not None else (rec_cur.baseline_series if rec_cur else None)
 
@@ -2094,6 +2114,13 @@ def cancel_job(job_id: str, *, store: InMemoryJobStore | None = None) -> MPCJobS
     )
     updated = job_store.get(job_id)
     assert updated is not None
+    _sync_project_cancelled(updated, job_id, error="Cancel requested")
+    try:
+        from backend_api.http.services import credit_service
+
+        credit_service.end_job_usage(job_id=job_id, cancel=True)
+    except Exception:
+        pass
     return _to_status_response(updated)
 
 

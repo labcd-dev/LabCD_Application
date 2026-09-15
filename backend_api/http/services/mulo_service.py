@@ -162,6 +162,19 @@ def _mulo_worker(job_id: str) -> None:
         job.touch(JobStatus.RUNNING)
         register_callback(_push)
         final_state = designer.design_controller()
+        if job.cancel_requested or job_store.is_cancel_requested(job_id):
+            job.error = "Optimization cancelled by user"
+            job.touch(JobStatus.CANCELLED)
+            sync_project_from_job(
+                project_id=job.metadata.get("project_id"),
+                job_id=job_id,
+                status="cancelled",
+                error=job.error,
+            )
+            from backend_api.http.services import credit_service
+
+            credit_service.end_job_usage(job_id=job_id, cancel=True)
+            return
         job.metadata["final_state"] = make_serializable(final_state)
         job.metadata["modified_code"] = designer.equation
         job.metadata["modified_controller_structure"] = make_serializable(designer.controller_structure)
@@ -182,6 +195,19 @@ def _mulo_worker(job_id: str) -> None:
 
         credit_service.end_job_usage(job_id=job_id)
     except Exception as exc:
+        if job.cancel_requested or job_store.is_cancel_requested(job_id):
+            job.error = "Optimization cancelled by user"
+            job.touch(JobStatus.CANCELLED)
+            sync_project_from_job(
+                project_id=job.metadata.get("project_id"),
+                job_id=job_id,
+                status="cancelled",
+                error=job.error,
+            )
+            from backend_api.http.services import credit_service
+
+            credit_service.end_job_usage(job_id=job_id, cancel=True)
+            return
         job.error = str(exc)
         job.event_queue.put({"type": "run_error", "error": str(exc)})
         job.touch(JobStatus.FAILED)

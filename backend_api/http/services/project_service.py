@@ -513,6 +513,30 @@ def sync_project_from_job(
         db.close()
 
 
+def sync_project_cancelled(
+    project_id: int | str | None,
+    job_id: str,
+    *,
+    error: str = "Cancelled by user",
+) -> None:
+    """Mark a linked project cancelled. Accepts str/int ids from job stores."""
+    if project_id is None or project_id == "":
+        return
+    try:
+        pid = int(project_id)
+    except (TypeError, ValueError):
+        return
+    try:
+        sync_project_from_job(
+            project_id=pid,
+            job_id=job_id,
+            status="cancelled",
+            error=error,
+        )
+    except Exception:
+        pass
+
+
 def link_or_create_for_job(
     *,
     user_id: int | None,

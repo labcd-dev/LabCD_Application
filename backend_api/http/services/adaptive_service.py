@@ -65,6 +65,14 @@ def _coerce_project_id(value: Any) -> str | None:
     return str(value)
 
 
+def _sync_project_cancelled(record: Any, job_id: str, *, error: str = "Cancelled by user") -> None:
+    if record is None or not getattr(record, "project_id", None):
+        return
+    from backend_api.http.services.project_service import sync_project_cancelled
+
+    sync_project_cancelled(record.project_id, job_id, error=error)
+
+
 def _first_float(value: Any) -> float | None:
     if isinstance(value, (int, float)) and value == value and value not in (float("inf"), float("-inf")):
         return float(value)
@@ -299,6 +307,11 @@ def _make_on_event(job_id: str, store: InMemoryAdaptiveJobStore) -> Callable[[di
                 stage="error",
                 message=str(fields.get("reasoning") or "Cancelled"),
             )
+            _sync_project_cancelled(
+                store.get(job_id),
+                job_id,
+                error=str(fields.get("reasoning") or "Cancelled"),
+            )
 
     return on_event
 
@@ -341,6 +354,7 @@ def _run_pipeline_thread(job_id: str, store: InMemoryAdaptiveJobStore) -> None:
         return
     if record.cancel_requested:
         store.update(job_id, status="cancelled", stage="error", message="Cancelled before design")
+        _sync_project_cancelled(store.get(job_id), job_id, error="Cancelled before design")
         return
 
     options = record.options or {}
@@ -425,6 +439,7 @@ def _run_pipeline_thread(job_id: str, store: InMemoryAdaptiveJobStore) -> None:
 
         if store.is_cancel_requested(job_id):
             store.update(job_id, status="cancelled", stage="error", message="Cancelled")
+            _sync_project_cancelled(store.get(job_id), job_id)
             return
 
         report = None
@@ -990,12 +1005,15 @@ def cancel_job(
             message="Cancelled by client",
         )
         assert updated is not None
+        _sync_project_cancelled(updated, job_id, error="Cancelled by client")
         from backend_api.http.services import credit_service
 
         credit_service.end_job_usage(job_id=job_id, cancel=True)
         return _to_status_response(updated)
     updated = job_store.update(job_id, message="Cancel requested")
     assert updated is not None
+    # Running design stops asynchronously; mark project cancelled immediately for history.
+    _sync_project_cancelled(updated, job_id, error="Cancel requested")
     return _to_status_response(updated)
 
 
