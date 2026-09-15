@@ -44,6 +44,8 @@ celery.conf.update(
     task_acks_late=True,  # Re-queue task if worker crashes
     broker_connection_retry_on_startup=True,
     task_default_queue="celery",
+    task_time_limit=600,  # 10 minutes hard limit
+    task_soft_time_limit=540,  # 9 minutes soft limit
     include=CELERY_TASK_MODULES,
 )
 

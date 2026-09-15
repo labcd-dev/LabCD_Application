@@ -67,7 +67,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.api
-    command: ["python", "-m", "celery", "-A", "backend_api.celery_app", "worker", "--loglevel=info", "-Q", "celery,compute,default", "-c", "4"]
+    command: ["python", "-m", "celery", "-A", "backend_api.celery_app", "worker", "--loglevel=info", "-Q", "celery,compute,default", "-c", "8"]
     env_file:
       - .env
     environment:
