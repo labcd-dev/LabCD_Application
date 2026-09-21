@@ -15,6 +15,11 @@ MANAGED_API_KEYS: tuple[str, ...] = (
     "GROQ_API_KEY",
     "CEREBRAS_API_KEY",
     "TAVILY_API_KEY",
+    # Stripe billing — see backend_api.http.services.stripe_service. Reused via
+    # this same admin "API keys" UI/endpoint rather than a bespoke settings page.
+    "STRIPE_SECRET_KEY",
+    "STRIPE_PUBLISHABLE_KEY",
+    "STRIPE_WEBHOOK_SECRET",
 )
 
 MANAGED_API_KEY_SET = frozenset(MANAGED_API_KEYS)

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'r
 import {
   Camera,
   Coins,
+  CreditCard,
   KeyRound,
   Monitor,
   Palette,
@@ -10,7 +11,7 @@ import {
   UserCircle,
 } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { authApi, creditsApi } from '../api/endpoints'
+import { authApi, billingApi, creditsApi } from '../api/endpoints'
 import type {
   AuthSessionInfo,
   CreditDashboard,
@@ -34,6 +35,7 @@ type ProfileSection =
   | 'security'
   | 'devices'
   | 'credits'
+  | 'billing'
   | 'about'
 
 const SECTIONS: {
@@ -48,6 +50,7 @@ const SECTIONS: {
   { id: 'security', label: 'Security', description: 'Change password', icon: KeyRound },
   { id: 'devices', label: 'Devices', description: 'Active sessions', icon: Monitor },
   { id: 'credits', label: 'Credits', description: 'Balance and usage', icon: Coins },
+  { id: 'billing', label: 'Billing', description: 'Plan and subscription', icon: CreditCard },
   { id: 'about', label: 'About', description: 'Account details', icon: UserCircle },
 ]
 
@@ -123,6 +126,10 @@ export function ProfilePage() {
   const [creditsLoading, setCreditsLoading] = useState(false)
   const [referralCopied, setReferralCopied] = useState(false)
 
+  const [billingNotice, setBillingNotice] = useState<string | null>(null)
+  const [billingError, setBillingError] = useState<string | null>(null)
+  const [portalBusy, setPortalBusy] = useState(false)
+
   const loadSessions = async () => {
     setSessionsError(null)
     try {
@@ -164,6 +171,34 @@ export function ProfilePage() {
       setSection(requestedSection)
     }
   }, [requestedSection, section])
+
+  useEffect(() => {
+    const billingResult = searchParams.get('billing')
+    if (!billingResult) return
+    if (billingResult === 'success') {
+      setSection('billing')
+      setBillingNotice('Payment received — your plan is being updated. This can take a few seconds.')
+      void refreshUser()
+    } else if (billingResult === 'canceled') {
+      setSection('billing')
+      setBillingNotice('Checkout was canceled — no charge was made.')
+    }
+    // Clear the query param so a refresh doesn't re-trigger the notice.
+    navigate('/profile?section=billing', { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const handleManageBilling = async () => {
+    setBillingError(null)
+    setPortalBusy(true)
+    try {
+      const { url } = await billingApi.createPortalSession()
+      window.location.href = url
+    } catch (err) {
+      setBillingError(err instanceof Error ? err.message : 'Failed to open billing portal')
+      setPortalBusy(false)
+    }
+  }
 
   useEffect(() => {
     if (section === 'credits') {
@@ -780,6 +815,67 @@ export function ProfilePage() {
                       </div>
                     </>
                   ) : null}
+                </div>
+              )}
+
+              {section === 'billing' && (
+                <div className="max-w-lg space-y-4">
+                  {billingNotice && <StatusMessage type="info" message={billingNotice} />}
+                  {billingError && <StatusMessage type="error" message={billingError} />}
+
+                  <div className="rounded-xl border border-border-subtle bg-surface-muted px-4 py-3">
+                    <p className="m-0 text-[11px] font-semibold uppercase tracking-[0.05em] text-muted">
+                      Current plan
+                    </p>
+                    <p className="mt-1 mb-0 text-lg font-semibold text-foreground">
+                      {user.plan_name || 'No plan assigned'}
+                    </p>
+                    {user.stripe_subscription_status && (
+                      <p className="mt-1 mb-0 text-sm text-muted-text">
+                        Subscription: <span className="font-medium">{user.stripe_subscription_status}</span>
+                        {user.billing_interval ? ` · billed ${user.billing_interval}ly` : ''}
+                      </p>
+                    )}
+                    {user.stripe_current_period_end && (
+                      <p className="mt-1 mb-0 text-sm text-muted-text">
+                        {user.stripe_cancel_at_period_end
+                          ? 'Cancels on '
+                          : 'Renews on '}
+                        {formatDate(user.stripe_current_period_end, {
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric',
+                        })}
+                      </p>
+                    )}
+                    {user.stripe_cancel_at_period_end && (
+                      <p className="mt-2 mb-0 text-sm text-[var(--app-status-warning-text)]">
+                        Your subscription is set to cancel at the end of the current period. Use
+                        “Manage billing” below to resume it before then.
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {user.stripe_customer_id && (
+                      <button
+                        type="button"
+                        className={btnPrimary}
+                        onClick={() => void handleManageBilling()}
+                        disabled={portalBusy}
+                      >
+                        {portalBusy ? 'Opening…' : 'Manage billing'}
+                      </button>
+                    )}
+                    <button type="button" className={btnBase} onClick={() => navigate('/pricing')}>
+                      {user.stripe_customer_id ? 'Change plan' : 'View plans'}
+                    </button>
+                  </div>
+
+                  <p className="m-0 text-xs text-muted-text">
+                    “Manage billing” opens Stripe’s secure customer portal, where you can update
+                    your payment method, view invoices, change plans, or cancel your subscription.
+                  </p>
                 </div>
               )}
 

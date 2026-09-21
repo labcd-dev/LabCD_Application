@@ -63,6 +63,19 @@ class Plan(Base):
         nullable=False,
     )
 
+    # -- Stripe billing --
+    # Stable short code (e.g. "plus", "pro", "business", "enterprise") used to
+    # match this plan to a pricing-page tier independent of its display name.
+    plan_code: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    price_yearly: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
+    # "Contact us" tiers (e.g. Enterprise) are never sold through Stripe Checkout.
+    is_contact_sales: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Drives the "MOST POPULAR" badge on the pricing page.
+    is_most_popular: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    stripe_product_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    stripe_price_id_monthly: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    stripe_price_id_yearly: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
     actions: Mapped[list[Action]] = relationship(
         "Action",
         secondary=plan_actions,
@@ -177,6 +190,31 @@ class User(Base):
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
         nullable=False,
+    )
+
+    # -- Stripe billing --
+    # These mirror the current Stripe Customer/Subscription for this account so
+    # the admin panel can display and manage billing without calling Stripe for
+    # every page load. They are kept in sync by webhook events (see
+    # backend_api.http.services.stripe_service) and, defensively, by admin
+    # "sync from Stripe" actions.
+    stripe_customer_id: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, unique=True, index=True
+    )
+    stripe_subscription_id: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, index=True
+    )
+    # Raw Stripe subscription status: active, trialing, past_due, canceled,
+    # incomplete, incomplete_expired, unpaid, paused.
+    stripe_subscription_status: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    stripe_price_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # "month" or "year" — mirrors which Price (monthly/yearly) is active.
+    billing_interval: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    stripe_current_period_end: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    stripe_cancel_at_period_end: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
     )
 
     plan: Mapped[Plan | None] = relationship(

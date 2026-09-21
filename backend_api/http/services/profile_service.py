@@ -49,6 +49,13 @@ def user_out(user: User) -> UserOut:
         feedback_survey_completed_mulo=mulo_done,
         tutorial_dont_show_again=bool(user.tutorial_dont_show_again),
         onboarding_answers=user.onboarding_answers,
+        stripe_customer_id=user.stripe_customer_id,
+        stripe_subscription_id=user.stripe_subscription_id,
+        stripe_subscription_status=user.stripe_subscription_status,
+        stripe_price_id=user.stripe_price_id,
+        billing_interval=user.billing_interval,
+        stripe_current_period_end=user.stripe_current_period_end,
+        stripe_cancel_at_period_end=bool(user.stripe_cancel_at_period_end),
     )
 
 

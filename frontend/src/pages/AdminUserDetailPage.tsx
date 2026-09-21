@@ -127,6 +127,61 @@ export function AdminUserDetailPage() {
     }
   }
 
+  const handleCancelSubscription = async () => {
+    if (!detail) return
+    if (
+      !window.confirm(
+        `Cancel ${detail.user.email}'s Stripe subscription at the end of the current period?`,
+      )
+    ) {
+      return
+    }
+    setBusy(true)
+    setError(null)
+    setMessage(null)
+    try {
+      await adminApi.cancelUserSubscription(detail.user.id, true)
+      setMessage('Subscription set to cancel at period end')
+      await loadDetail({ quiet: true })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to cancel subscription')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleResumeSubscription = async () => {
+    if (!detail) return
+    setBusy(true)
+    setError(null)
+    setMessage(null)
+    try {
+      await adminApi.resumeUserSubscription(detail.user.id)
+      setMessage('Subscription resumed')
+      await loadDetail({ quiet: true })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to resume subscription')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleSyncSubscription = async () => {
+    if (!detail) return
+    setBusy(true)
+    setError(null)
+    setMessage(null)
+    try {
+      await adminApi.syncUserSubscription(detail.user.id)
+      setMessage('Subscription synced from Stripe')
+      await loadDetail({ quiet: true })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to sync subscription')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const handleRevokeSession = async (sessionId: number) => {
     if (!detail) return
     setBusy(true)
@@ -330,6 +385,80 @@ export function AdminUserDetailPage() {
             value={user.tutorial_dont_show_again ? 'Hidden permanently' : 'May show on login'}
           />
         </dl>
+      </div>
+
+      <div className={cardPanel}>
+        <h2 className="m-0 mb-4 text-lg font-semibold text-foreground">Billing</h2>
+        {user.stripe_customer_id ? (
+          <>
+            <dl className="space-y-3">
+              <DetailRow label="Stripe customer" value={user.stripe_customer_id} />
+              <DetailRow
+                label="Stripe subscription"
+                value={user.stripe_subscription_id ?? 'None'}
+              />
+              <DetailRow
+                label="Status"
+                value={user.stripe_subscription_status ?? 'Unknown'}
+              />
+              <DetailRow
+                label="Billing interval"
+                value={user.billing_interval ? `${user.billing_interval}ly` : '—'}
+              />
+              <DetailRow
+                label={user.stripe_cancel_at_period_end ? 'Cancels on' : 'Renews on'}
+                value={
+                  user.stripe_current_period_end
+                    ? formatDateTime(user.stripe_current_period_end)
+                    : '—'
+                }
+              />
+            </dl>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <a
+                className={`${btnBase} ${btnCompact}`}
+                href={`https://dashboard.stripe.com/customers/${user.stripe_customer_id}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Open in Stripe
+              </a>
+              <button
+                type="button"
+                className={`${btnBase} ${btnCompact}`}
+                onClick={() => void handleSyncSubscription()}
+                disabled={busy || !user.stripe_subscription_id}
+              >
+                Sync from Stripe
+              </button>
+              {user.stripe_cancel_at_period_end ? (
+                <button
+                  type="button"
+                  className={`${btnBase} ${btnCompact}`}
+                  onClick={() => void handleResumeSubscription()}
+                  disabled={busy || !user.stripe_subscription_id}
+                >
+                  Resume subscription
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className={`${btnBase} ${btnCompact}`}
+                  onClick={() => void handleCancelSubscription()}
+                  disabled={busy || !user.stripe_subscription_id}
+                >
+                  Cancel at period end
+                </button>
+              )}
+            </div>
+          </>
+        ) : (
+          <p className="m-0 text-sm text-muted-text">
+            This user has no Stripe customer yet — they haven&apos;t started a paid
+            subscription. Change their plan above to grant access manually, or they can
+            subscribe from the Plans &amp; Billing page.
+          </p>
+        )}
       </div>
 
       {canCredits && credits && (

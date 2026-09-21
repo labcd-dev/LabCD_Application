@@ -36,6 +36,7 @@ import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 import { DesignPage } from './pages/DesignPage'
 import { LoginPage } from './pages/LoginPage'
 import { LoginSsoPage } from './pages/LoginSsoPage'
+import { PricingPage } from './pages/PricingPage'
 import { ProfilePage } from './pages/ProfilePage'
 import { ProjectDetailPage } from './pages/ProjectDetailPage'
 import { ProjectsPage } from './pages/ProjectsPage'
@@ -83,6 +84,7 @@ export default function App() {
                   <Route path="adaptive" element={<AdaptivePage />} />
                   <Route path="mpc" element={<MpcPage />} />
                   <Route path="tutorials" element={<TutorialsPage />} />
+                  <Route path="pricing" element={<PricingPage />} />
                   <Route path="profile" element={<ProfilePage />} />
                   <Route path="*" element={<Navigate to="/design" replace />} />
                 </Route>

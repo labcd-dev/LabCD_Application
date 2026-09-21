@@ -391,6 +391,10 @@ def seed_auth_data(db: Session) -> None:
 
     free_plan = _ensure_default_plans(db)
 
+    from backend_api.http.services import plan_service
+
+    plan_service.seed_billing_plans(db)
+
     all_codes = [code for code, _desc in DEFAULT_ACTIONS]
     admin_role, user_role = role_service.ensure_default_roles(db, all_codes)
 

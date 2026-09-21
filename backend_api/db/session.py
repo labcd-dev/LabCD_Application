@@ -154,6 +154,7 @@ def _migrate_schema() -> None:
     _migrate_password_hash_nullable()
     _migrate_analytics_module_width()
     _migrate_user_credits()
+    _migrate_stripe_billing()
 
 
 def _migrate_password_hash_nullable() -> None:
@@ -376,6 +377,90 @@ def _migrate_plan_allowed_models() -> None:
             conn.execute(
                 text("UPDATE plans SET allowed_models = :models WHERE name = 'Free'"),
                 {"models": free_models_json},
+            )
+
+
+def _migrate_stripe_billing() -> None:
+    """Add Stripe billing columns to plans/users for existing deployments."""
+    from sqlalchemy import inspect
+
+    inspector = inspect(engine)
+    table_names = set(inspector.get_table_names())
+
+    if "plans" in table_names:
+        plan_columns = {col["name"] for col in inspector.get_columns("plans")}
+        statements: list[str] = []
+        if "plan_code" not in plan_columns:
+            statements.append("ALTER TABLE plans ADD COLUMN plan_code VARCHAR(40)")
+        if "price_yearly" not in plan_columns:
+            statements.append("ALTER TABLE plans ADD COLUMN price_yearly NUMERIC(10, 2)")
+        if "is_contact_sales" not in plan_columns:
+            statements.append(
+                "ALTER TABLE plans ADD COLUMN is_contact_sales BOOLEAN NOT NULL DEFAULT FALSE"
+            )
+        if "is_most_popular" not in plan_columns:
+            statements.append(
+                "ALTER TABLE plans ADD COLUMN is_most_popular BOOLEAN NOT NULL DEFAULT FALSE"
+            )
+        if "stripe_product_id" not in plan_columns:
+            statements.append("ALTER TABLE plans ADD COLUMN stripe_product_id VARCHAR(255)")
+        if "stripe_price_id_monthly" not in plan_columns:
+            statements.append(
+                "ALTER TABLE plans ADD COLUMN stripe_price_id_monthly VARCHAR(255)"
+            )
+        if "stripe_price_id_yearly" not in plan_columns:
+            statements.append(
+                "ALTER TABLE plans ADD COLUMN stripe_price_id_yearly VARCHAR(255)"
+            )
+        if statements:
+            with engine.begin() as conn:
+                for statement in statements:
+                    conn.execute(text(statement))
+        with engine.begin() as conn:
+            conn.execute(
+                text("CREATE INDEX IF NOT EXISTS ix_plans_plan_code ON plans (plan_code)")
+            )
+
+    if "users" in table_names:
+        user_columns = {col["name"] for col in inspector.get_columns("users")}
+        statements = []
+        if "stripe_customer_id" not in user_columns:
+            statements.append("ALTER TABLE users ADD COLUMN stripe_customer_id VARCHAR(255)")
+        if "stripe_subscription_id" not in user_columns:
+            statements.append("ALTER TABLE users ADD COLUMN stripe_subscription_id VARCHAR(255)")
+        if "stripe_subscription_status" not in user_columns:
+            statements.append(
+                "ALTER TABLE users ADD COLUMN stripe_subscription_status VARCHAR(40)"
+            )
+        if "stripe_price_id" not in user_columns:
+            statements.append("ALTER TABLE users ADD COLUMN stripe_price_id VARCHAR(255)")
+        if "billing_interval" not in user_columns:
+            statements.append("ALTER TABLE users ADD COLUMN billing_interval VARCHAR(10)")
+        if "stripe_current_period_end" not in user_columns:
+            statements.append(
+                "ALTER TABLE users ADD COLUMN stripe_current_period_end TIMESTAMP WITH TIME ZONE"
+            )
+        if "stripe_cancel_at_period_end" not in user_columns:
+            statements.append(
+                "ALTER TABLE users ADD COLUMN stripe_cancel_at_period_end "
+                "BOOLEAN NOT NULL DEFAULT FALSE"
+            )
+        if statements:
+            with engine.begin() as conn:
+                for statement in statements:
+                    conn.execute(text(statement))
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_stripe_customer_id "
+                    "ON users (stripe_customer_id)"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_users_stripe_subscription_id "
+                    "ON users (stripe_subscription_id)"
+                )
             )
 
 

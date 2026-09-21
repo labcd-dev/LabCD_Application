@@ -59,6 +59,15 @@ class PlanOut(BaseModel):
     actions: list[str]
     models: list[str]
     created_at: datetime
+    # -- Stripe billing (all optional; existing plans have none of this set) --
+    plan_code: str | None = None
+    price_yearly: float | None = None
+    is_contact_sales: bool = False
+    is_most_popular: bool = False
+    stripe_product_id: str | None = None
+    stripe_price_id_monthly: str | None = None
+    stripe_price_id_yearly: str | None = None
+    stripe_configured: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -70,6 +79,13 @@ class PlanCreateRequest(BaseModel):
     actions: list[str] = Field(default_factory=list)
     models: list[str] = Field(default_factory=list)
     is_active: bool = True
+    plan_code: str | None = Field(default=None, max_length=40)
+    price_yearly: float | None = Field(default=None, ge=0)
+    is_contact_sales: bool = False
+    is_most_popular: bool = False
+    stripe_product_id: str | None = Field(default=None, max_length=255)
+    stripe_price_id_monthly: str | None = Field(default=None, max_length=255)
+    stripe_price_id_yearly: str | None = Field(default=None, max_length=255)
 
 
 class PlanUpdateRequest(BaseModel):
@@ -79,6 +95,13 @@ class PlanUpdateRequest(BaseModel):
     actions: list[str] | None = None
     models: list[str] | None = None
     is_active: bool | None = None
+    plan_code: str | None = Field(default=None, max_length=40)
+    price_yearly: float | None = Field(default=None, ge=0)
+    is_contact_sales: bool | None = None
+    is_most_popular: bool | None = None
+    stripe_product_id: str | None = Field(default=None, max_length=255)
+    stripe_price_id_monthly: str | None = Field(default=None, max_length=255)
+    stripe_price_id_yearly: str | None = Field(default=None, max_length=255)
 
 
 class DefaultPlanOut(BaseModel):
@@ -137,6 +160,14 @@ class UserOut(BaseModel):
     feedback_survey_completed_mulo: bool = False
     tutorial_dont_show_again: bool = False
     onboarding_answers: dict[str, Any] | None = None
+    # -- Stripe billing --
+    stripe_customer_id: str | None = None
+    stripe_subscription_id: str | None = None
+    stripe_subscription_status: str | None = None
+    stripe_price_id: str | None = None
+    billing_interval: str | None = None
+    stripe_current_period_end: datetime | None = None
+    stripe_cancel_at_period_end: bool = False
 
     model_config = {"from_attributes": True}
 
