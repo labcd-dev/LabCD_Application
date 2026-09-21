@@ -80,6 +80,13 @@ def get_plan_by_name(db: Session, name: str) -> Plan | None:
     return db.query(Plan).filter(Plan.name == name.strip()).first()
 
 
+def _normalize_optional_str(value: str | None) -> str | None:
+    if value is None:
+        return None
+    stripped = value.strip()
+    return stripped or None
+
+
 def create_plan(
     db: Session,
     *,
@@ -89,6 +96,13 @@ def create_plan(
     action_codes: list[str] | None = None,
     models: list[str] | None = None,
     is_active: bool = True,
+    plan_code: str | None = None,
+    price_yearly: Decimal | float | str | None = None,
+    is_contact_sales: bool = False,
+    is_most_popular: bool = False,
+    stripe_product_id: str | None = None,
+    stripe_price_id_monthly: str | None = None,
+    stripe_price_id_yearly: str | None = None,
 ) -> Plan:
     normalized = name.strip()
     if not normalized:
@@ -101,6 +115,13 @@ def create_plan(
         price=Decimal(str(price)),
         is_active=is_active,
         allowed_models=normalize_plan_models(models),
+        plan_code=_normalize_optional_str(plan_code),
+        price_yearly=(Decimal(str(price_yearly)) if price_yearly is not None else None),
+        is_contact_sales=is_contact_sales,
+        is_most_popular=is_most_popular,
+        stripe_product_id=_normalize_optional_str(stripe_product_id),
+        stripe_price_id_monthly=_normalize_optional_str(stripe_price_id_monthly),
+        stripe_price_id_yearly=_normalize_optional_str(stripe_price_id_yearly),
     )
     db.add(plan)
     db.flush()
@@ -121,6 +142,13 @@ def update_plan(
     action_codes: list[str] | None = None,
     models: list[str] | None = None,
     is_active: bool | None = None,
+    plan_code: str | None = None,
+    price_yearly: Decimal | float | str | None = None,
+    is_contact_sales: bool | None = None,
+    is_most_popular: bool | None = None,
+    stripe_product_id: str | None = None,
+    stripe_price_id_monthly: str | None = None,
+    stripe_price_id_yearly: str | None = None,
 ) -> Plan:
     if name is not None:
         normalized = name.strip()
@@ -142,6 +170,20 @@ def update_plan(
         plan.actions = ensure_actions(db, action_codes)
     if models is not None:
         plan.allowed_models = normalize_plan_models(models)
+    if plan_code is not None:
+        plan.plan_code = _normalize_optional_str(plan_code)
+    if price_yearly is not None:
+        plan.price_yearly = Decimal(str(price_yearly)) if str(price_yearly).strip() else None
+    if is_contact_sales is not None:
+        plan.is_contact_sales = is_contact_sales
+    if is_most_popular is not None:
+        plan.is_most_popular = is_most_popular
+    if stripe_product_id is not None:
+        plan.stripe_product_id = _normalize_optional_str(stripe_product_id)
+    if stripe_price_id_monthly is not None:
+        plan.stripe_price_id_monthly = _normalize_optional_str(stripe_price_id_monthly)
+    if stripe_price_id_yearly is not None:
+        plan.stripe_price_id_yearly = _normalize_optional_str(stripe_price_id_yearly)
     db.add(plan)
     db.commit()
     db.refresh(plan)
@@ -184,4 +226,143 @@ def plan_out_dict(plan: Plan) -> dict:
         "actions": plan.action_codes(),
         "models": plan.model_ids(),
         "created_at": plan.created_at,
+        "plan_code": plan.plan_code,
+        "price_yearly": (float(plan.price_yearly) if plan.price_yearly is not None else None),
+        "is_contact_sales": plan.is_contact_sales,
+        "is_most_popular": plan.is_most_popular,
+        "stripe_product_id": plan.stripe_product_id,
+        "stripe_price_id_monthly": plan.stripe_price_id_monthly,
+        "stripe_price_id_yearly": plan.stripe_price_id_yearly,
+        "stripe_configured": bool(plan.is_contact_sales or plan.stripe_price_id_monthly or plan.stripe_price_id_yearly),
     }
+
+
+# --------------------------------------------------------------------------
+# Stripe pricing-page tiers (Plus / Pro / Business / Enterprise)
+# --------------------------------------------------------------------------
+# Seeded additively (matched by plan_code, not name) so this never touches or
+# renames the pre-existing Free / Single Loop / Multi Loop / Full Access
+# plans or any user already assigned to them. Admins fill in the Stripe
+# product/price IDs afterwards from Admin -> Plans (see STRIPE_SETUP.md).
+
+STRIPE_BILLING_PLAN_DEFS: list[dict] = [
+    {
+        "plan_code": "plus",
+        "name": "Plus",
+        "description": "Get started with the Single Loop pipeline.",
+        "price": Decimal("14.90"),
+        "price_yearly": Decimal("149.00"),
+        "action_codes": [
+            "pipeline:silo",
+            "module:upload",
+            "module:regularize",
+            "module:silo",
+        ],
+        "models": ["gpt-4o-mini", "gpt-4o"],
+        "is_most_popular": False,
+        "is_contact_sales": False,
+    },
+    {
+        "plan_code": "pro",
+        "name": "Pro",
+        "description": "Single Loop and Multi Loop pipelines, most popular.",
+        "price": Decimal("149.90"),
+        "price_yearly": Decimal("1499.00"),
+        "action_codes": [
+            "pipeline:silo",
+            "pipeline:mulo",
+            "module:upload",
+            "module:regularize",
+            "module:recommender",
+            "module:trimmer",
+            "module:silo",
+            "module:mulo",
+            "module:case_studies",
+        ],
+        "models": list(DEFAULT_LLM_MODELS),
+        "is_most_popular": True,
+        "is_contact_sales": False,
+    },
+    {
+        "plan_code": "business",
+        "name": "Business",
+        "description": "Full pipeline suite: Single Loop, Multi Loop, Adaptive, and MPC.",
+        "price": Decimal("349.90"),
+        "price_yearly": Decimal("3499.00"),
+        "action_codes": [
+            "pipeline:silo",
+            "pipeline:mulo",
+            "pipeline:adaptive",
+            "pipeline:mpc",
+            "module:upload",
+            "module:regularize",
+            "module:recommender",
+            "module:trimmer",
+            "module:silo",
+            "module:mulo",
+            "module:adaptive",
+            "module:mpc",
+            "module:case_studies",
+        ],
+        "models": list(DEFAULT_LLM_MODELS),
+        "is_most_popular": False,
+        "is_contact_sales": False,
+    },
+    {
+        "plan_code": "enterprise",
+        "name": "Enterprise",
+        "description": "Custom volume, SSO, and support — contact us.",
+        "price": Decimal("0.00"),
+        "price_yearly": None,
+        "action_codes": [
+            "pipeline:silo",
+            "pipeline:mulo",
+            "pipeline:adaptive",
+            "pipeline:mpc",
+            "module:upload",
+            "module:regularize",
+            "module:recommender",
+            "module:trimmer",
+            "module:silo",
+            "module:mulo",
+            "module:adaptive",
+            "module:mpc",
+            "module:case_studies",
+        ],
+        "models": list(DEFAULT_LLM_MODELS),
+        "is_most_popular": False,
+        "is_contact_sales": True,
+    },
+]
+
+
+def get_plan_by_code(db: Session, plan_code: str) -> Plan | None:
+    return db.query(Plan).filter(Plan.plan_code == plan_code).first()
+
+
+def seed_billing_plans(db: Session) -> None:
+    """Create the Plus/Pro/Business/Enterprise plans if they don't exist yet.
+
+    Idempotent and additive: matches on ``plan_code``, never renames or
+    deletes an existing plan, and never changes the default registration
+    plan. Safe to call on every startup.
+    """
+    for plan_def in STRIPE_BILLING_PLAN_DEFS:
+        existing = get_plan_by_code(db, plan_def["plan_code"])
+        if existing is not None:
+            continue
+        plan = Plan(
+            name=plan_def["name"],
+            description=plan_def["description"],
+            price=plan_def["price"],
+            is_active=True,
+            allowed_models=normalize_plan_models(plan_def["models"]),
+            plan_code=plan_def["plan_code"],
+            price_yearly=plan_def["price_yearly"],
+            is_contact_sales=plan_def["is_contact_sales"],
+            is_most_popular=plan_def["is_most_popular"],
+        )
+        db.add(plan)
+        db.flush()
+        plan.actions = ensure_actions(db, plan_def["action_codes"])
+    db.commit()

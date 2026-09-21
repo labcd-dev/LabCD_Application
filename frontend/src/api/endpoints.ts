@@ -7,6 +7,7 @@ import type {
   ApiKeysResponse,
   ApiKeysUpdate,
   AuthUser,
+  BillingStatus,
   CaseStudiesResponse,
   ControlDesignTemplate,
   CreditDashboard,
@@ -43,6 +44,7 @@ import type {
   ProjectDetail,
   ProjectPipelineType,
   ProjectSummary,
+  PublicPlan,
   RagStatusResponse,
   RecommenderHandoffResponse,
   RegularizeResponse,
@@ -264,6 +266,13 @@ export const adminApi = {
     actions?: string[]
     models?: string[]
     is_active?: boolean
+    plan_code?: string | null
+    price_yearly?: number | null
+    is_contact_sales?: boolean
+    is_most_popular?: boolean
+    stripe_product_id?: string | null
+    stripe_price_id_monthly?: string | null
+    stripe_price_id_yearly?: string | null
   }) =>
     apiFetch<PlanInfo>('/admin/plans', {
       method: 'POST',
@@ -278,6 +287,13 @@ export const adminApi = {
       actions?: string[]
       models?: string[]
       is_active?: boolean
+      plan_code?: string | null
+      price_yearly?: number | null
+      is_contact_sales?: boolean
+      is_most_popular?: boolean
+      stripe_product_id?: string | null
+      stripe_price_id_monthly?: string | null
+      stripe_price_id_yearly?: string | null
     },
   ) =>
     apiFetch<PlanInfo>(`/admin/plans/${planId}`, {
@@ -367,6 +383,15 @@ export const adminApi = {
     }),
   deleteUser: (userId: number) =>
     apiFetch<void>(`/admin/users/${userId}`, { method: 'DELETE' }),
+  cancelUserSubscription: (userId: number, atPeriodEnd = true) =>
+    apiFetch<AuthUser>(
+      `/admin/users/${userId}/billing/cancel?at_period_end=${atPeriodEnd ? 'true' : 'false'}`,
+      { method: 'POST' },
+    ),
+  resumeUserSubscription: (userId: number) =>
+    apiFetch<AuthUser>(`/admin/users/${userId}/billing/resume`, { method: 'POST' }),
+  syncUserSubscription: (userId: number) =>
+    apiFetch<AuthUser>(`/admin/users/${userId}/billing/sync`, { method: 'POST' }),
   listProjects: (params?: { user_id?: number; pipeline_type?: string }) => {
     const query = new URLSearchParams()
     if (params?.user_id != null) query.set('user_id', String(params.user_id))
@@ -1223,4 +1248,17 @@ export const creditsApi = {
   getSession: (sessionId: number) =>
     apiFetch<CreditUsageSession>(`/credits/sessions/${sessionId}`),
 }
+
+export const billingApi = {
+  getPlans: () => apiFetch<PublicPlan[]>('/billing/plans'),
+  getStatus: () => apiFetch<BillingStatus>('/billing/status'),
+  createCheckoutSession: (body: { plan_id: number; interval: 'month' | 'year' }) =>
+    apiFetch<{ url: string }>('/billing/checkout-session', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  createPortalSession: () =>
+    apiFetch<{ url: string }>('/billing/portal-session', { method: 'POST' }),
+}
+
 

@@ -34,6 +34,7 @@ from backend_api.http.routers import (
     adaptive,
     admin,
     auth,
+    billing,
     blog,
     bug_reports,
     case_studies,
@@ -128,6 +129,7 @@ def create_app() -> FastAPI:
 
     app.include_router(health.router, prefix=API_PREFIX)
     app.include_router(auth.router, prefix=API_PREFIX)
+    app.include_router(billing.router, prefix=API_PREFIX)
     app.include_router(sso.router, prefix=API_PREFIX)
     app.include_router(credits.router, prefix=API_PREFIX)
     app.include_router(admin.router, prefix=API_PREFIX)

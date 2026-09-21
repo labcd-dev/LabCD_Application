@@ -224,6 +224,32 @@ export interface AuthUser {
   feedback_survey_completed_mulo?: boolean
   tutorial_dont_show_again?: boolean
   onboarding_answers?: OnboardingAnswers | null
+  // -- Stripe billing --
+  stripe_customer_id?: string | null
+  stripe_subscription_id?: string | null
+  stripe_subscription_status?: string | null
+  stripe_price_id?: string | null
+  billing_interval?: 'month' | 'year' | null
+  stripe_current_period_end?: string | null
+  stripe_cancel_at_period_end?: boolean
+}
+
+export interface BillingStatus {
+  stripe_enabled: boolean
+  publishable_key: string | null
+}
+
+export interface PublicPlan {
+  id: number
+  plan_code: string | null
+  name: string
+  description: string
+  price: number
+  price_yearly: number | null
+  is_contact_sales: boolean
+  is_most_popular: boolean
+  purchasable: boolean
+  actions: string[]
 }
 
 export interface MessageResponse {
@@ -629,6 +655,15 @@ export interface PlanInfo {
   actions: string[]
   models: string[]
   created_at: string
+  // -- Stripe billing --
+  plan_code?: string | null
+  price_yearly?: number | null
+  is_contact_sales?: boolean
+  is_most_popular?: boolean
+  stripe_product_id?: string | null
+  stripe_price_id_monthly?: string | null
+  stripe_price_id_yearly?: string | null
+  stripe_configured?: boolean
 }
 
 export interface RoleInfo {

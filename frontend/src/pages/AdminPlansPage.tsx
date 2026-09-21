@@ -47,6 +47,13 @@ export function AdminPlansPage() {
   const [isActive, setIsActive] = useState(true)
   const [selectedActions, setSelectedActions] = useState<string[]>([])
   const [selectedModels, setSelectedModels] = useState<string[]>([])
+  const [planCode, setPlanCode] = useState('')
+  const [priceYearly, setPriceYearly] = useState('')
+  const [isContactSales, setIsContactSales] = useState(false)
+  const [isMostPopular, setIsMostPopular] = useState(false)
+  const [stripeProductId, setStripeProductId] = useState('')
+  const [stripePriceIdMonthly, setStripePriceIdMonthly] = useState('')
+  const [stripePriceIdYearly, setStripePriceIdYearly] = useState('')
 
   const reload = async () => {
     const [planList, actionList, defaultPlan, models] = await Promise.all([
@@ -115,6 +122,13 @@ export function AdminPlansPage() {
     setIsActive(true)
     setSelectedActions([])
     setSelectedModels([])
+    setPlanCode('')
+    setPriceYearly('')
+    setIsContactSales(false)
+    setIsMostPopular(false)
+    setStripeProductId('')
+    setStripePriceIdMonthly('')
+    setStripePriceIdYearly('')
     setMessage(null)
     setError(null)
     setPanelOpen(true)
@@ -128,6 +142,13 @@ export function AdminPlansPage() {
     setIsActive(plan.is_active)
     setSelectedActions(plan.actions)
     setSelectedModels(plan.models ?? [])
+    setPlanCode(plan.plan_code ?? '')
+    setPriceYearly(plan.price_yearly != null ? String(plan.price_yearly) : '')
+    setIsContactSales(plan.is_contact_sales ?? false)
+    setIsMostPopular(plan.is_most_popular ?? false)
+    setStripeProductId(plan.stripe_product_id ?? '')
+    setStripePriceIdMonthly(plan.stripe_price_id_monthly ?? '')
+    setStripePriceIdYearly(plan.stripe_price_id_yearly ?? '')
     setMessage(null)
     setError(null)
     setPanelOpen(true)
@@ -147,6 +168,20 @@ export function AdminPlansPage() {
       setError('Price must be a non-negative number')
       return
     }
+    const parsedYearly = priceYearly.trim() === '' ? null : Number(priceYearly)
+    if (parsedYearly != null && (Number.isNaN(parsedYearly) || parsedYearly < 0)) {
+      setError('Yearly price must be a non-negative number')
+      return
+    }
+    const billingFields = {
+      plan_code: planCode.trim() || null,
+      price_yearly: parsedYearly,
+      is_contact_sales: isContactSales,
+      is_most_popular: isMostPopular,
+      stripe_product_id: stripeProductId.trim() || null,
+      stripe_price_id_monthly: stripePriceIdMonthly.trim() || null,
+      stripe_price_id_yearly: stripePriceIdYearly.trim() || null,
+    }
     try {
       if (editingPlanId == null) {
         await adminApi.createPlan({
@@ -156,6 +191,7 @@ export function AdminPlansPage() {
           actions: selectedActions,
           models: selectedModels,
           is_active: isActive,
+          ...billingFields,
         })
         setMessage(`Created plan ${name}`)
       } else {
@@ -166,6 +202,7 @@ export function AdminPlansPage() {
           actions: selectedActions,
           models: selectedModels,
           is_active: isActive,
+          ...billingFields,
         })
         setMessage(`Updated plan ${name}`)
       }
@@ -298,15 +335,51 @@ export function AdminPlansPage() {
                           {plan.description ? (
                             <div className="mt-0.5 text-xs text-muted-text">{plan.description}</div>
                           ) : null}
-                          {isDefault ? (
-                            <span className="mt-1 inline-flex items-center gap-1 rounded-md bg-[color-mix(in_srgb,var(--app-primary)_14%,transparent)] px-2 py-0.5 text-xs font-semibold text-primary">
-                              <Star className="size-3" aria-hidden />
-                              Default for registration
-                            </span>
-                          ) : null}
+                          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                            {isDefault ? (
+                              <span className="inline-flex items-center gap-1 rounded-md bg-[color-mix(in_srgb,var(--app-primary)_14%,transparent)] px-2 py-0.5 text-xs font-semibold text-primary">
+                                <Star className="size-3" aria-hidden />
+                                Default for registration
+                              </span>
+                            ) : null}
+                            {plan.is_most_popular ? (
+                              <span className="inline-flex items-center rounded-md bg-[color-mix(in_srgb,var(--app-primary)_14%,transparent)] px-2 py-0.5 text-xs font-semibold text-primary">
+                                Most popular
+                              </span>
+                            ) : null}
+                            {plan.plan_code ? (
+                              <span
+                                className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ${
+                                  plan.stripe_configured
+                                    ? 'bg-[var(--app-status-success-bg)] text-[var(--app-status-success-text)]'
+                                    : 'bg-[var(--app-status-warning-bg)] text-[var(--app-status-warning-text)]'
+                                }`}
+                                title={
+                                  plan.stripe_configured
+                                    ? 'Stripe price IDs configured'
+                                    : 'No Stripe price configured yet — see STRIPE_SETUP.md'
+                                }
+                              >
+                                {plan.plan_code}
+                                {plan.stripe_configured ? '' : ' · no Stripe price'}
+                              </span>
+                            ) : null}
+                          </div>
                         </td>
                         <td className="px-4 py-3 font-medium text-foreground">
-                          {formatPrice(plan.price)}
+                          {plan.is_contact_sales ? (
+                            <span className="text-muted-text">Custom</span>
+                          ) : (
+                            <>
+                              {formatPrice(plan.price)}
+                              <span className="font-normal text-muted-text">/mo</span>
+                              {plan.price_yearly != null && (
+                                <div className="text-xs font-normal text-muted-text">
+                                  {formatPrice(plan.price_yearly)}/yr
+                                </div>
+                              )}
+                            </>
+                          )}
                         </td>
                         <td className="px-4 py-3">
                           {plan.is_active ? (
@@ -476,6 +549,85 @@ export function AdminPlansPage() {
                   />
                   <span>Active</span>
                 </label>
+
+                <fieldset className="mb-3 space-y-2 rounded-xl border border-border p-3">
+                  <legend className="px-1 text-sm font-medium text-foreground">
+                    Pricing page &amp; Stripe billing
+                  </legend>
+                  <p className="m-0 text-xs text-muted-text">
+                    Set a <code>plan_code</code> to show this plan on the pricing page. Leave
+                    blank to keep it as an internal-only plan. See STRIPE_SETUP.md for how to
+                    create the Product/Price objects in the Stripe Dashboard.
+                  </p>
+                  <label className={fieldLabel}>
+                    <span>Plan code (e.g. plus, pro, business, enterprise)</span>
+                    <input
+                      className={fieldInput}
+                      value={planCode}
+                      onChange={(e) => setPlanCode(e.target.value)}
+                      placeholder="e.g. plus"
+                    />
+                  </label>
+                  <label className={fieldLabel}>
+                    <span>Yearly price (USD, optional)</span>
+                    <input
+                      className={fieldInput}
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={priceYearly}
+                      onChange={(e) => setPriceYearly(e.target.value)}
+                      placeholder="e.g. 149.00"
+                    />
+                  </label>
+                  <label className={fieldCheckbox}>
+                    <input
+                      type="checkbox"
+                      checked={isContactSales}
+                      onChange={(e) => setIsContactSales(e.target.checked)}
+                    />
+                    <span>Contact-sales plan (no Stripe Checkout, e.g. Enterprise)</span>
+                  </label>
+                  <label className={fieldCheckbox}>
+                    <input
+                      type="checkbox"
+                      checked={isMostPopular}
+                      onChange={(e) => setIsMostPopular(e.target.checked)}
+                    />
+                    <span>Show &quot;Most popular&quot; badge on the pricing page</span>
+                  </label>
+                  {!isContactSales && (
+                    <>
+                      <label className={fieldLabel}>
+                        <span>Stripe product ID</span>
+                        <input
+                          className={`${fieldInput} font-mono text-xs`}
+                          value={stripeProductId}
+                          onChange={(e) => setStripeProductId(e.target.value)}
+                          placeholder="prod_..."
+                        />
+                      </label>
+                      <label className={fieldLabel}>
+                        <span>Stripe monthly price ID</span>
+                        <input
+                          className={`${fieldInput} font-mono text-xs`}
+                          value={stripePriceIdMonthly}
+                          onChange={(e) => setStripePriceIdMonthly(e.target.value)}
+                          placeholder="price_..."
+                        />
+                      </label>
+                      <label className={fieldLabel}>
+                        <span>Stripe yearly price ID</span>
+                        <input
+                          className={`${fieldInput} font-mono text-xs`}
+                          value={stripePriceIdYearly}
+                          onChange={(e) => setStripePriceIdYearly(e.target.value)}
+                          placeholder="price_..."
+                        />
+                      </label>
+                    </>
+                  )}
+                </fieldset>
 
                 <fieldset className="mb-2 space-y-2 border-0 p-0">
                   <legend className="mb-2 text-sm font-medium text-foreground">Modules</legend>

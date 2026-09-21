@@ -76,6 +76,7 @@ from backend_api.http.services import (
     project_service,
     role_service,
     sso_service,
+    stripe_service,
     telegram_analytics_service,
 )
 from backend_api.http.services import plant_model_chat_service
@@ -509,6 +510,13 @@ def create_plan(
             action_codes=request.actions,
             models=request.models,
             is_active=request.is_active,
+            plan_code=request.plan_code,
+            price_yearly=request.price_yearly,
+            is_contact_sales=request.is_contact_sales,
+            is_most_popular=request.is_most_popular,
+            stripe_product_id=request.stripe_product_id,
+            stripe_price_id_monthly=request.stripe_price_id_monthly,
+            stripe_price_id_yearly=request.stripe_price_id_yearly,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -547,6 +555,13 @@ def update_plan(
             action_codes=request.actions,
             models=request.models,
             is_active=request.is_active,
+            plan_code=request.plan_code,
+            price_yearly=request.price_yearly,
+            is_contact_sales=request.is_contact_sales,
+            is_most_popular=request.is_most_popular,
+            stripe_product_id=request.stripe_product_id,
+            stripe_price_id_monthly=request.stripe_price_id_monthly,
+            stripe_price_id_yearly=request.stripe_price_id_yearly,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -930,6 +945,87 @@ def list_user_sessions(
         )
         for row in session_service.list_user_sessions(db, user_id)
     ]
+
+
+@router.post("/users/{user_id}/billing/cancel", response_model=UserOut)
+def admin_cancel_user_subscription(
+    user_id: int,
+    http_request: Request,
+    at_period_end: bool = Query(default=True),
+    admin: User = Depends(require_action("admin:users")),
+    db: Session = Depends(get_db),
+) -> UserOut:
+    """Cancel a user's Stripe subscription (default: at period end)."""
+    user = get_user_by_id(db, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    try:
+        stripe_service.admin_cancel_subscription(db, user, at_period_end=at_period_end)
+    except stripe_service.StripeConfigError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except stripe_service.StripeBillingError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    audit_service.record_from_request(
+        db,
+        http_request,
+        action="admin.user.billing.cancel",
+        category="admin",
+        actor=admin,
+        resource_type="user",
+        resource_id=user.id,
+        success=True,
+        details={"at_period_end": at_period_end},
+    )
+    return user_out(user)
+
+
+@router.post("/users/{user_id}/billing/resume", response_model=UserOut)
+def admin_resume_user_subscription(
+    user_id: int,
+    http_request: Request,
+    admin: User = Depends(require_action("admin:users")),
+    db: Session = Depends(get_db),
+) -> UserOut:
+    """Undo a pending cancel-at-period-end for a user's subscription."""
+    user = get_user_by_id(db, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    try:
+        stripe_service.admin_resume_subscription(db, user)
+    except stripe_service.StripeConfigError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except stripe_service.StripeBillingError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    audit_service.record_from_request(
+        db,
+        http_request,
+        action="admin.user.billing.resume",
+        category="admin",
+        actor=admin,
+        resource_type="user",
+        resource_id=user.id,
+        success=True,
+    )
+    return user_out(user)
+
+
+@router.post("/users/{user_id}/billing/sync", response_model=UserOut)
+def admin_sync_user_subscription(
+    user_id: int,
+    _: User = Depends(require_action("admin:users")),
+    db: Session = Depends(get_db),
+) -> UserOut:
+    """Re-fetch a user's subscription status directly from Stripe."""
+    user = get_user_by_id(db, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    try:
+        stripe_service.admin_sync_subscription(db, user)
+    except stripe_service.StripeConfigError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except stripe_service.StripeBillingError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return user_out(user)
 
 
 @router.get("/credits/settings", response_model=CreditSettingsOut)

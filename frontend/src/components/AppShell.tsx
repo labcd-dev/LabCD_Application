@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import {
   Clapperboard,
+  CreditCard,
   HelpCircle,
   Layers,
   LogOut,
@@ -37,6 +38,7 @@ function sectionLabel(pathname: string): string {
   if (pathname.startsWith('/adaptive')) return 'Adaptive Control'
   if (pathname.startsWith('/mpc')) return 'MPC Control'
   if (pathname.startsWith('/tutorials')) return 'tutorials'
+  if (pathname.startsWith('/pricing')) return 'plans & billing'
   if (pathname === '/profile') return 'profile'
   return 'app'
 }
@@ -114,6 +116,7 @@ export function AppShell({ children, topbarActions }: AppShellProps) {
     location.pathname.startsWith('/adaptive') ||
     location.pathname.startsWith('/mpc')
   const isTutorials = location.pathname.startsWith('/tutorials')
+  const isPricing = location.pathname.startsWith('/pricing')
   const isProfile = location.pathname === '/profile'
   const isMpc = location.pathname.startsWith('/mpc')
   const isAdaptive = location.pathname.startsWith('/adaptive')
@@ -232,6 +235,14 @@ export function AppShell({ children, topbarActions }: AppShellProps) {
             expanded={sidebarOpen}
           >
             <Clapperboard className="size-[19px]" strokeWidth={1.6} aria-hidden />
+          </RailItem>
+          <RailItem
+            to="/pricing"
+            label="Plans & Billing"
+            active={isPricing}
+            expanded={sidebarOpen}
+          >
+            <CreditCard className="size-[19px]" strokeWidth={1.6} aria-hidden />
           </RailItem>
           {hasAction('admin:access') && (
             <RailItem to="/admin" label="Admin" expanded={sidebarOpen}>

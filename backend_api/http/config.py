@@ -67,6 +67,24 @@ LOGIN_FAIL_WINDOW_SECONDS = int(os.getenv("LOGIN_FAIL_WINDOW_SECONDS", "60"))
 LOGIN_FAIL_MAX_ATTEMPTS = int(os.getenv("LOGIN_FAIL_MAX_ATTEMPTS", "3"))
 LOGIN_LOCKOUT_MINUTES = int(os.getenv("LOGIN_LOCKOUT_MINUTES", "10"))
 
+# Stripe billing. Prefer reading these via api_key_service.current_env_value()
+# at call time (same pattern as TELEGRAM_BOT_TOKEN above) so that keys saved
+# from Admin -> API keys take effect without a restart; these constants are
+# only a fallback for import-time defaults / documentation.
+STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "").strip()
+STRIPE_PUBLISHABLE_KEY = os.getenv("STRIPE_PUBLISHABLE_KEY", "").strip()
+STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "").strip()
+# Where Stripe Checkout / Customer Portal send the browser back to.
+STRIPE_CHECKOUT_SUCCESS_URL = os.getenv(
+    "STRIPE_CHECKOUT_SUCCESS_URL", f"{APP_PUBLIC_URL}/profile?billing=success"
+).strip()
+STRIPE_CHECKOUT_CANCEL_URL = os.getenv(
+    "STRIPE_CHECKOUT_CANCEL_URL", f"{APP_PUBLIC_URL}/pricing?billing=canceled"
+).strip()
+STRIPE_PORTAL_RETURN_URL = os.getenv(
+    "STRIPE_PORTAL_RETURN_URL", f"{APP_PUBLIC_URL}/profile"
+).strip()
+
 DEFAULT_LLM_MODELS = [
     "gpt-5.5",
     "gpt-5.4",
