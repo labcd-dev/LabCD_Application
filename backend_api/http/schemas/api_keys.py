@@ -21,3 +21,6 @@ class ApiKeysUpdate(BaseModel):
     GROQ_API_KEY: str | None = Field(default=None)
     CEREBRAS_API_KEY: str | None = Field(default=None)
     TAVILY_API_KEY: str | None = Field(default=None)
+    STRIPE_SECRET_KEY: str | None = Field(default=None)
+    STRIPE_PUBLISHABLE_KEY: str | None = Field(default=None)
+    STRIPE_WEBHOOK_SECRET: str | None = Field(default=None)

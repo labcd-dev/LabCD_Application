@@ -24,6 +24,9 @@ const KEY_LABELS: Record<ApiKeyName, string> = {
   GROQ_API_KEY: 'Groq',
   CEREBRAS_API_KEY: 'Cerebras',
   TAVILY_API_KEY: 'Tavily (search)',
+  STRIPE_SECRET_KEY: 'Stripe secret',
+  STRIPE_PUBLISHABLE_KEY: 'Stripe publishable',
+  STRIPE_WEBHOOK_SECRET: 'Stripe webhook secret',
 }
 
 type DraftRow = {

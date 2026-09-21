@@ -842,6 +842,9 @@ export type ApiKeyName =
   | 'GROQ_API_KEY'
   | 'CEREBRAS_API_KEY'
   | 'TAVILY_API_KEY'
+  | 'STRIPE_SECRET_KEY'
+  | 'STRIPE_PUBLISHABLE_KEY'
+  | 'STRIPE_WEBHOOK_SECRET'
 
 export interface ApiKeyStatus {
   name: ApiKeyName | string

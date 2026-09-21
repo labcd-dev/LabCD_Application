@@ -50,6 +50,23 @@ celery.conf.update(
 )
 
 # Explicitly import task modules so @celery.task registers them into the worker registry
+
+# Ensure workers pick up admin-updated API keys from the shared .env bind-mount
+# without requiring a process restart (see api_key_service.refresh_managed_keys_from_env_file).
+from celery.signals import task_prerun  # noqa: E402
+
+
+@task_prerun.connect
+def _reload_api_keys_before_task(**_kwargs) -> None:
+    try:
+        from backend_api.http.services.api_key_service import refresh_managed_keys_from_env_file
+
+        refresh_managed_keys_from_env_file(force=False)
+    except Exception:
+        # Never block task execution on a refresh failure; keys may still be set via env_file.
+        pass
+
+
 import backend_api.tasks.adaptive_tasks  # noqa: F401, E402
 import backend_api.tasks.mpc_tasks  # noqa: F401, E402
 import backend_api.tasks.workflow_tasks  # noqa: F401, E402

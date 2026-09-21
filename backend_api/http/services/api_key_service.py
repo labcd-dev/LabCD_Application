@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import re
 import tempfile
+import threading
 from pathlib import Path
 
 from backend_api.http.config import PROJECT_ROOT
@@ -25,6 +26,13 @@ MANAGED_API_KEYS: tuple[str, ...] = (
 MANAGED_API_KEY_SET = frozenset(MANAGED_API_KEYS)
 
 _ENV_KEY_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)\s*=")
+# Match KEY=value or KEY="value" / KEY='value' (dotenv-style).
+_ENV_LINE_RE = re.compile(
+    r"^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$"
+)
+
+_reload_lock = threading.Lock()
+_last_env_mtime: float | None = None
 
 
 class ApiKeyError(Exception):
@@ -48,6 +56,10 @@ def _current_value(name: str) -> str:
 
 
 def list_keys() -> list[dict[str, object]]:
+    # Prefer live process env (updated by admin save). Also pull from file so a
+    # freshly started worker that has not yet received task_prerun still reflects
+    # the on-disk source of truth when the admin page is opened against the API.
+    refresh_managed_keys_from_env_file(force=False)
     rows: list[dict[str, object]] = []
     for name in MANAGED_API_KEYS:
         value = _current_value(name)
@@ -77,9 +89,82 @@ def _format_env_assignment(name: str, value: str) -> str:
     return f"{name}={value}"
 
 
+def _unquote_env_value(raw: str) -> str:
+    value = raw.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+        quote = value[0]
+        inner = value[1:-1]
+        if quote == '"':
+            inner = inner.replace('\\"', '"').replace("\\\\", "\\")
+        return inner
+    # Strip inline comments for unquoted values (dotenv behaviour).
+    if " #" in value or "\t#" in value:
+        value = re.split(r"(?<!\S)#", value, maxsplit=1)[0].rstrip()
+    return value
+
+
+def _parse_env_file_managed(path: Path) -> dict[str, str]:
+    """Return managed key -> value from a .env file (empty string = cleared)."""
+    if not path.is_file():
+        return {}
+    result: dict[str, str] = {}
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return {}
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        match = _ENV_LINE_RE.match(stripped)
+        if match is None:
+            continue
+        key, raw_val = match.group(1), match.group(2)
+        if key not in MANAGED_API_KEY_SET:
+            continue
+        result[key] = _unquote_env_value(raw_val)
+    return result
+
+
+def refresh_managed_keys_from_env_file(*, force: bool = False) -> bool:
+    """Reload managed API keys from the root ``.env`` into ``os.environ``.
+
+    Used by Celery workers (and optionally the API) so that admin saves that
+    only update the shared ``.env`` bind-mount are visible without a process
+    restart. Returns True if the file was (re)read.
+    """
+    global _last_env_mtime
+    path = env_file_path()
+    try:
+        mtime = path.stat().st_mtime if path.is_file() else None
+    except OSError:
+        return False
+
+    with _reload_lock:
+        if not force and mtime is not None and _last_env_mtime is not None and mtime <= _last_env_mtime:
+            return False
+        file_values = _parse_env_file_managed(path)
+        # Apply every managed key that appears in the file; keys absent from the
+        # file are left untouched (may still come from container env_file injection).
+        for name, value in file_values.items():
+            _apply_process_env(name, value if value else None)
+        _last_env_mtime = mtime
+        return True
+
+
+def _ensure_env_file(path: Path) -> None:
+    """Create an empty .env when missing so first-time admin saves can persist."""
+    if path.exists():
+        return
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("", encoding="utf-8")
+    except OSError as exc:
+        raise ApiKeyError(f"Could not create .env at {path}: {exc}") from exc
+
+
 def _upsert_env_file(path: Path, updates: dict[str, str]) -> None:
-    if not path.exists():
-        raise ApiKeyError(f".env file not found at {path}")
+    _ensure_env_file(path)
     if not os.access(path, os.W_OK):
         raise ApiKeyError(f".env file is not writable at {path}")
 
@@ -109,7 +194,7 @@ def _upsert_env_file(path: Path, updates: dict[str, str]) -> None:
         new_lines.append(_format_env_assignment(key, value))
 
     content = newline.join(new_lines)
-    if original.endswith(("\n", "\r\n")):
+    if original.endswith(("\n", "\r\n")) or not original:
         content += newline
 
     fd, tmp_name = tempfile.mkstemp(
@@ -190,6 +275,13 @@ def update_env_keys(
             _apply_process_env(name, old_value if old_value else None)
         raise ApiKeyError(f"Failed to write .env: {exc}") from exc
 
+    # Bump reload marker so this process's next refresh sees the new mtime.
+    global _last_env_mtime
+    try:
+        _last_env_mtime = env_file_path().stat().st_mtime
+    except OSError:
+        _last_env_mtime = None
+
     return changed
 
 
@@ -199,10 +291,11 @@ def update_keys(updates: dict[str, str | None]) -> list[str]:
 
 
 def mask_secret(value: str) -> str:
-    """Return a masked display form for a secret value."""
+    """Public alias used by other admin endpoints."""
     return _mask_value(value)
 
 
 def current_env_value(name: str) -> str:
-    """Read a process-env secret (prefer this over import-time config constants)."""
+    """Return the live process-env value for ``name`` (after optional refresh)."""
+    refresh_managed_keys_from_env_file(force=False)
     return _current_value(name)
