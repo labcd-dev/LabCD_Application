@@ -59,7 +59,7 @@ import type {
   TutorialDocument,
   TutorialDocumentSummary,
   TutorialVideo,
-  UploadResponse,
+  UploadResponse, PlantModelUploadResponse,
   UserJourney,
   MediaUploadResponse,
   SiteBrand,

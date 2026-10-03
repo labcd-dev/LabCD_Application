@@ -13,15 +13,24 @@ export interface JobStatusResponse {
 }
 
 export interface UploadResponse {
-  /** Plant-model RAG upload fields */
-  file_name?: string
+  /** Generic /upload and pipeline upload (HomePage, etc.) — required */
+  file_name: string
+  file_type: string
+  file_content: string
+  /** Plant-model RAG upload extras (optional) */
   local_chars?: number
   attached_files?: string[]
   message?: string
   demo?: boolean
-  /** Legacy generic upload fields (other modules) */
-  file_type?: string
-  file_content?: string
+}
+
+/** Response from POST /plant-model/upload (AgentPlant attachments). */
+export interface PlantModelUploadResponse {
+  file_name: string
+  local_chars?: number
+  attached_files?: string[]
+  message?: string
+  demo?: boolean
 }
 
 export interface MediaUploadResponse {
