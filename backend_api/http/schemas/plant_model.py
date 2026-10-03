@@ -39,12 +39,38 @@ class PlantModelChatRequest(BaseModel):
         ge=1,
         le=5,
     )
+    web_search_enabled: bool = False
+    # When true, ground this turn on session-uploaded files (first message only from UI).
+    use_attachments: bool = False
 
 
 class TokenUsageOut(BaseModel):
     input_tokens: int
     output_tokens: int
     estimated_cost: float
+
+
+class PlantModelStep(BaseModel):
+    kind: str = ""
+    label: str = ""
+    detail: str | None = None
+    ok: bool = True
+
+
+class PlantModelRagChunk(BaseModel):
+    file_name: str = ""
+    text: str = ""
+    score: float | None = None
+
+
+class PlantModelWebSearch(BaseModel):
+    status: str = "empty"
+    query: str | None = None
+    brief: str | None = None
+    link: str | None = None
+    reason: str | None = None
+    links: list[dict[str, Any]] = Field(default_factory=list)
+    queries: list[str] = Field(default_factory=list)
 
 
 class PlantModelChatResponse(BaseModel):
@@ -54,6 +80,9 @@ class PlantModelChatResponse(BaseModel):
     session_state: PlantModelSessionState
     usage: Optional[TokenUsageOut] = None
     conversation_id: int | None = None
+    steps: list[PlantModelStep] = Field(default_factory=list)
+    rag_chunks: list[PlantModelRagChunk] = Field(default_factory=list)
+    web_search: PlantModelWebSearch | None = None
 
 
 class PlantModelConversationSummary(BaseModel):
