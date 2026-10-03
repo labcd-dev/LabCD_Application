@@ -46,6 +46,12 @@ from backend_api.http.services.plant_artifact_service import (
 
 router = APIRouter(prefix="/plant-model", tags=["plant-model"])
 
+# Upload / simulate / attachments (RAG + sandbox) from agent-plant-minimal parity.
+from backend_api.http.services.plant_model_extras import router as plant_model_extras_router
+
+router.include_router(plant_model_extras_router)
+
+
 
 @router.get("/conversations", response_model=list[PlantModelConversationSummary])
 def list_plant_model_conversations(

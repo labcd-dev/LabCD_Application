@@ -753,6 +753,8 @@ export const plantModelApi = {
     conversation_id?: number | null
     max_drafts?: number
     min_user_turns_before_completion?: number
+    web_search_enabled?: boolean
+    use_attachments?: boolean
   }) =>
     apiFetch<PlantModelChatResponse>('/plant-model/chat', {
       method: 'POST',
@@ -764,6 +766,32 @@ export const plantModelApi = {
     apiFetch<PlantModelConversationDetail>(`/plant-model/conversations/${conversationId}`),
   deleteConversation: (conversationId: number) =>
     apiFetch<void>(`/plant-model/conversations/${conversationId}`, { method: 'DELETE' }),
+  upload: async (file: File, opts?: { signal?: AbortSignal }) => {
+    const form = new FormData()
+    form.append('file', file)
+    const base = (import.meta as any).env?.VITE_API_BASE_URL ?? '/api/v1'
+    const token = getAuthToken()
+    const res = await fetch(`${base}/plant-model/upload`, {
+      method: 'POST',
+      body: form,
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      signal: opts?.signal,
+    })
+    if (!res.ok) {
+      let detail = res.statusText
+      try {
+        const body = await res.json()
+        if (body?.detail) detail = String(body.detail)
+      } catch { /* ignore */ }
+      throw new Error(detail)
+    }
+    return res.json() as Promise<import('./types').UploadResponse>
+  },
+  simulate: (body: import('./types').SimulateRequest) =>
+    apiFetch<import('./types').SimulateResponse>('/plant-model/simulate', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
 }
 
 export const regularizerApi = {
