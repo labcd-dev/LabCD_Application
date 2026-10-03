@@ -9,6 +9,8 @@ export const FALLBACK_LANDING: LandingPayload = {
     secondary_color: '#2563eb',
     sign_in_url: 'https://chat.labcd.ai',
     access_platform_url: 'https://chat.labcd.ai',
+    plant_agent_hero_image_url: '',
+    plant_agent_hero_enabled: true,
     page_title: 'AI Control Design Platform - Lab of Control Design',
   },
   menus: {

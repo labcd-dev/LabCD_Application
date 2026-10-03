@@ -25,6 +25,8 @@ DEFAULT_BRAND: dict[str, Any] = {
     "sign_in_url": "https://chat.labcd.ai",
     "access_platform_url": "https://chat.labcd.ai",
     "page_title": "AI Control Design Platform - Lab of Control Design",
+    "plant_agent_hero_image_url": "",
+    "plant_agent_hero_enabled": True,
 }
 
 DEFAULT_LANDING: dict[str, Any] = {

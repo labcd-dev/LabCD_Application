@@ -275,6 +275,36 @@ export function AdminSitePage() {
             prefix="logo"
             previewClassName="h-16 w-auto max-w-[220px] object-contain"
           />
+          <div className="rounded-xl border border-border bg-surface-muted/40 p-4 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="m-0 text-sm font-medium text-foreground">Plant Agent hero image</p>
+                <p className="m-0 mt-1 text-xs text-muted-text">
+                  Shown on the empty Design / Plant Agent chat. Leave blank to use the packaged default
+                  (<code className="text-[11px]">/assets/plant-agent-hero.png</code>).
+                </p>
+              </div>
+              <label className="flex items-center gap-2 text-sm text-foreground">
+                <input
+                  type="checkbox"
+                  checked={brand.plant_agent_hero_enabled !== false}
+                  onChange={(e) =>
+                    setBrand({ ...brand, plant_agent_hero_enabled: e.target.checked })
+                  }
+                />
+                Enabled
+              </label>
+            </div>
+            <ImageUploadField
+              label="Custom hero image"
+              value={brand.plant_agent_hero_image_url || ''}
+              onChange={(url) => setBrand({ ...brand, plant_agent_hero_image_url: url })}
+              prefix="plant-agent-hero"
+              hint="JPEG, PNG, or WebP up to 5 MB. Landscape 16:9 works best."
+              previewClassName="h-28 w-auto max-w-full object-cover rounded-md"
+            />
+          </div>
+
           <div className="grid gap-4 sm:grid-cols-2">
             <ColorField label="Primary color" value={brand.primary_color} onChange={(v) => setBrand({ ...brand, primary_color: v })} />
             <ColorField label="Secondary color" value={brand.secondary_color} onChange={(v) => setBrand({ ...brand, secondary_color: v })} />

@@ -57,7 +57,7 @@ def ensure_site_seeded(db: Session) -> None:
 def get_brand(db: Session) -> SiteBrand:
     ensure_site_seeded(db)
     raw = plan_service.get_setting(db, SETTING_BRAND)
-    data = _parse_json(raw, DEFAULT_BRAND)
+    data = {**DEFAULT_BRAND, **_parse_json(raw, DEFAULT_BRAND)}
     return SiteBrand.model_validate(data)
 
 
