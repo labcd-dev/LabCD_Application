@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useSearchParams } from 'react-router-dom'
 import Plot from 'react-plotly.js'
-import { plantModelApi } from '../api/endpoints'
+import { plantModelApi, siteApi } from '../api/endpoints'
 import type {
   PlantModelChatMessage,
   PlantModelChatResponse,
@@ -309,6 +309,8 @@ export function AgentPlantChat({ model = "gpt-4o-mini", onUseModel }: Props) {
   }
   const [attachment, setAttachment] = useState<PendingAttachment | null>(null)
   const uploadAbortRef = useRef<AbortController | null>(null)
+  const [heroEnabled, setHeroEnabled] = useState(true)
+  const [heroImageUrl, setHeroImageUrl] = useState<string>('/assets/plant-agent-hero.png')
   const [session, setSession] = useState<PlantModelSessionState | null>(null)
   const [conversationId, setConversationId] = useState<number | null>(null)
   const [draft, setDraft] = useState<PlantModelResult | null>(null)
@@ -339,6 +341,28 @@ export function AgentPlantChat({ model = "gpt-4o-mini", onUseModel }: Props) {
     const id = window.setInterval(() => setNow(Date.now()), ms)
     return () => window.clearInterval(id)
   }, [loading])
+
+  // Site brand → empty-state hero (admin-configurable)
+  useEffect(() => {
+    let cancelled = false
+    siteApi
+      .getLanding()
+      .then((payload) => {
+        if (cancelled) return
+        const brand = payload.brand
+        const enabled = brand.plant_agent_hero_enabled !== false
+        setHeroEnabled(enabled)
+        const custom = (brand.plant_agent_hero_image_url || '').trim()
+        setHeroImageUrl(custom || '/assets/plant-agent-hero.png')
+      })
+      .catch(() => {
+        /* keep packaged default */
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
 
   const [searchParams, setSearchParams] = useSearchParams()
   const location = useLocation()
@@ -890,11 +914,24 @@ export function AgentPlantChat({ model = "gpt-4o-mini", onUseModel }: Props) {
           <div className="ap-chat__inner">
             {turns.length === 0 && (
               <div className="ap-empty">
-                <h2>Describe a plant model</h2>
-                <p>
-                  Start with the physical system — states, inputs, parameters. AgentPlant drafts
-                  dynamics code and can simulate it in the sandbox.
-                </p>
+                {heroEnabled && heroImageUrl && (
+                  <div className="ap-empty__hero" aria-hidden="true">
+                    <img
+                      src={heroImageUrl}
+                      alt=""
+                      className="ap-empty__hero-img"
+                      decoding="async"
+                    />
+                    <div className="ap-empty__hero-scrim" />
+                  </div>
+                )}
+                <div className="ap-empty__copy">
+                  <h2>Describe a plant model</h2>
+                  <p>
+                    Start with the physical system — states, inputs, parameters. AgentPlant drafts
+                    dynamics code and can simulate it in the sandbox.
+                  </p>
+                </div>
               </div>
             )}
 

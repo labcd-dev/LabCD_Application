@@ -58,7 +58,9 @@ html, body, #root {
   flex-direction: column;
   min-width: 0;
   min-height: 0;
+  height: 100%;
   border-right: 1px solid var(--ap-border);
+  overflow: hidden;
 }
 
 .ap-chat__scroll {
@@ -510,15 +512,31 @@ html, body, #root {
 }
 
 .ap-composer-wrap--empty {
-  flex: 1;
+  flex: 0 0 auto;           /* was flex: 1 — that pushed layout tall */
   align-items: center;
-  padding-bottom: 12vh;
+  padding: 8px 80px 240px;   /* was padding-bottom: 12vh */
   background: transparent;
 }
 
+.ap-chat:has(.ap-composer-wrap--empty) {
+  overflow: hidden;
+}
+
 .ap-chat:has(.ap-composer-wrap--empty) .ap-chat__scroll {
-  flex: 0 0 auto;
-  padding-top: 12vh;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;         /* was auto + padding-top: 12vh */
+  padding: 8px 0 0;
+  justify-content: center;
+}
+
+.ap-chat:has(.ap-composer-wrap--empty) .ap-chat__inner {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  max-height: 100%;
 }
 
 .ap-composer {
@@ -721,11 +739,71 @@ html, body, #root {
   background: var(--ap-hover);
 }
 
+/* Empty-state hero (admin-configurable plant_agent_hero_*)
+   Target: hinge high (upper third), title mid-frame, luminous swing arc
+   visible in the lower band — do NOT fade the bottom of the image. */
 .ap-empty {
+  position: relative;
   text-align: center;
-  padding: 8px 12px 28px;
-  max-width: 520px;
+  padding: 4px 12px 8px;
+  max-width: 720px;
+  width: 100%;
   margin: 0 auto;
+  z-index: 1;
+  flex: 1 1 auto;
+  min-height: 0;            /* was min(52vh, 420px) — caused overflow */
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.ap-empty__hero {
+  position: absolute;
+  /* Full empty-state frame so the bottom arc is not clipped */
+  inset: 12% 4% auto;
+  pointer-events: none;
+  z-index: 0;
+  /*overflow: visible;*/
+  border-radius: 0;
+  opacity: 0.8;
+  /* Match chat surface: pure-black plate in the PNG is replaced via blend */
+  /*background: var(--ap-bg, #0a0d12);*/
+  /*mask-image: none;*/
+  /*-webkit-mask-image: none;*/
+}
+
+.ap-empty__hero-img {
+  width: 100%;
+  height: 100%;
+  /* contain keeps hinge + full arc; cover was cropping the low light */
+  object-fit: contain;
+  object-position: center center;
+  display: block;
+  filter: none;
+  /*mix-blend-mode: lighten !* #000 → surface color *!*/
+}
+
+.ap-empty__hero-scrim {
+  position: absolute;
+  inset: 0;
+  /* Soft local readablility behind title only — leave lower arc bright */
+  background: radial-gradient(
+    ellipse 70% 45% at 50% 48%,
+    color-mix(in srgb, var(--ap-bg, #0a0d12) 55%, transparent) 0%,
+    color-mix(in srgb, var(--ap-bg, #0a0d12) 25%, transparent) 55%,
+    transparent 75%
+  );
+  pointer-events: none;
+}
+
+.ap-empty__copy {
+  position: relative;
+  z-index: 1;
+  padding-top: 0;
+  padding-bottom: min(4vh, 28px);  /* was min(10vh, 72px) */
+  max-width: 480px;
 }
 
 .ap-empty h2 {
@@ -733,14 +811,20 @@ html, body, #root {
   font-size: 1.35rem;
   font-weight: 600;
   color: var(--ap-text);
+  text-shadow:
+    0 0 24px color-mix(in srgb, var(--ap-bg, #000) 80%, transparent),
+    0 1px 12px color-mix(in srgb, var(--ap-bg, #000) 70%, transparent);
 }
 
 .ap-empty p {
-  margin: 0;
+  margin: 0 auto;
+  max-width: 420px;
   color: var(--ap-muted);
   font-size: 14.5px;
   line-height: 1.5;
+  text-shadow: 0 0 18px color-mix(in srgb, var(--ap-bg, #000) 75%, transparent);
 }
+
 
 .ap-panel {
   display: flex;
@@ -973,30 +1057,7 @@ html, body, #root {
   min-height: 280px;
 }
 
-.ap-empty {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  gap: 8px;
-  padding: 40px 24px;
-  color: var(--ap-muted);
-}
-
-.ap-empty h2 {
-  margin: 0;
-  font-size: 1.25rem;
-  color: var(--ap-text);
-  font-weight: 600;
-}
-
-.ap-empty p {
-  margin: 0;
-  max-width: 360px;
-  font-size: 13.5px;
-}
+/* legacy .ap-empty rules removed — see hero block above */
 
 @media (max-width: 900px) {
   .ap-shell {

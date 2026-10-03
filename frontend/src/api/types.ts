@@ -998,6 +998,9 @@ export interface SiteBrand {
   sign_in_url: string
   access_platform_url: string
   page_title: string
+  /** Plant Agent empty-state hero. Empty string → packaged default when enabled. */
+  plant_agent_hero_image_url?: string
+  plant_agent_hero_enabled?: boolean
 }
 
 export interface NavMenuItem {

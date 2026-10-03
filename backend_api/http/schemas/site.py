@@ -16,6 +16,10 @@ class SiteBrand(BaseModel):
     sign_in_url: str = "https://chat.labcd.ai"
     access_platform_url: str = "https://chat.labcd.ai"
     page_title: str = "AI Control Design Platform - Lab of Control Design"
+    # Plant Agent empty-state hero (Design / AgentPlantChat). Empty url + enabled
+    # uses the packaged default under /assets/plant-agent-hero.png.
+    plant_agent_hero_image_url: str = ""
+    plant_agent_hero_enabled: bool = True
 
 
 class NavMenuItemOut(BaseModel):
