@@ -785,7 +785,7 @@ export const plantModelApi = {
       } catch { /* ignore */ }
       throw new Error(detail)
     }
-    return res.json() as Promise<import('./types').UploadResponse>
+    return res.json() as Promise<import('./types').PlantModelUploadResponse>
   },
   simulate: (body: import('./types').SimulateRequest) =>
     apiFetch<import('./types').SimulateResponse>('/plant-model/simulate', {
