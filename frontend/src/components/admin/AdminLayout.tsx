@@ -90,11 +90,11 @@ export function AdminLayout() {
       )}
 
       <aside
-        className={`admin-sidebar fixed inset-y-0 left-0 z-40 flex w-[260px] flex-col border-r border-border bg-surface-elevated/95 shadow-sm backdrop-blur-md transition-transform duration-200 lg:static lg:translate-x-0 ${
+        className={`admin-sidebar fixed inset-y-0 left-0 z-40 flex h-dvh w-[260px] flex-col overflow-hidden border-r border-border bg-surface-elevated/95 shadow-sm backdrop-blur-md transition-transform duration-200 lg:sticky lg:top-0 lg:translate-x-0 ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-4">
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-5 py-4">
           <Link to="/admin" className="flex items-center gap-3" onClick={closeSidebar}>
             <img src="/logo.svg" alt="LabCD" className="h-10 w-10" />
             <div>
@@ -114,7 +114,7 @@ export function AdminLayout() {
           </button>
         </div>
 
-        <nav className="flex flex-1 flex-col gap-1 p-3">
+        <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-3">
           {visibleNav.map(({ to, end, label, icon: Icon }) => (
             <NavLink
               key={to}
@@ -135,7 +135,7 @@ export function AdminLayout() {
           ))}
         </nav>
 
-        <div className="space-y-3 border-t border-border p-4">
+        <div className="shrink-0 space-y-3 border-t border-border p-4">
           <Link
             to="/design"
             className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm text-muted-text transition-colors hover:bg-surface-hover hover:text-foreground"
