@@ -1935,6 +1935,9 @@ def submit_job(
     )
     job_id = record.job_id
     credit_service.begin_job_usage(request.user_id, "mpc", job_id=job_id, check_balance=False)
+    from backend_api.http.services.analytics_service import record_module_use
+
+    record_module_use(request.user_id, "mpc")
     # Automatically link or create in Project database so it appears in Projects history
     try:
         from backend_api.http.services.project_service import link_or_create_for_job

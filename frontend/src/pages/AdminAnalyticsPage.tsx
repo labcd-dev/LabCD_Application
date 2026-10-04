@@ -27,11 +27,14 @@ import {
 const RANGE_OPTIONS = [7, 30, 90] as const
 
 const MODULE_LABELS: Record<string, string> = {
-  silo: 'Silo',
-  mulo: 'Mulo',
+  silo: 'SILO',
+  mulo: 'MULO',
   recommender: 'Recommender',
   trimmer: 'Trimmer',
   regularize: 'Regularizer',
+  plant_model: 'Plant Model',
+  mpc: 'MPC',
+  adaptive: 'Adaptive',
 }
 
 function formatPercent(value: number | null | undefined): string {

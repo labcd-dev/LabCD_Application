@@ -16,7 +16,9 @@ EVENT_ACTIVE = "active"
 EVENT_MODULE = "module"
 EVENT_LLM = "llm"
 
-VALID_MODULES = frozenset({"silo", "mulo", "recommender", "trimmer", "regularize", "plant_model"})
+VALID_MODULES = frozenset(
+    {"silo", "mulo", "recommender", "trimmer", "regularize", "plant_model", "mpc", "adaptive"}
+)
 MAX_LLM_MODEL_LEN = 100
 
 
