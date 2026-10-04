@@ -4,14 +4,17 @@ LabCD can post a once-per-day product analytics summary to a Telegram channel. B
 
 ## What is sent
 
-Plain-text message including:
+HTML-formatted Telegram message (`parse_mode: HTML`) with section icons, including:
 
 - UTC date
 - Daily active users (DAU)
 - Monthly active users (MAU, trailing 30 days)
 - D7 and D30 retention
-- Module run counts for today (Silo, Mulo, Recommender, Trimmer, Regularizer)
-- LLM usage for today (most-used model plus per-model run counts)
+- Module run counts for today (always lists every known module, including zeros, plus a total):
+  Regularizer, Plant Model, SILO, Recommender, Trimmer, MULO, MPC, Adaptive
+- LLM usage for today (top model plus per-model run counts)
+
+MPC and Adaptive counts come from job-start events (`record_module_use` when a job begins). Plant Model is recorded when a chat run starts. Classic pipeline modules are recorded as before.
 
 Timezone for the schedule and “today” is **UTC**.
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import logging
 import threading
 from datetime import datetime, timezone
@@ -33,13 +34,17 @@ _stop_event = threading.Event()
 _scheduler_thread: threading.Thread | None = None
 _scheduler_lock = threading.Lock()
 
-MODULE_LABELS = {
-    "silo": "Silo",
-    "mulo": "Mulo",
-    "recommender": "Recommender",
-    "trimmer": "Trimmer",
-    "regularize": "Regularizer",
-}
+# Fixed display order for the daily digest (icon + label).
+MODULE_DISPLAY = (
+    ("regularize", "⚙️ Regularizer"),
+    ("plant_model", "🤖 Plant Model"),
+    ("silo", "🔁 SILO"),
+    ("recommender", "📐 Recommender"),
+    ("trimmer", "✂️ Trimmer"),
+    ("mulo", "🔀 MULO"),
+    ("mpc", "🎯 MPC"),
+    ("adaptive", "📈 Adaptive"),
+)
 
 
 def _utcnow() -> datetime:
@@ -117,38 +122,43 @@ def _format_percent(value: float | None) -> str:
 
 
 def format_daily_message(db: Session) -> str:
-    """Build a plain-text daily digest from analytics aggregates."""
+    """Build an HTML daily digest from analytics aggregates."""
     data = analytics_service.get_analytics(db, days=1)
     today = _today_iso()
-    lines = [
-        "LabCD daily analytics",
-        f"Date (UTC): {today}",
-        "",
-        f"DAU: {data['dau_today']}",
-        f"MAU (30d): {data['mau']}",
-        f"D7 retention: {_format_percent(data.get('retention_d7'))}",
-        f"D30 retention: {_format_percent(data.get('retention_d30'))}",
-        "",
-        "Module runs (today):",
-    ]
-    modules = data.get("modules") or []
-    if not modules:
-        lines.append("  (none)")
-    else:
-        for row in modules:
-            label = MODULE_LABELS.get(row["module"], row["module"])
-            lines.append(f"  {label}: {row['count']}")
+    counts = {row["module"]: int(row["count"]) for row in (data.get("modules") or [])}
+    total_runs = 0
+    module_lines: list[str] = []
+    for key, label in MODULE_DISPLAY:
+        count = counts.get(key, 0)
+        total_runs += count
+        module_lines.append(f"• {label}: {count}")
 
-    lines.extend(["", "LLM usage (today):"])
+    lines = [
+        "📊 <b>LabCD Daily Analytics</b>",
+        f"📅 <i>{html.escape(today)} UTC</i>",
+        "",
+        "👥 <b>Users</b>",
+        f"• DAU: <b>{data['dau_today']}</b>",
+        f"• MAU (30d): <b>{data['mau']}</b>",
+        f"• D7 retention: {_format_percent(data.get('retention_d7'))}",
+        f"• D30 retention: {_format_percent(data.get('retention_d30'))}",
+        "",
+        "🧩 <b>Module runs</b>",
+        *module_lines,
+        f"• Total: <b>{total_runs}</b>",
+        "",
+        "🧠 <b>LLM usage</b>",
+    ]
     llms = data.get("llms") or []
     most_used = data.get("most_used_llm")
     if most_used:
-        lines.append(f"  Most used: {most_used}")
+        lines.append(f"• Top: <code>{html.escape(str(most_used))}</code>")
     if not llms:
-        lines.append("  (none)")
+        lines.append("• (none)")
     else:
         for row in llms:
-            lines.append(f"  {row['model']}: {row['count']}")
+            model = html.escape(str(row["model"]))
+            lines.append(f"• {model}: {row['count']}")
     return "\n".join(lines)
 
 
@@ -167,7 +177,12 @@ def send_message(chat_id: str, text: str) -> None:
     with httpx.Client(timeout=30.0) as client:
         response = client.post(
             url,
-            json={"chat_id": chat_id, "text": text, "disable_web_page_preview": True},
+            json={
+                "chat_id": chat_id,
+                "text": text,
+                "parse_mode": "HTML",
+                "disable_web_page_preview": True,
+            },
         )
         response.raise_for_status()
         payload = response.json()
