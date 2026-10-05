@@ -121,9 +121,17 @@ def _format_percent(value: float | None) -> str:
     return f"{value * 100:.1f}%"
 
 
+def _format_credits(value: float | int) -> str:
+    amount = float(value or 0)
+    if amount == int(amount):
+        return f"{int(amount):,}"
+    return f"{amount:,.2f}"
+
+
 def format_daily_message(db: Session) -> str:
     """Build an HTML daily digest from analytics aggregates."""
     data = analytics_service.get_analytics(db, days=1)
+    extras = analytics_service.get_digest_extras(db)
     today = _today_iso()
     counts = {row["module"]: int(row["count"]) for row in (data.get("modules") or [])}
     total_runs = 0
@@ -138,10 +146,17 @@ def format_daily_message(db: Session) -> str:
         f"📅 <i>{html.escape(today)} UTC</i>",
         "",
         "👥 <b>Users</b>",
+        f"• Total: <b>{extras['users_total']}</b>",
+        f"• New today: <b>{extras['users_new_today']}</b>",
         f"• DAU: <b>{data['dau_today']}</b>",
         f"• MAU (30d): <b>{data['mau']}</b>",
+        f"• Logins today: <b>{extras['logins_today']}</b>",
         f"• D7 retention: {_format_percent(data.get('retention_d7'))}",
         f"• D30 retention: {_format_percent(data.get('retention_d30'))}",
+        "",
+        "📁 <b>Projects</b>",
+        f"• Total: <b>{extras['projects_total']}</b>",
+        f"• Created today: <b>{extras['projects_new_today']}</b>",
         "",
         "🧩 <b>Module runs</b>",
         *module_lines,
@@ -159,6 +174,19 @@ def format_daily_message(db: Session) -> str:
         for row in llms:
             model = html.escape(str(row["model"]))
             lines.append(f"• {model}: {row['count']}")
+
+    lines.extend(
+        [
+            "",
+            "💳 <b>Credits</b>",
+            f"• Spent today: <b>{_format_credits(extras['credits_spent_today'])}</b>",
+            "",
+            "⚠️ <b>Health</b>",
+            f"• Errors today: <b>{extras['errors_today']}</b>",
+            f"• Bug reports today: <b>{extras['bugs_today']}</b>",
+            f"• Feedback surveys today: <b>{extras['feedback_today']}</b>",
+        ]
+    )
     return "\n".join(lines)
 
 

@@ -9,8 +9,19 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from backend_api.common.datetime_utils import as_utc, resolve_timezone, utcnow
-from backend_api.db.models import AnalyticsEvent, User
+from backend_api.db.models import (
+    AnalyticsEvent,
+    BugReport,
+    CreditLedgerEntry,
+    ErrorEvent,
+    FeedbackSurveyResponse,
+    LoginHistory,
+    Project,
+    User,
+)
 from backend_api.db.session import SessionLocal
+
+ENTRY_USAGE_DEBIT = "usage_debit"
 
 EVENT_ACTIVE = "active"
 EVENT_MODULE = "module"
@@ -157,6 +168,49 @@ def _cohort_retention(db: Session, *, retention_days: int, now: datetime) -> flo
         if hit is not None:
             retained += 1
     return retained / len(cohort_users)
+
+
+def _count(db: Session, model, *filters) -> int:
+    return int(db.query(func.count(model.id)).filter(*filters).scalar() or 0)
+
+
+def get_digest_extras(db: Session) -> dict:
+    """Cheap UTC-day aggregates for the Telegram daily digest."""
+    today_start = _utc_day_start()
+    tomorrow = today_start + timedelta(days=1)
+    day_filters = lambda column: (column >= today_start, column < tomorrow)
+
+    credits_raw = (
+        db.query(func.sum(-CreditLedgerEntry.amount))
+        .filter(
+            CreditLedgerEntry.entry_type == ENTRY_USAGE_DEBIT,
+            CreditLedgerEntry.created_at >= today_start,
+            CreditLedgerEntry.created_at < tomorrow,
+        )
+        .scalar()
+    )
+    credits_spent = float(credits_raw or 0)
+    if credits_spent < 0:
+        credits_spent = 0.0
+
+    return {
+        "users_total": _count(db, User),
+        "users_new_today": _count(db, User, *day_filters(User.created_at)),
+        "logins_today": _count(
+            db,
+            LoginHistory,
+            LoginHistory.success.is_(True),
+            *day_filters(LoginHistory.created_at),
+        ),
+        "projects_total": _count(db, Project),
+        "projects_new_today": _count(db, Project, *day_filters(Project.created_at)),
+        "errors_today": _count(db, ErrorEvent, *day_filters(ErrorEvent.created_at)),
+        "bugs_today": _count(db, BugReport, *day_filters(BugReport.created_at)),
+        "feedback_today": _count(
+            db, FeedbackSurveyResponse, *day_filters(FeedbackSurveyResponse.created_at)
+        ),
+        "credits_spent_today": credits_spent,
+    }
 
 
 def get_analytics(db: Session, days: int = 30, tz_name: str | None = None) -> dict:
