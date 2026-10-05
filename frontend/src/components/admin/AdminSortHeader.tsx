@@ -4,7 +4,7 @@ import type { SortDir } from '../../hooks/useClientSort'
 type AdminSortHeaderProps<K extends string> = {
   label: string
   sortKey: K
-  activeKey: K
+  activeKey: string
   dir: SortDir
   onSort: (key: K) => void
   className?: string

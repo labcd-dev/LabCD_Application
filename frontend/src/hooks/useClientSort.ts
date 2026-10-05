@@ -7,20 +7,17 @@ export type SortState<K extends string> = {
   dir: SortDir
 }
 
-type AccessorMap<T, K extends string> = Record<K, (item: T) => string | number | boolean | null | undefined>
+type SortValue = string | number | boolean | null | undefined
+type AccessorMap<T> = Record<string, (item: T) => SortValue>
 
-type Options<T, K extends string> = {
+type Options<T, A extends AccessorMap<T>> = {
   items: T[]
-  defaultKey: K
+  defaultKey: keyof A & string
   defaultDir?: SortDir
-  accessors: AccessorMap<T, K>
+  accessors: A
 }
 
-function compareValues(
-  a: string | number | boolean | null | undefined,
-  b: string | number | boolean | null | undefined,
-  dir: SortDir,
-): number {
+function compareValues(a: SortValue, b: SortValue, dir: SortDir): number {
   const emptyA = a === null || a === undefined || a === ''
   const emptyB = b === null || b === undefined || b === ''
   if (emptyA && emptyB) return 0
@@ -41,12 +38,14 @@ function compareValues(
   return dir === 'asc' ? result : -result
 }
 
-export function useClientSort<T, K extends string>({
+export function useClientSort<T, A extends AccessorMap<T>>({
   items,
   defaultKey,
   defaultDir = 'asc',
   accessors,
-}: Options<T, K>) {
+}: Options<T, A>) {
+  type K = keyof A & string
+
   const [sort, setSort] = useState<SortState<K>>({
     key: defaultKey,
     dir: defaultDir,
