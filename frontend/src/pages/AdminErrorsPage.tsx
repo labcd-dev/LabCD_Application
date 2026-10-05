@@ -5,9 +5,11 @@ import { adminApi } from '../api/endpoints'
 import type { ErrorEvent, ErrorTrackingSettings } from '../api/types'
 import { AdminDownloadCsvButton } from '../components/admin/AdminDownloadCsvButton'
 import { AdminPagination } from '../components/admin/AdminPagination'
+import { AdminSortHeader } from '../components/admin/AdminSortHeader'
 import { StatusMessage } from '../components/StatusMessage'
 import { useAuth } from '../context/AuthContext'
 import { useClientPagination } from '../hooks/useClientPagination'
+import { useClientSort } from '../hooks/useClientSort'
 import { downloadCsv } from '../lib/downloadCsv'
 import {
   btnBase,
@@ -86,8 +88,43 @@ export function AdminErrorsPage() {
     return parts.length ? parts.join(', ') : 'all events'
   }, [query, source, statusCode])
 
-  const pagination = useClientPagination(events, {
-    resetKey: `${source}|${statusCode}|${query}`,
+  const errorSortAccessors = useMemo(
+    () => ({
+      created_at: (e: ErrorEvent) => e.created_at ?? '',
+      source: (e: ErrorEvent) => e.source,
+      status_code: (e: ErrorEvent) => e.status_code ?? -1,
+      path: (e: ErrorEvent) => e.path ?? '',
+      message: (e: ErrorEvent) => e.message,
+    }),
+    [],
+  )
+
+  const {
+    sortedItems: sortedEvents,
+    sortBy,
+    sortDir,
+    toggle: toggleSort,
+    resetKey: sortResetKey,
+  } = useClientSort({
+    items: events,
+    defaultKey: 'created_at',
+    defaultDir: 'desc',
+    accessors: errorSortAccessors,
+  })
+
+  const exportParams = useMemo(() => {
+    const statusFilter = statusCode.trim() ? Number(statusCode) : undefined
+    return {
+      source: source || undefined,
+      status_code: Number.isFinite(statusFilter) ? statusFilter : undefined,
+      q: query.trim() || undefined,
+      sort_by: sortBy,
+      sort_dir: sortDir,
+    }
+  }, [query, sortBy, sortDir, source, statusCode])
+
+  const pagination = useClientPagination(sortedEvents, {
+    resetKey: `${source}|${statusCode}|${query}|${sortResetKey}`,
   })
 
   if (!canManage) {
@@ -120,14 +157,8 @@ export function AdminErrorsPage() {
   const handleDownloadCsv = async () => {
     setError(null)
     try {
-      const statusFilter = statusCode.trim() ? Number(statusCode) : undefined
       await downloadCsv(
-        () =>
-          adminApi.downloadErrorsCsv({
-            source: source || undefined,
-            status_code: Number.isFinite(statusFilter) ? statusFilter : undefined,
-            q: query.trim() || undefined,
-          }),
+        () => adminApi.downloadErrorsCsv(exportParams),
         'error_events.csv',
       )
     } catch (err) {
@@ -256,11 +287,46 @@ export function AdminErrorsPage() {
               <table className="w-full min-w-[720px] border-collapse text-left text-sm">
                 <thead>
                   <tr className="border-b border-border text-muted-text">
-                    <th className="px-2 py-2 font-medium">When</th>
-                    <th className="px-2 py-2 font-medium">Source</th>
-                    <th className="px-2 py-2 font-medium">Status</th>
-                    <th className="px-2 py-2 font-medium">Path</th>
-                    <th className="px-2 py-2 font-medium">Message</th>
+                    <AdminSortHeader
+                      label="When"
+                      sortKey="created_at"
+                      activeKey={sortBy}
+                      dir={sortDir}
+                      onSort={toggleSort}
+                      className="px-2 py-2"
+                    />
+                    <AdminSortHeader
+                      label="Source"
+                      sortKey="source"
+                      activeKey={sortBy}
+                      dir={sortDir}
+                      onSort={toggleSort}
+                      className="px-2 py-2"
+                    />
+                    <AdminSortHeader
+                      label="Status"
+                      sortKey="status_code"
+                      activeKey={sortBy}
+                      dir={sortDir}
+                      onSort={toggleSort}
+                      className="px-2 py-2"
+                    />
+                    <AdminSortHeader
+                      label="Path"
+                      sortKey="path"
+                      activeKey={sortBy}
+                      dir={sortDir}
+                      onSort={toggleSort}
+                      className="px-2 py-2"
+                    />
+                    <AdminSortHeader
+                      label="Message"
+                      sortKey="message"
+                      activeKey={sortBy}
+                      dir={sortDir}
+                      onSort={toggleSort}
+                      className="px-2 py-2"
+                    />
                   </tr>
                 </thead>
                 <tbody>

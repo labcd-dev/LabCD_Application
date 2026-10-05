@@ -374,13 +374,59 @@ def list_all_projects(
     *,
     user_id: int | None = None,
     pipeline_type: str | None = None,
+    q: str | None = None,
+    sort_by: str | None = None,
+    sort_dir: str | None = None,
 ) -> list[Project]:
+    from backend_api.common.query_sort import sort_rows
+
     query = db.query(Project).options(joinedload(Project.owner))
     if user_id is not None:
         query = query.filter(Project.user_id == user_id)
     if pipeline_type is not None:
         query = query.filter(Project.pipeline_type == pipeline_type)
-    return query.order_by(Project.updated_at.desc()).all()
+    projects = query.all()
+
+    needle = (q or "").strip().lower()
+    if needle:
+        filtered: list[Project] = []
+        for project in projects:
+            owner_email = project.owner.email if project.owner else ""
+            if (
+                needle in (project.title or "").lower()
+                or needle in (project.file_name or "").lower()
+                or needle in (owner_email or "").lower()
+                or needle in (project.status or "").lower()
+            ):
+                filtered.append(project)
+        projects = filtered
+
+    def _score(project: Project) -> float:
+        summary = project_to_summary(project, include_owner=False)
+        value = summary.get("score")
+        return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else -1.0
+
+    def _rating(project: Project) -> float:
+        summary = project_to_summary(project, include_owner=False)
+        value = summary.get("rating")
+        return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else -1.0
+
+    return sort_rows(
+        projects,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+        default_key="updated_at",
+        default_dir="desc",
+        accessors={
+            "title": lambda p: p.title or "",
+            "owner_email": lambda p: p.owner.email if p.owner else "",
+            "pipeline_type": lambda p: p.pipeline_type or "",
+            "status": lambda p: p.status or "",
+            "score": _score,
+            "rating": _rating,
+            "updated_at": lambda p: p.updated_at.isoformat() if p.updated_at else "",
+        },
+    )
 
 
 def update_project(

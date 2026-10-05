@@ -126,7 +126,12 @@ def list_audits(
     success: bool | None = None,
     q: str | None = None,
     limit: int = 200,
+    max_limit: int = 1000,
+    sort_by: str | None = None,
+    sort_dir: str | None = None,
 ) -> list[AuditLog]:
+    from backend_api.common.query_sort import apply_sql_order
+
     query = db.query(AuditLog)
     if category:
         query = query.filter(AuditLog.category == category.strip())
@@ -147,11 +152,22 @@ def list_audits(
                 AuditLog.ip_address.ilike(like),
             )
         )
-    return (
-        query.order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
-        .limit(max(1, min(limit, 1000)))
-        .all()
+    query = apply_sql_order(
+        query,
+        {
+            "created_at": AuditLog.created_at,
+            "category": AuditLog.category,
+            "action": AuditLog.action,
+            "actor_email": AuditLog.actor_email,
+            "success": AuditLog.success,
+            "ip_address": AuditLog.ip_address,
+        },
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+        default_key="created_at",
+        default_dir="desc",
     )
+    return query.limit(max(1, min(limit, max_limit))).all()
 
 
 def entry_to_dict(entry: AuditLog) -> dict[str, Any]:
@@ -203,7 +219,9 @@ def export_csv(
     actor_user_id: int | None = None,
     success: bool | None = None,
     q: str | None = None,
-    limit: int = 5000,
+    limit: int = 10000,
+    sort_by: str | None = None,
+    sort_dir: str | None = None,
 ) -> str:
     entries = list_audits(
         db,
@@ -213,6 +231,9 @@ def export_csv(
         success=success,
         q=q,
         limit=min(limit, 10000),
+        max_limit=10000,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
     )
     fieldnames = [
         "id",

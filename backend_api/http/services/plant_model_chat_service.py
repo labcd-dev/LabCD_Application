@@ -171,13 +171,49 @@ def list_all_conversations(
     *,
     user_id: int | None = None,
     status: str | None = None,
+    q: str | None = None,
+    sort_by: str | None = None,
+    sort_dir: str | None = None,
 ) -> list[PlantModelConversation]:
+    from backend_api.common.query_sort import sort_rows
+
     query = db.query(PlantModelConversation).options(joinedload(PlantModelConversation.owner))
     if user_id is not None:
         query = query.filter(PlantModelConversation.user_id == user_id)
     if status is not None:
         query = query.filter(PlantModelConversation.status == status)
-    return query.order_by(PlantModelConversation.updated_at.desc()).all()
+    conversations = query.all()
+
+    needle = (q or "").strip().lower()
+    if needle:
+        filtered: list[PlantModelConversation] = []
+        for conversation in conversations:
+            owner_email = conversation.owner.email if conversation.owner else ""
+            if (
+                needle in (conversation.title or "").lower()
+                or needle in (conversation.final_system_name or "").lower()
+                or needle in (owner_email or "").lower()
+                or needle in (conversation.status or "").lower()
+                or needle in (conversation.llm_model or "").lower()
+            ):
+                filtered.append(conversation)
+        conversations = filtered
+
+    return sort_rows(
+        conversations,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+        default_key="updated_at",
+        default_dir="desc",
+        accessors={
+            "title": lambda c: c.title or "",
+            "system_name": lambda c: c.final_system_name or "",
+            "owner_email": lambda c: c.owner.email if c.owner else "",
+            "llm_model": lambda c: c.llm_model or "",
+            "status": lambda c: c.status or "",
+            "updated_at": lambda c: c.updated_at.isoformat() if c.updated_at else "",
+        },
+    )
 
 
 def assert_conversation_access(conversation: PlantModelConversation, user: User) -> None:

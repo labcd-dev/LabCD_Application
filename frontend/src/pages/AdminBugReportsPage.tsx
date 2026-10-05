@@ -1,14 +1,16 @@
 import { Navigate } from 'react-router-dom'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { RefreshCw, ZoomIn } from 'lucide-react'
 import { bugReportsApi } from '../api/endpoints'
 import type { BugReport, BugReportSettings } from '../api/types'
 import { AdminDownloadCsvButton } from '../components/admin/AdminDownloadCsvButton'
 import { AdminPagination } from '../components/admin/AdminPagination'
+import { AdminSortHeader } from '../components/admin/AdminSortHeader'
 import { ImageModal } from '../components/ImageModal'
 import { StatusMessage } from '../components/StatusMessage'
 import { useAuth } from '../context/AuthContext'
 import { useClientPagination } from '../hooks/useClientPagination'
+import { useClientSort } from '../hooks/useClientSort'
 import { downloadCsv } from '../lib/downloadCsv'
 import {
   btnBase,
@@ -77,7 +79,40 @@ export function AdminBugReportsPage() {
     void load()
   }, [canManage, load])
 
-  const pagination = useClientPagination(reports, { resetKey: statusFilter })
+  const bugSortAccessors = useMemo(
+    () => ({
+      created_at: (r: BugReport) => r.created_at ?? '',
+      user_email: (r: BugReport) => r.user_email ?? '',
+      status: (r: BugReport) => r.status,
+    }),
+    [],
+  )
+
+  const {
+    sortedItems: sortedReports,
+    sortBy,
+    sortDir,
+    toggle: toggleSort,
+    resetKey: sortResetKey,
+  } = useClientSort({
+    items: reports,
+    defaultKey: 'created_at',
+    defaultDir: 'desc',
+    accessors: bugSortAccessors,
+  })
+
+  const exportParams = useMemo(
+    () => ({
+      status: statusFilter,
+      sort_by: sortBy,
+      sort_dir: sortDir,
+    }),
+    [sortBy, sortDir, statusFilter],
+  )
+
+  const pagination = useClientPagination(sortedReports, {
+    resetKey: `${statusFilter}|${sortResetKey}`,
+  })
 
   if (!canManage) {
     return <Navigate to="/admin" replace />
@@ -129,7 +164,7 @@ export function AdminBugReportsPage() {
     setError(null)
     try {
       await downloadCsv(
-        () => bugReportsApi.downloadCsv({ status: statusFilter }),
+        () => bugReportsApi.downloadCsv(exportParams),
         'bug_reports.csv',
       )
     } catch (err) {
@@ -218,10 +253,31 @@ export function AdminBugReportsPage() {
               <table className="w-full min-w-[720px] border-collapse text-left text-sm">
                 <thead>
                   <tr className="border-b border-border text-muted-text">
-                    <th className="px-2 py-2 font-medium">When</th>
-                    <th className="px-2 py-2 font-medium">User</th>
+                    <AdminSortHeader
+                      label="When"
+                      sortKey="created_at"
+                      activeKey={sortBy}
+                      dir={sortDir}
+                      onSort={toggleSort}
+                      className="px-2 py-2"
+                    />
+                    <AdminSortHeader
+                      label="User"
+                      sortKey="user_email"
+                      activeKey={sortBy}
+                      dir={sortDir}
+                      onSort={toggleSort}
+                      className="px-2 py-2"
+                    />
                     <th className="px-2 py-2 font-medium">Description</th>
-                    <th className="px-2 py-2 font-medium">Status</th>
+                    <AdminSortHeader
+                      label="Status"
+                      sortKey="status"
+                      activeKey={sortBy}
+                      dir={sortDir}
+                      onSort={toggleSort}
+                      className="px-2 py-2"
+                    />
                     <th className="px-2 py-2 font-medium">Image</th>
                     <th className="px-2 py-2 font-medium">Actions</th>
                   </tr>

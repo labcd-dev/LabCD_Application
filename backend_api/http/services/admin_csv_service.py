@@ -431,13 +431,32 @@ def _before_test_survey_csv_row(
     }
 
 
-def export_users_csv(db: Session) -> str:
-    users = db.query(User).order_by(User.email).all()
+def export_users_csv(
+    db: Session,
+    *,
+    q: str | None = None,
+    sort_by: str | None = None,
+    sort_dir: str | None = None,
+) -> str:
+    from backend_api.http.services import admin_user_service
+
+    users = admin_user_service.list_users(
+        db,
+        q=q,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+    )
     rows = [_user_csv_row(user) for user in users]
     return rows_to_csv(rows, USER_CSV_FIELDS)
 
 
-def export_plans_csv(db: Session) -> str:
+def export_plans_csv(
+    db: Session,
+    *,
+    q: str | None = None,
+    sort_by: str | None = None,
+    sort_dir: str | None = None,
+) -> str:
     default_plan = plan_service.get_default_plan(db)
     default_plan_id = default_plan.id if default_plan else None
     fieldnames = [
@@ -452,7 +471,12 @@ def export_plans_csv(db: Session) -> str:
         "created_at",
     ]
     rows = []
-    for plan in plan_service.list_plans(db):
+    for plan in plan_service.list_plans(
+        db,
+        q=q,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+    ):
         data = plan_service.plan_out_dict(plan)
         rows.append(
             {
@@ -475,14 +499,74 @@ def export_projects_csv(
     *,
     user_id: int | None = None,
     pipeline_type: str | None = None,
+    q: str | None = None,
+    sort_by: str | None = None,
+    sort_dir: str | None = None,
 ) -> str:
     projects = project_service.list_all_projects(
         db,
         user_id=user_id,
         pipeline_type=pipeline_type,
+        q=q,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
     )
     rows = [_project_csv_row(project) for project in projects]
     return rows_to_csv(rows, PROJECT_CSV_FIELDS)
+
+
+PLANT_CHAT_CSV_FIELDS = [
+    "id",
+    "user_id",
+    "owner_email",
+    "title",
+    "system_name",
+    "status",
+    "llm_model",
+    "created_at",
+    "updated_at",
+]
+
+
+def export_plant_model_conversations_csv(
+    db: Session,
+    *,
+    user_id: int | None = None,
+    status: str | None = None,
+    q: str | None = None,
+    sort_by: str | None = None,
+    sort_dir: str | None = None,
+) -> str:
+    from backend_api.http.services import plant_model_chat_service
+
+    conversations = plant_model_chat_service.list_all_conversations(
+        db,
+        user_id=user_id,
+        status=status,
+        q=q,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+    )
+    rows = []
+    for conversation in conversations:
+        data = plant_model_chat_service.conversation_to_summary(
+            conversation,
+            include_owner=True,
+        )
+        rows.append(
+            {
+                "id": data["id"],
+                "user_id": data.get("user_id", ""),
+                "owner_email": data.get("owner_email") or "",
+                "title": data.get("title") or "",
+                "system_name": data.get("system_name") or "",
+                "status": data.get("status") or "",
+                "llm_model": data.get("llm_model") or "",
+                "created_at": _iso(data.get("created_at")),
+                "updated_at": _iso(data.get("updated_at")),
+            }
+        )
+    return rows_to_csv(rows, PLANT_CHAT_CSV_FIELDS)
 
 
 def _scenario_metrics_history(results: Any) -> list[dict[str, Any]]:
@@ -762,6 +846,9 @@ def export_project_profiling_csv(
     *,
     user_id: int | None = None,
     pipeline_type: str | None = None,
+    q: str | None = None,
+    sort_by: str | None = None,
+    sort_dir: str | None = None,
 ) -> str:
     """Export SILO computational profiling as a multi-section CSV.
 
@@ -775,6 +862,9 @@ def export_project_profiling_csv(
         db,
         user_id=user_id,
         pipeline_type=effective_pipeline,
+        q=q,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
     )
     session_rows, scenario_rows, best_rows = _collect_project_summary_rows(projects)
 

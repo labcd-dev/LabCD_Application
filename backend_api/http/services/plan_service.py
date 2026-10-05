@@ -65,11 +65,46 @@ def set_default_plan(db: Session, plan_id: int) -> Plan:
     return plan
 
 
-def list_plans(db: Session, *, active_only: bool = False) -> list[Plan]:
+def list_plans(
+    db: Session,
+    *,
+    active_only: bool = False,
+    q: str | None = None,
+    sort_by: str | None = None,
+    sort_dir: str | None = None,
+) -> list[Plan]:
+    from backend_api.common.query_sort import sort_rows
+
     query = db.query(Plan)
     if active_only:
         query = query.filter(Plan.is_active.is_(True))
-    return query.order_by(Plan.price, Plan.name).all()
+    plans = query.all()
+
+    needle = (q or "").strip().lower()
+    if needle:
+        filtered: list[Plan] = []
+        for plan in plans:
+            if (
+                needle in (plan.name or "").lower()
+                or needle in (plan.description or "").lower()
+                or any(needle in code.lower() for code in plan.action_codes())
+                or any(needle in model.lower() for model in plan.model_ids())
+            ):
+                filtered.append(plan)
+        plans = filtered
+
+    return sort_rows(
+        plans,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+        default_key="price",
+        default_dir="asc",
+        accessors={
+            "name": lambda p: p.name or "",
+            "price": lambda p: float(p.price) if p.price is not None else 0.0,
+            "is_active": lambda p: bool(p.is_active),
+        },
+    )
 
 
 def get_plan(db: Session, plan_id: int) -> Plan | None:

@@ -2,14 +2,67 @@
 
 from __future__ import annotations
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
+from backend_api.common.query_sort import sort_rows
 from backend_api.db.models import FeedbackSurveyResponse, LoginHistory, User
 from backend_api.http.services import error_tracking_service, project_service, session_service
 from backend_api.http.services.auth_service import get_user_by_id, is_last_active_admin
 from backend_api.http.services.profile_service import user_out
 
 LOGIN_HISTORY_LIMIT = 200
+
+USER_SORT_KEYS = (
+    "email",
+    "role_name",
+    "is_active",
+    "plan_name",
+    "created_at",
+)
+
+
+def list_users(
+    db: Session,
+    *,
+    q: str | None = None,
+    sort_by: str | None = None,
+    sort_dir: str | None = None,
+) -> list[User]:
+    users = (
+        db.query(User)
+        .options(joinedload(User.plan), joinedload(User.role))
+        .all()
+    )
+    needle = (q or "").strip().lower()
+    if needle:
+        filtered: list[User] = []
+        for user in users:
+            plan_name = user.plan.name if user.plan is not None else ""
+            role_name = user.role.name if user.role is not None else ""
+            actions = user.action_codes()
+            if (
+                needle in (user.email or "").lower()
+                or needle in plan_name.lower()
+                or needle in role_name.lower()
+                or any(needle in action.lower() for action in actions)
+            ):
+                filtered.append(user)
+        users = filtered
+
+    return sort_rows(
+        users,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+        default_key="email",
+        default_dir="asc",
+        accessors={
+            "email": lambda u: u.email or "",
+            "role_name": lambda u: u.role.name if u.role is not None else "",
+            "is_active": lambda u: bool(u.is_active),
+            "plan_name": lambda u: u.plan.name if u.plan is not None else "",
+            "created_at": lambda u: u.created_at.isoformat() if u.created_at else "",
+        },
+    )
 
 
 def get_user_detail(db: Session, user_id: int) -> dict | None:

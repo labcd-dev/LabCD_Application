@@ -29,6 +29,7 @@ from backend_api.http.services.admin_csv_service import (
     export_monitoring_csv,
     export_overview_xlsx,
     export_plans_csv,
+    export_plant_model_conversations_csv,
     export_project_profiling_csv,
     export_projects_csv,
     export_users_csv,
@@ -387,6 +388,8 @@ def list_error_events(
     status_code: int | None = Query(default=None),
     q: str | None = Query(default=None),
     limit: int = Query(default=200, ge=1, le=1000),
+    sort_by: str | None = Query(default=None),
+    sort_dir: str | None = Query(default=None),
 ) -> list[ErrorEventOut]:
     events = error_tracking_service.list_errors(
         db,
@@ -395,6 +398,8 @@ def list_error_events(
         status_code=status_code,
         q=q,
         limit=limit,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
     )
     return [ErrorEventOut(**error_tracking_service.event_to_dict(e)) for e in events]
 
@@ -407,7 +412,9 @@ def export_error_events_csv(
     source: str | None = Query(default=None),
     status_code: int | None = Query(default=None),
     q: str | None = Query(default=None),
-    limit: int = Query(default=5000, ge=1, le=10000),
+    limit: int = Query(default=10000, ge=1, le=10000),
+    sort_by: str | None = Query(default=None),
+    sort_dir: str | None = Query(default=None),
 ) -> StreamingResponse:
     content = error_tracking_service.export_csv(
         db,
@@ -416,6 +423,8 @@ def export_error_events_csv(
         status_code=status_code,
         q=q,
         limit=limit,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
     )
     return csv_response(content, "error_events.csv")
 
@@ -430,6 +439,8 @@ def list_audit_log(
     success: bool | None = Query(default=None),
     q: str | None = Query(default=None),
     limit: int = Query(default=200, ge=1, le=1000),
+    sort_by: str | None = Query(default=None),
+    sort_dir: str | None = Query(default=None),
 ) -> list[AuditLogOut]:
     entries = audit_service.list_audits(
         db,
@@ -439,6 +450,8 @@ def list_audit_log(
         success=success,
         q=q,
         limit=limit,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
     )
     return [AuditLogOut(**audit_service.entry_to_dict(e)) for e in entries]
 
@@ -452,7 +465,9 @@ def export_audit_log_csv(
     actor_user_id: int | None = Query(default=None),
     success: bool | None = Query(default=None),
     q: str | None = Query(default=None),
-    limit: int = Query(default=5000, ge=1, le=10000),
+    limit: int = Query(default=10000, ge=1, le=10000),
+    sort_by: str | None = Query(default=None),
+    sort_dir: str | None = Query(default=None),
 ) -> StreamingResponse:
     content = audit_service.export_csv(
         db,
@@ -462,6 +477,8 @@ def export_audit_log_csv(
         success=success,
         q=q,
         limit=limit,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
     )
     return csv_response(content, "audit_log.csv")
 
@@ -470,8 +487,14 @@ def export_audit_log_csv(
 def export_plans_csv_endpoint(
     _: User = Depends(require_action("admin:plans")),
     db: Session = Depends(get_db),
+    q: str | None = Query(default=None),
+    sort_by: str | None = Query(default=None),
+    sort_dir: str | None = Query(default=None),
 ) -> StreamingResponse:
-    return csv_response(export_plans_csv(db), "plans.csv")
+    return csv_response(
+        export_plans_csv(db, q=q, sort_by=sort_by, sort_dir=sort_dir),
+        "plans.csv",
+    )
 
 
 @router.get("/actions", response_model=list[ActionOut])
@@ -488,10 +511,22 @@ def list_plans(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
     active_only: bool = Query(default=False),
+    q: str | None = Query(default=None),
+    sort_by: str | None = Query(default=None),
+    sort_dir: str | None = Query(default=None),
 ) -> list[PlanOut]:
     if not (user.has_action("admin:plans") or user.has_action("admin:users")):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Missing required action: admin:plans")
-    return [_plan_out(plan) for plan in plan_service.list_plans(db, active_only=active_only)]
+    return [
+        _plan_out(plan)
+        for plan in plan_service.list_plans(
+            db,
+            active_only=active_only,
+            q=q,
+            sort_by=sort_by,
+            sort_dir=sort_dir,
+        )
+    ]
 
 
 @router.post("/plans", response_model=PlanOut, status_code=status.HTTP_201_CREATED)
@@ -757,8 +792,16 @@ def delete_role(
 def list_users(
     _: User = Depends(require_action("admin:users")),
     db: Session = Depends(get_db),
+    q: str | None = Query(default=None),
+    sort_by: str | None = Query(default=None),
+    sort_dir: str | None = Query(default=None),
 ) -> list[UserOut]:
-    users = db.query(User).order_by(User.email).all()
+    users = admin_user_service.list_users(
+        db,
+        q=q,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+    )
     return [user_out(user) for user in users]
 
 
@@ -766,8 +809,14 @@ def list_users(
 def export_users_csv_endpoint(
     _: User = Depends(require_action("admin:users")),
     db: Session = Depends(get_db),
+    q: str | None = Query(default=None),
+    sort_by: str | None = Query(default=None),
+    sort_dir: str | None = Query(default=None),
 ) -> StreamingResponse:
-    return csv_response(export_users_csv(db), "users.csv")
+    return csv_response(
+        export_users_csv(db, q=q, sort_by=sort_by, sort_dir=sort_dir),
+        "users.csv",
+    )
 
 
 @router.get("/users/{user_id}", response_model=AdminUserDetailOut)
@@ -1289,11 +1338,17 @@ def list_all_projects(
     db: Session = Depends(get_db),
     user_id: int | None = Query(default=None),
     pipeline_type: str | None = Query(default=None),
+    q: str | None = Query(default=None),
+    sort_by: str | None = Query(default=None),
+    sort_dir: str | None = Query(default=None),
 ) -> list[ProjectSummary]:
     projects = project_service.list_all_projects(
         db,
         user_id=user_id,
         pipeline_type=pipeline_type,
+        q=q,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
     )
     return [
         ProjectSummary(**project_service.project_to_summary(p, include_owner=True))
@@ -1307,11 +1362,17 @@ def export_projects_csv_endpoint(
     db: Session = Depends(get_db),
     user_id: int | None = Query(default=None),
     pipeline_type: str | None = Query(default=None),
+    q: str | None = Query(default=None),
+    sort_by: str | None = Query(default=None),
+    sort_dir: str | None = Query(default=None),
 ) -> StreamingResponse:
     content = export_projects_csv(
         db,
         user_id=user_id,
         pipeline_type=pipeline_type,
+        q=q,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
     )
     return csv_response(content, "projects.csv")
 
@@ -1322,11 +1383,17 @@ def export_projects_profiling_csv_endpoint(
     db: Session = Depends(get_db),
     user_id: int | None = Query(default=None),
     pipeline_type: str | None = Query(default=None),
+    q: str | None = Query(default=None),
+    sort_by: str | None = Query(default=None),
+    sort_dir: str | None = Query(default=None),
 ) -> StreamingResponse:
     content = export_project_profiling_csv(
         db,
         user_id=user_id,
         pipeline_type=pipeline_type,
+        q=q,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
     )
     return csv_response(content, "project_profiling.csv")
 
@@ -1435,11 +1502,17 @@ def list_all_plant_model_conversations(
     db: Session = Depends(get_db),
     user_id: int | None = Query(default=None),
     status_filter: str | None = Query(default=None, alias="status"),
+    q: str | None = Query(default=None),
+    sort_by: str | None = Query(default=None),
+    sort_dir: str | None = Query(default=None),
 ) -> list[PlantModelConversationSummary]:
     conversations = plant_model_chat_service.list_all_conversations(
         db,
         user_id=user_id,
         status=status_filter,
+        q=q,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
     )
     return [
         PlantModelConversationSummary(
@@ -1447,6 +1520,27 @@ def list_all_plant_model_conversations(
         )
         for c in conversations
     ]
+
+
+@router.get("/plant-model/conversations/export.csv")
+def export_plant_model_conversations_csv_endpoint(
+    _: User = Depends(require_action("admin:plant_model")),
+    db: Session = Depends(get_db),
+    user_id: int | None = Query(default=None),
+    status_filter: str | None = Query(default=None, alias="status"),
+    q: str | None = Query(default=None),
+    sort_by: str | None = Query(default=None),
+    sort_dir: str | None = Query(default=None),
+) -> StreamingResponse:
+    content = export_plant_model_conversations_csv(
+        db,
+        user_id=user_id,
+        status=status_filter,
+        q=q,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+    )
+    return csv_response(content, "plant_model_conversations.csv")
 
 
 @router.get(

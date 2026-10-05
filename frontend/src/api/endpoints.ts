@@ -253,12 +253,20 @@ export const adminApi = {
       method: 'POST',
     }),
   listActions: () => apiFetch<ActionInfo[]>('/admin/actions'),
-  listPlans: (params?: { active_only?: boolean }) => {
-    const query = new URLSearchParams()
-    if (params?.active_only) query.set('active_only', 'true')
-    const suffix = query.toString() ? `?${query}` : ''
-    return apiFetch<PlanInfo[]>(`/admin/plans${suffix}`)
-  },
+  listPlans: (params?: {
+    active_only?: boolean
+    q?: string
+    sort_by?: string
+    sort_dir?: string
+  }) =>
+    apiFetch<PlanInfo[]>(
+      `/admin/plans${buildQuery({
+        active_only: params?.active_only ? true : undefined,
+        q: params?.q,
+        sort_by: params?.sort_by,
+        sort_dir: params?.sort_dir,
+      })}`,
+    ),
   createPlan: (body: {
     name: string
     description?: string
@@ -339,7 +347,14 @@ export const adminApi = {
       method: 'PUT',
       body: JSON.stringify({ plan_id: planId }),
     }),
-  listUsers: () => apiFetch<AuthUser[]>('/admin/users'),
+  listUsers: (params?: { q?: string; sort_by?: string; sort_dir?: string }) =>
+    apiFetch<AuthUser[]>(
+      `/admin/users${buildQuery({
+        q: params?.q,
+        sort_by: params?.sort_by,
+        sort_dir: params?.sort_dir,
+      })}`,
+    ),
   getUser: (userId: number) => apiFetch<AdminUserDetail>(`/admin/users/${userId}`),
   getUserJourney: (userId: number) =>
     apiFetch<UserJourney>(`/admin/users/${userId}/journey`),
@@ -392,13 +407,22 @@ export const adminApi = {
     apiFetch<AuthUser>(`/admin/users/${userId}/billing/resume`, { method: 'POST' }),
   syncUserSubscription: (userId: number) =>
     apiFetch<AuthUser>(`/admin/users/${userId}/billing/sync`, { method: 'POST' }),
-  listProjects: (params?: { user_id?: number; pipeline_type?: string }) => {
-    const query = new URLSearchParams()
-    if (params?.user_id != null) query.set('user_id', String(params.user_id))
-    if (params?.pipeline_type) query.set('pipeline_type', params.pipeline_type)
-    const suffix = query.toString() ? `?${query}` : ''
-    return apiFetch<ProjectSummary[]>(`/admin/projects${suffix}`)
-  },
+  listProjects: (params?: {
+    user_id?: number
+    pipeline_type?: string
+    q?: string
+    sort_by?: string
+    sort_dir?: string
+  }) =>
+    apiFetch<ProjectSummary[]>(
+      `/admin/projects${buildQuery({
+        user_id: params?.user_id,
+        pipeline_type: params?.pipeline_type,
+        q: params?.q,
+        sort_by: params?.sort_by,
+        sort_dir: params?.sort_dir,
+      })}`,
+    ),
   getProject: (projectId: number) =>
     apiFetch<ProjectDetail>(`/admin/projects/${projectId}`),
   downloadProjectArtifact: (projectId: number, filename: string) =>
@@ -413,15 +437,36 @@ export const adminApi = {
     }),
   deleteProject: (projectId: number) =>
     apiFetch<void>(`/admin/projects/${projectId}`, { method: 'DELETE' }),
-  listPlantModelConversations: (params?: { user_id?: number; status?: string }) => {
-    const query = new URLSearchParams()
-    if (params?.user_id != null) query.set('user_id', String(params.user_id))
-    if (params?.status) query.set('status', params.status)
-    const suffix = query.toString() ? `?${query}` : ''
-    return apiFetch<PlantModelConversationSummary[]>(
-      `/admin/plant-model/conversations${suffix}`,
-    )
-  },
+  listPlantModelConversations: (params?: {
+    user_id?: number
+    status?: string
+    q?: string
+    sort_by?: string
+    sort_dir?: string
+  }) =>
+    apiFetch<PlantModelConversationSummary[]>(
+      `/admin/plant-model/conversations${buildQuery({
+        user_id: params?.user_id,
+        status: params?.status,
+        q: params?.q,
+        sort_by: params?.sort_by,
+        sort_dir: params?.sort_dir,
+      })}`,
+    ),
+  downloadPlantModelConversationsCsv: (params?: {
+    user_id?: number
+    status?: string
+    q?: string
+    sort_by?: string
+    sort_dir?: string
+  }) =>
+    downloadAdminCsv('/admin/plant-model/conversations/export.csv', {
+      user_id: params?.user_id,
+      status: params?.status,
+      q: params?.q,
+      sort_by: params?.sort_by,
+      sort_dir: params?.sort_dir,
+    }),
   getPlantModelConversation: (conversationId: number) =>
     apiFetch<PlantModelConversationDetail>(
       `/admin/plant-model/conversations/${conversationId}`,
@@ -462,6 +507,8 @@ export const adminApi = {
     status_code?: number
     q?: string
     limit?: number
+    sort_by?: string
+    sort_dir?: string
   }) =>
     apiFetch<ErrorEvent[]>(
       `/admin/errors${buildQuery({
@@ -470,6 +517,8 @@ export const adminApi = {
         status_code: params?.status_code,
         q: params?.q,
         limit: params?.limit,
+        sort_by: params?.sort_by,
+        sort_dir: params?.sort_dir,
       })}`,
     ),
   downloadErrorsCsv: (params?: {
@@ -478,6 +527,8 @@ export const adminApi = {
     status_code?: number
     q?: string
     limit?: number
+    sort_by?: string
+    sort_dir?: string
   }) =>
     downloadAdminCsv('/admin/errors/export.csv', {
       user_id: params?.user_id,
@@ -485,6 +536,8 @@ export const adminApi = {
       status_code: params?.status_code,
       q: params?.q,
       limit: params?.limit,
+      sort_by: params?.sort_by,
+      sort_dir: params?.sort_dir,
     }),
   listAuditLog: (params?: {
     category?: string
@@ -493,6 +546,8 @@ export const adminApi = {
     success?: boolean
     q?: string
     limit?: number
+    sort_by?: string
+    sort_dir?: string
   }) =>
     apiFetch<AuditLogEntry[]>(
       `/admin/audit-log${buildQuery({
@@ -502,6 +557,8 @@ export const adminApi = {
         success: params?.success,
         q: params?.q,
         limit: params?.limit,
+        sort_by: params?.sort_by,
+        sort_dir: params?.sort_dir,
       })}`,
     ),
   downloadAuditLogCsv: (params?: {
@@ -511,6 +568,8 @@ export const adminApi = {
     success?: boolean
     q?: string
     limit?: number
+    sort_by?: string
+    sort_dir?: string
   }) =>
     downloadAdminCsv('/admin/audit-log/export.csv', {
       category: params?.category,
@@ -519,18 +578,48 @@ export const adminApi = {
       success: params?.success,
       q: params?.q,
       limit: params?.limit,
+      sort_by: params?.sort_by,
+      sort_dir: params?.sort_dir,
     }),
-  downloadUsersCsv: () => downloadAdminCsv('/admin/users/export.csv'),
-  downloadPlansCsv: () => downloadAdminCsv('/admin/plans/export.csv'),
-  downloadProjectsCsv: (params?: { user_id?: number; pipeline_type?: string }) =>
+  downloadUsersCsv: (params?: { q?: string; sort_by?: string; sort_dir?: string }) =>
+    downloadAdminCsv('/admin/users/export.csv', {
+      q: params?.q,
+      sort_by: params?.sort_by,
+      sort_dir: params?.sort_dir,
+    }),
+  downloadPlansCsv: (params?: { q?: string; sort_by?: string; sort_dir?: string }) =>
+    downloadAdminCsv('/admin/plans/export.csv', {
+      q: params?.q,
+      sort_by: params?.sort_by,
+      sort_dir: params?.sort_dir,
+    }),
+  downloadProjectsCsv: (params?: {
+    user_id?: number
+    pipeline_type?: string
+    q?: string
+    sort_by?: string
+    sort_dir?: string
+  }) =>
     downloadAdminCsv('/admin/projects/export.csv', {
       user_id: params?.user_id,
       pipeline_type: params?.pipeline_type,
+      q: params?.q,
+      sort_by: params?.sort_by,
+      sort_dir: params?.sort_dir,
     }),
-  downloadProjectsProfilingCsv: (params?: { user_id?: number; pipeline_type?: string }) =>
+  downloadProjectsProfilingCsv: (params?: {
+    user_id?: number
+    pipeline_type?: string
+    q?: string
+    sort_by?: string
+    sort_dir?: string
+  }) =>
     downloadAdminCsv('/admin/projects/profiling/export.csv', {
       user_id: params?.user_id,
       pipeline_type: params?.pipeline_type,
+      q: params?.q,
+      sort_by: params?.sort_by,
+      sort_dir: params?.sort_dir,
     }),
   downloadMonitoringCsv: () => downloadAdminCsv('/admin/monitoring/export.csv'),
   downloadOverviewCsv: () => downloadAdminCsv('/admin/overview/export.xlsx'),
@@ -728,9 +817,17 @@ export const bugReportsApi = {
       method: 'PATCH',
       body: JSON.stringify(body),
     }),
-  listAdmin: (params?: { status?: 'open' | 'fixed' | 'all' }) =>
+  listAdmin: (params?: {
+    status?: 'open' | 'fixed' | 'all'
+    sort_by?: string
+    sort_dir?: string
+  }) =>
     apiFetch<BugReport[]>(
-      `/admin/bug-reports${buildQuery({ status: params?.status })}`,
+      `/admin/bug-reports${buildQuery({
+        status: params?.status,
+        sort_by: params?.sort_by,
+        sort_dir: params?.sort_dir,
+      })}`,
     ),
   getAdmin: (reportId: number) => apiFetch<BugReport>(`/admin/bug-reports/${reportId}`),
   updateStatus: (reportId: number, status: 'open' | 'fixed') =>
@@ -738,9 +835,15 @@ export const bugReportsApi = {
       method: 'PATCH',
       body: JSON.stringify({ status }),
     }),
-  downloadCsv: (params?: { status?: 'open' | 'fixed' | 'all' }) =>
+  downloadCsv: (params?: {
+    status?: 'open' | 'fixed' | 'all'
+    sort_by?: string
+    sort_dir?: string
+  }) =>
     downloadAdminCsv('/admin/bug-reports/export.csv', {
       status: params?.status,
+      sort_by: params?.sort_by,
+      sort_dir: params?.sort_dir,
     }),
 }
 

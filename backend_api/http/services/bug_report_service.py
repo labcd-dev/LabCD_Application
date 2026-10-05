@@ -94,11 +94,31 @@ def create_report(
     return row
 
 
-def list_reports(db: Session, *, status: str | None = None) -> list[BugReport]:
+def list_reports(
+    db: Session,
+    *,
+    status: str | None = None,
+    sort_by: str | None = None,
+    sort_dir: str | None = None,
+) -> list[BugReport]:
+    from backend_api.common.query_sort import sort_rows
+
     query = db.query(BugReport).options(joinedload(BugReport.user))
     if status and status != "all":
         query = query.filter(BugReport.status == status)
-    return query.order_by(BugReport.created_at.desc()).all()
+    reports = query.all()
+    return sort_rows(
+        reports,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+        default_key="created_at",
+        default_dir="desc",
+        accessors={
+            "created_at": lambda r: r.created_at.isoformat() if r.created_at else "",
+            "user_email": lambda r: r.user.email if r.user is not None else "",
+            "status": lambda r: r.status or "",
+        },
+    )
 
 
 def get_report(db: Session, report_id: int) -> BugReport | None:
@@ -137,8 +157,14 @@ def to_out(report: BugReport) -> dict:
     }
 
 
-def export_csv(db: Session, *, status: str | None = None) -> str:
-    rows = list_reports(db, status=status)
+def export_csv(
+    db: Session,
+    *,
+    status: str | None = None,
+    sort_by: str | None = None,
+    sort_dir: str | None = None,
+) -> str:
+    rows = list_reports(db, status=status, sort_by=sort_by, sort_dir=sort_dir)
     buffer = io.StringIO()
     fieldnames = [
         "id",

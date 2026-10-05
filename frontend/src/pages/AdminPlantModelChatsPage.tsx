@@ -3,10 +3,14 @@ import { Link, Navigate } from 'react-router-dom'
 import { MessagesSquare, Search, Trash2 } from 'lucide-react'
 import { adminApi } from '../api/endpoints'
 import type { AuthUser, PlantModelConversationSummary } from '../api/types'
+import { AdminDownloadCsvButton } from '../components/admin/AdminDownloadCsvButton'
 import { AdminPagination } from '../components/admin/AdminPagination'
+import { AdminSortHeader } from '../components/admin/AdminSortHeader'
 import { StatusMessage } from '../components/StatusMessage'
 import { useAuth } from '../context/AuthContext'
 import { useClientPagination } from '../hooks/useClientPagination'
+import { useClientSort } from '../hooks/useClientSort'
+import { downloadCsv } from '../lib/downloadCsv'
 import {
   btnBase,
   btnCompact,
@@ -67,8 +71,43 @@ export function AdminPlantModelChatsPage() {
     )
   }, [conversations, query])
 
-  const pagination = useClientPagination(filtered, {
-    resetKey: `${query}|${userId}|${statusFilter}`,
+  const chatSortAccessors = useMemo(
+    () => ({
+      title: (c: PlantModelConversationSummary) => c.system_name || c.title,
+      owner_email: (c: PlantModelConversationSummary) => c.owner_email ?? '',
+      llm_model: (c: PlantModelConversationSummary) => c.llm_model,
+      status: (c: PlantModelConversationSummary) => c.status,
+      updated_at: (c: PlantModelConversationSummary) => c.updated_at ?? '',
+    }),
+    [],
+  )
+
+  const {
+    sortedItems: sortedChats,
+    sortBy,
+    sortDir,
+    toggle: toggleSort,
+    resetKey: sortResetKey,
+  } = useClientSort({
+    items: filtered,
+    defaultKey: 'updated_at',
+    defaultDir: 'desc',
+    accessors: chatSortAccessors,
+  })
+
+  const exportParams = useMemo(
+    () => ({
+      user_id: userId ? Number(userId) : undefined,
+      status: statusFilter || undefined,
+      q: query.trim() || undefined,
+      sort_by: sortBy,
+      sort_dir: sortDir,
+    }),
+    [query, sortBy, sortDir, statusFilter, userId],
+  )
+
+  const pagination = useClientPagination(sortedChats, {
+    resetKey: `${query}|${userId}|${statusFilter}|${sortResetKey}`,
   })
 
   if (!canManage) {
@@ -99,6 +138,20 @@ export function AdminPlantModelChatsPage() {
             View and manage plant-model conversations and saved dynamics models from Design chat.
           </p>
         </div>
+        <AdminDownloadCsvButton
+          onClick={async () => {
+            setError(null)
+            try {
+              await downloadCsv(
+                () => adminApi.downloadPlantModelConversationsCsv(exportParams),
+                'plant_model_conversations.csv',
+              )
+            } catch (err) {
+              setError(err instanceof Error ? err.message : 'Failed to download CSV')
+            }
+          }}
+          disabled={loading}
+        />
       </header>
 
       {error && <StatusMessage type="error" message={error} />}
@@ -161,11 +214,46 @@ export function AdminPlantModelChatsPage() {
             <table className="w-full min-w-[720px] border-collapse text-left text-sm">
               <thead>
                 <tr className="border-b border-border bg-surface-muted text-xs uppercase tracking-wide text-muted">
-                  <th className="px-4 py-3 font-semibold">Chat</th>
-                  <th className="px-4 py-3 font-semibold">Owner</th>
-                  <th className="px-4 py-3 font-semibold">LLM</th>
-                  <th className="px-4 py-3 font-semibold">Status</th>
-                  <th className="px-4 py-3 font-semibold">Updated</th>
+                  <AdminSortHeader
+                    label="Chat"
+                    sortKey="title"
+                    activeKey={sortBy}
+                    dir={sortDir}
+                    onSort={toggleSort}
+                    className="px-4 py-3"
+                  />
+                  <AdminSortHeader
+                    label="Owner"
+                    sortKey="owner_email"
+                    activeKey={sortBy}
+                    dir={sortDir}
+                    onSort={toggleSort}
+                    className="px-4 py-3"
+                  />
+                  <AdminSortHeader
+                    label="LLM"
+                    sortKey="llm_model"
+                    activeKey={sortBy}
+                    dir={sortDir}
+                    onSort={toggleSort}
+                    className="px-4 py-3"
+                  />
+                  <AdminSortHeader
+                    label="Status"
+                    sortKey="status"
+                    activeKey={sortBy}
+                    dir={sortDir}
+                    onSort={toggleSort}
+                    className="px-4 py-3"
+                  />
+                  <AdminSortHeader
+                    label="Updated"
+                    sortKey="updated_at"
+                    activeKey={sortBy}
+                    dir={sortDir}
+                    onSort={toggleSort}
+                    className="px-4 py-3"
+                  />
                   <th className="px-4 py-3 font-semibold">Actions</th>
                 </tr>
               </thead>

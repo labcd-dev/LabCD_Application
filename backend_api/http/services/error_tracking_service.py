@@ -249,7 +249,12 @@ def list_errors(
     status_code: int | None = None,
     q: str | None = None,
     limit: int = 200,
+    max_limit: int = 1000,
+    sort_by: str | None = None,
+    sort_dir: str | None = None,
 ) -> list[ErrorEvent]:
+    from backend_api.common.query_sort import apply_sql_order
+
     query = db.query(ErrorEvent)
     if user_id is not None:
         query = query.filter(ErrorEvent.user_id == user_id)
@@ -266,11 +271,21 @@ def list_errors(
                 ErrorEvent.page_url.ilike(like),
             )
         )
-    return (
-        query.order_by(ErrorEvent.created_at.desc(), ErrorEvent.id.desc())
-        .limit(max(1, min(limit, 1000)))
-        .all()
+    query = apply_sql_order(
+        query,
+        {
+            "created_at": ErrorEvent.created_at,
+            "source": ErrorEvent.source,
+            "status_code": ErrorEvent.status_code,
+            "path": ErrorEvent.path,
+            "message": ErrorEvent.message,
+        },
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+        default_key="created_at",
+        default_dir="desc",
     )
+    return query.limit(max(1, min(limit, max_limit))).all()
 
 
 def _event_row(event: ErrorEvent) -> dict[str, Any]:
@@ -296,7 +311,9 @@ def export_csv(
     source: str | None = None,
     status_code: int | None = None,
     q: str | None = None,
-    limit: int = 5000,
+    limit: int = 10000,
+    sort_by: str | None = None,
+    sort_dir: str | None = None,
 ) -> str:
     events = list_errors(
         db,
@@ -305,6 +322,9 @@ def export_csv(
         status_code=status_code,
         q=q,
         limit=limit,
+        max_limit=10000,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
     )
     buffer = io.StringIO()
     fieldnames = [

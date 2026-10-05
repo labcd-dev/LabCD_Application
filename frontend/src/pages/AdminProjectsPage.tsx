@@ -5,9 +5,11 @@ import { adminApi } from '../api/endpoints'
 import type { AuthUser, ProjectSummary } from '../api/types'
 import { AdminDownloadCsvButton } from '../components/admin/AdminDownloadCsvButton'
 import { AdminPagination } from '../components/admin/AdminPagination'
+import { AdminSortHeader } from '../components/admin/AdminSortHeader'
 import { StatusMessage } from '../components/StatusMessage'
 import { useAuth } from '../context/AuthContext'
 import { useClientPagination } from '../hooks/useClientPagination'
+import { useClientSort } from '../hooks/useClientSort'
 import { downloadCsv } from '../lib/downloadCsv'
 import {
   btnBase,
@@ -106,8 +108,47 @@ export function AdminProjectsPage() {
     }
   }, [projects])
 
-  const pagination = useClientPagination(filtered, {
-    resetKey: `${query}|${userId}|${pipelineFilter}`,
+  const projectSortAccessors = useMemo(
+    () => ({
+      title: (p: ProjectSummary) => p.title,
+      owner_email: (p: ProjectSummary) => p.owner_email ?? '',
+      pipeline_type: (p: ProjectSummary) => p.pipeline_type,
+      status: (p: ProjectSummary) => p.status,
+      score: (p: ProjectSummary) =>
+        typeof p.score === 'number' && Number.isFinite(p.score) ? p.score : -1,
+      rating: (p: ProjectSummary) =>
+        typeof p.rating === 'number' && Number.isFinite(p.rating) ? p.rating : -1,
+      updated_at: (p: ProjectSummary) => p.updated_at ?? '',
+    }),
+    [],
+  )
+
+  const {
+    sortedItems: sortedProjects,
+    sortBy,
+    sortDir,
+    toggle: toggleSort,
+    resetKey: sortResetKey,
+  } = useClientSort({
+    items: filtered,
+    defaultKey: 'updated_at',
+    defaultDir: 'desc',
+    accessors: projectSortAccessors,
+  })
+
+  const exportParams = useMemo(
+    () => ({
+      user_id: userId ? Number(userId) : undefined,
+      pipeline_type: pipelineFilter || undefined,
+      q: query.trim() || undefined,
+      sort_by: sortBy,
+      sort_dir: sortDir,
+    }),
+    [pipelineFilter, query, sortBy, sortDir, userId],
+  )
+
+  const pagination = useClientPagination(sortedProjects, {
+    resetKey: `${query}|${userId}|${pipelineFilter}|${sortResetKey}`,
   })
 
   if (!canManage) {
@@ -144,11 +185,7 @@ export function AdminProjectsPage() {
               setError(null)
               try {
                 await downloadCsv(
-                  () =>
-                    adminApi.downloadProjectsCsv({
-                      user_id: userId ? Number(userId) : undefined,
-                      pipeline_type: pipelineFilter || undefined,
-                    }),
+                  () => adminApi.downloadProjectsCsv(exportParams),
                   'projects.csv',
                 )
               } catch (err) {
@@ -163,11 +200,7 @@ export function AdminProjectsPage() {
               setError(null)
               try {
                 await downloadCsv(
-                  () =>
-                    adminApi.downloadProjectsProfilingCsv({
-                      user_id: userId ? Number(userId) : undefined,
-                      pipeline_type: pipelineFilter || undefined,
-                    }),
+                  () => adminApi.downloadProjectsProfilingCsv(exportParams),
                   'project_profiling.csv',
                 )
               } catch (err) {
@@ -298,13 +331,62 @@ export function AdminProjectsPage() {
             <table className="w-full min-w-[720px] border-collapse text-left text-sm">
               <thead>
                 <tr className="border-b border-border bg-surface-muted text-xs uppercase tracking-wide text-muted">
-                  <th className="px-4 py-3 font-semibold">Project</th>
-                  <th className="px-4 py-3 font-semibold">Owner</th>
-                  <th className="px-4 py-3 font-semibold">Pipeline</th>
-                  <th className="px-4 py-3 font-semibold">Status</th>
-                  <th className="px-4 py-3 font-semibold">Score</th>
-                  <th className="px-4 py-3 font-semibold">Rating</th>
-                  <th className="px-4 py-3 font-semibold">Updated</th>
+                  <AdminSortHeader
+                    label="Project"
+                    sortKey="title"
+                    activeKey={sortBy}
+                    dir={sortDir}
+                    onSort={toggleSort}
+                    className="px-4 py-3"
+                  />
+                  <AdminSortHeader
+                    label="Owner"
+                    sortKey="owner_email"
+                    activeKey={sortBy}
+                    dir={sortDir}
+                    onSort={toggleSort}
+                    className="px-4 py-3"
+                  />
+                  <AdminSortHeader
+                    label="Pipeline"
+                    sortKey="pipeline_type"
+                    activeKey={sortBy}
+                    dir={sortDir}
+                    onSort={toggleSort}
+                    className="px-4 py-3"
+                  />
+                  <AdminSortHeader
+                    label="Status"
+                    sortKey="status"
+                    activeKey={sortBy}
+                    dir={sortDir}
+                    onSort={toggleSort}
+                    className="px-4 py-3"
+                  />
+                  <AdminSortHeader
+                    label="Score"
+                    sortKey="score"
+                    activeKey={sortBy}
+                    dir={sortDir}
+                    onSort={toggleSort}
+                    className="px-4 py-3"
+                  />
+                  <AdminSortHeader
+                    label="Rating"
+                    sortKey="rating"
+                    activeKey={sortBy}
+                    dir={sortDir}
+                    onSort={toggleSort}
+                    className="px-4 py-3"
+                  />
+                  <AdminSortHeader
+                    label="Updated"
+                    sortKey="updated_at"
+                    activeKey={sortBy}
+                    dir={sortDir}
+                    onSort={toggleSort}
+                    className="px-4 py-3"
+                  />
                   <th className="px-4 py-3 font-semibold">Actions</th>
                 </tr>
               </thead>

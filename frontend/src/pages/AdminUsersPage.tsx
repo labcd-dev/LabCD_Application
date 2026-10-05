@@ -15,10 +15,12 @@ import { adminApi } from '../api/endpoints'
 import type { AuthUser, PlanInfo, RoleInfo } from '../api/types'
 import { AdminDownloadCsvButton } from '../components/admin/AdminDownloadCsvButton'
 import { AdminPagination } from '../components/admin/AdminPagination'
+import { AdminSortHeader } from '../components/admin/AdminSortHeader'
 import { PasswordStrengthMeter } from '../components/PasswordStrengthMeter'
 import { StatusMessage } from '../components/StatusMessage'
 import { useAuth } from '../context/AuthContext'
 import { useClientPagination } from '../hooks/useClientPagination'
+import { useClientSort } from '../hooks/useClientSort'
 import { downloadCsv } from '../lib/downloadCsv'
 import {
   btnBase,
@@ -111,7 +113,42 @@ export function AdminUsersPage() {
     )
   }, [users, query])
 
-  const pagination = useClientPagination(filteredUsers, { resetKey: query })
+  const userSortAccessors = useMemo(
+    () => ({
+      email: (u: AuthUser) => u.email,
+      role_name: (u: AuthUser) => u.role_name ?? '',
+      is_active: (u: AuthUser) => u.is_active,
+      plan_name: (u: AuthUser) => u.plan_name ?? '',
+      created_at: (u: AuthUser) => u.created_at ?? '',
+    }),
+    [],
+  )
+
+  const {
+    sortedItems: sortedUsers,
+    sortBy,
+    sortDir,
+    toggle: toggleSort,
+    resetKey: sortResetKey,
+  } = useClientSort({
+    items: filteredUsers,
+    defaultKey: 'email',
+    defaultDir: 'asc',
+    accessors: userSortAccessors,
+  })
+
+  const exportParams = useMemo(
+    () => ({
+      q: query.trim() || undefined,
+      sort_by: sortBy,
+      sort_dir: sortDir,
+    }),
+    [query, sortBy, sortDir],
+  )
+
+  const pagination = useClientPagination(sortedUsers, {
+    resetKey: `${query}|${sortResetKey}`,
+  })
 
   const planOptions = useMemo(() => {
     const options = [...activePlans]
@@ -269,7 +306,10 @@ export function AdminUsersPage() {
             onClick={async () => {
               setError(null)
               try {
-                await downloadCsv(() => adminApi.downloadUsersCsv(), 'users.csv')
+                await downloadCsv(
+                  () => adminApi.downloadUsersCsv(exportParams),
+                  'users.csv',
+                )
               } catch (err) {
                 setError(err instanceof Error ? err.message : 'Failed to download CSV')
               }
@@ -329,14 +369,49 @@ export function AdminUsersPage() {
             <div className="overflow-x-auto rounded-xl border border-border-subtle">
               <table className="admin-users-table w-full min-w-[720px] border-collapse text-sm">
                 <thead>
-                  <tr className="border-b border-border bg-surface-muted/80 text-left">
-                    <th className="px-4 py-3 font-medium text-foreground-secondary">Email</th>
-                    <th className="px-4 py-3 font-medium text-foreground-secondary">Role</th>
-                    <th className="px-4 py-3 font-medium text-foreground-secondary">Status</th>
-                    <th className="px-4 py-3 font-medium text-foreground-secondary">Plan</th>
-                    <th className="px-4 py-3 font-medium text-foreground-secondary">Modules</th>
-                    <th className="px-4 py-3 font-medium text-foreground-secondary">Created</th>
-                    <th className="px-4 py-3 text-right font-medium text-foreground-secondary">
+                  <tr className="border-b border-border bg-surface-muted/80 text-left text-foreground-secondary">
+                    <AdminSortHeader
+                      label="Email"
+                      sortKey="email"
+                      activeKey={sortBy}
+                      dir={sortDir}
+                      onSort={toggleSort}
+                      className="px-4 py-3"
+                    />
+                    <AdminSortHeader
+                      label="Role"
+                      sortKey="role_name"
+                      activeKey={sortBy}
+                      dir={sortDir}
+                      onSort={toggleSort}
+                      className="px-4 py-3"
+                    />
+                    <AdminSortHeader
+                      label="Status"
+                      sortKey="is_active"
+                      activeKey={sortBy}
+                      dir={sortDir}
+                      onSort={toggleSort}
+                      className="px-4 py-3"
+                    />
+                    <AdminSortHeader
+                      label="Plan"
+                      sortKey="plan_name"
+                      activeKey={sortBy}
+                      dir={sortDir}
+                      onSort={toggleSort}
+                      className="px-4 py-3"
+                    />
+                    <th className="px-4 py-3 font-medium">Modules</th>
+                    <AdminSortHeader
+                      label="Created"
+                      sortKey="created_at"
+                      activeKey={sortBy}
+                      dir={sortDir}
+                      onSort={toggleSort}
+                      className="px-4 py-3"
+                    />
+                    <th className="px-4 py-3 text-right font-medium">
                       <span className="sr-only">Actions</span>
                     </th>
                   </tr>

@@ -5,9 +5,11 @@ import { adminApi } from '../api/endpoints'
 import type { AuditLogEntry } from '../api/types'
 import { AdminDownloadCsvButton } from '../components/admin/AdminDownloadCsvButton'
 import { AdminPagination } from '../components/admin/AdminPagination'
+import { AdminSortHeader } from '../components/admin/AdminSortHeader'
 import { StatusMessage } from '../components/StatusMessage'
 import { useAuth } from '../context/AuthContext'
 import { useClientPagination } from '../hooks/useClientPagination'
+import { useClientSort } from '../hooks/useClientSort'
 import { downloadCsv } from '../lib/downloadCsv'
 import {
   btnBase,
@@ -51,7 +53,7 @@ export function AdminAuditLogPage() {
   const [query, setQuery] = useState('')
   const [selectedId, setSelectedId] = useState<number | null>(null)
 
-  const listParams = useMemo(() => {
+  const filterParams = useMemo(() => {
     const success =
       successFilter === 'all' ? undefined : successFilter === 'success'
     return {
@@ -59,15 +61,51 @@ export function AdminAuditLogPage() {
       action: actionFilter.trim() || undefined,
       success,
       q: query.trim() || undefined,
-      limit: 200,
     }
   }, [actionFilter, category, query, successFilter])
+
+  const auditSortAccessors = useMemo(
+    () => ({
+      created_at: (e: AuditLogEntry) => e.created_at ?? '',
+      category: (e: AuditLogEntry) => e.category,
+      action: (e: AuditLogEntry) => e.action,
+      actor_email: (e: AuditLogEntry) => e.actor_email ?? '',
+      success: (e: AuditLogEntry) => e.success,
+      ip_address: (e: AuditLogEntry) => e.ip_address ?? '',
+    }),
+    [],
+  )
+
+  const {
+    sortedItems: sortedEntries,
+    sortBy,
+    sortDir,
+    toggle: toggleSort,
+    resetKey: sortResetKey,
+  } = useClientSort({
+    items: entries,
+    defaultKey: 'created_at',
+    defaultDir: 'desc',
+    accessors: auditSortAccessors,
+  })
+
+  const exportParams = useMemo(
+    () => ({
+      ...filterParams,
+      sort_by: sortBy,
+      sort_dir: sortDir,
+    }),
+    [filterParams, sortBy, sortDir],
+  )
 
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const list = await adminApi.listAuditLog(listParams)
+      const list = await adminApi.listAuditLog({
+        ...filterParams,
+        limit: 200,
+      })
       setEntries(list)
       setSelectedId((prev) => (prev && list.some((e) => e.id === prev) ? prev : null))
     } catch (err) {
@@ -75,15 +113,15 @@ export function AdminAuditLogPage() {
     } finally {
       setLoading(false)
     }
-  }, [listParams])
+  }, [filterParams])
 
   useEffect(() => {
     if (!canManage) return
     void load()
   }, [canManage, load])
 
-  const pagination = useClientPagination(entries, {
-    resetKey: `${category}|${successFilter}|${actionFilter}|${query}`,
+  const pagination = useClientPagination(sortedEntries, {
+    resetKey: `${category}|${successFilter}|${actionFilter}|${query}|${sortResetKey}`,
   })
 
   if (!canManage) {
@@ -96,7 +134,7 @@ export function AdminAuditLogPage() {
     setError(null)
     try {
       await downloadCsv(
-        () => adminApi.downloadAuditLogCsv(listParams),
+        () => adminApi.downloadAuditLogCsv(exportParams),
         'audit_log.csv',
       )
     } catch (err) {
@@ -203,13 +241,55 @@ export function AdminAuditLogPage() {
               <table className="w-full min-w-[860px] border-collapse text-left text-sm">
                 <thead>
                   <tr className="border-b border-border text-muted-text">
-                    <th className="px-2 py-2 font-medium">When</th>
-                    <th className="px-2 py-2 font-medium">Category</th>
-                    <th className="px-2 py-2 font-medium">Action</th>
-                    <th className="px-2 py-2 font-medium">Actor</th>
+                    <AdminSortHeader
+                      label="When"
+                      sortKey="created_at"
+                      activeKey={sortBy}
+                      dir={sortDir}
+                      onSort={toggleSort}
+                      className="px-2 py-2"
+                    />
+                    <AdminSortHeader
+                      label="Category"
+                      sortKey="category"
+                      activeKey={sortBy}
+                      dir={sortDir}
+                      onSort={toggleSort}
+                      className="px-2 py-2"
+                    />
+                    <AdminSortHeader
+                      label="Action"
+                      sortKey="action"
+                      activeKey={sortBy}
+                      dir={sortDir}
+                      onSort={toggleSort}
+                      className="px-2 py-2"
+                    />
+                    <AdminSortHeader
+                      label="Actor"
+                      sortKey="actor_email"
+                      activeKey={sortBy}
+                      dir={sortDir}
+                      onSort={toggleSort}
+                      className="px-2 py-2"
+                    />
                     <th className="px-2 py-2 font-medium">Resource</th>
-                    <th className="px-2 py-2 font-medium">Result</th>
-                    <th className="px-2 py-2 font-medium">IP</th>
+                    <AdminSortHeader
+                      label="Result"
+                      sortKey="success"
+                      activeKey={sortBy}
+                      dir={sortDir}
+                      onSort={toggleSort}
+                      className="px-2 py-2"
+                    />
+                    <AdminSortHeader
+                      label="IP"
+                      sortKey="ip_address"
+                      activeKey={sortBy}
+                      dir={sortDir}
+                      onSort={toggleSort}
+                      className="px-2 py-2"
+                    />
                   </tr>
                 </thead>
                 <tbody>

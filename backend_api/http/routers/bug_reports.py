@@ -100,20 +100,34 @@ def admin_update_bug_report_settings(
 @router.get("/admin/bug-reports/export.csv")
 def admin_export_bug_reports_csv(
     report_status: str | None = Query(None, alias="status", pattern="^(open|fixed|all)$"),
+    sort_by: str | None = Query(default=None),
+    sort_dir: str | None = Query(default=None),
     _: User = Depends(require_action("admin:bug_reports")),
     db: Session = Depends(get_db),
 ) -> StreamingResponse:
-    content = bug_report_service.export_csv(db, status=report_status)
+    content = bug_report_service.export_csv(
+        db,
+        status=report_status,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+    )
     return csv_response(content, "bug_reports.csv")
 
 
 @router.get("/admin/bug-reports", response_model=list[BugReportOut])
 def admin_list_bug_reports(
     report_status: str | None = Query(None, alias="status", pattern="^(open|fixed|all)$"),
+    sort_by: str | None = Query(default=None),
+    sort_dir: str | None = Query(default=None),
     _: User = Depends(require_action("admin:bug_reports")),
     db: Session = Depends(get_db),
 ) -> list[BugReportOut]:
-    rows = bug_report_service.list_reports(db, status=report_status)
+    rows = bug_report_service.list_reports(
+        db,
+        status=report_status,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+    )
     return [BugReportOut.model_validate(bug_report_service.to_out(r)) for r in rows]
 
 

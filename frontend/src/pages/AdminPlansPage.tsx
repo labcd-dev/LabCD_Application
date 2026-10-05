@@ -13,9 +13,11 @@ import { adminApi, healthApi } from '../api/endpoints'
 import type { ActionInfo, PlanInfo } from '../api/types'
 import { AdminDownloadCsvButton } from '../components/admin/AdminDownloadCsvButton'
 import { AdminPagination } from '../components/admin/AdminPagination'
+import { AdminSortHeader } from '../components/admin/AdminSortHeader'
 import { StatusMessage } from '../components/StatusMessage'
 import { useAuth } from '../context/AuthContext'
 import { useClientPagination } from '../hooks/useClientPagination'
+import { useClientSort } from '../hooks/useClientSort'
 import { downloadCsv } from '../lib/downloadCsv'
 import {
   btnBase,
@@ -96,7 +98,40 @@ export function AdminPlansPage() {
     )
   }, [plans, query])
 
-  const pagination = useClientPagination(filteredPlans, { resetKey: query })
+  const planSortAccessors = useMemo(
+    () => ({
+      name: (plan: PlanInfo) => plan.name,
+      price: (plan: PlanInfo) => plan.price,
+      is_active: (plan: PlanInfo) => plan.is_active,
+    }),
+    [],
+  )
+
+  const {
+    sortedItems: sortedPlans,
+    sortBy,
+    sortDir,
+    toggle: toggleSort,
+    resetKey: sortResetKey,
+  } = useClientSort({
+    items: filteredPlans,
+    defaultKey: 'price',
+    defaultDir: 'asc',
+    accessors: planSortAccessors,
+  })
+
+  const exportParams = useMemo(
+    () => ({
+      q: query.trim() || undefined,
+      sort_by: sortBy,
+      sort_dir: sortDir,
+    }),
+    [query, sortBy, sortDir],
+  )
+
+  const pagination = useClientPagination(sortedPlans, {
+    resetKey: `${query}|${sortResetKey}`,
+  })
 
   if (!canManage) {
     return <Navigate to="/admin" replace />
@@ -266,7 +301,10 @@ export function AdminPlansPage() {
             onClick={async () => {
               setError(null)
               try {
-                await downloadCsv(() => adminApi.downloadPlansCsv(), 'plans.csv')
+                await downloadCsv(
+                  () => adminApi.downloadPlansCsv(exportParams),
+                  'plans.csv',
+                )
               } catch (err) {
                 setError(err instanceof Error ? err.message : 'Failed to download CSV')
               }
@@ -310,13 +348,34 @@ export function AdminPlansPage() {
             <div className="overflow-x-auto rounded-xl border border-border-subtle">
               <table className="admin-users-table w-full min-w-[860px] border-collapse text-sm">
                 <thead>
-                  <tr className="border-b border-border bg-surface-muted/80 text-left">
-                    <th className="px-4 py-3 font-medium text-foreground-secondary">Plan</th>
-                    <th className="px-4 py-3 font-medium text-foreground-secondary">Price</th>
-                    <th className="px-4 py-3 font-medium text-foreground-secondary">Status</th>
-                    <th className="px-4 py-3 font-medium text-foreground-secondary">Modules</th>
-                    <th className="px-4 py-3 font-medium text-foreground-secondary">Models</th>
-                    <th className="px-4 py-3 text-right font-medium text-foreground-secondary">
+                  <tr className="border-b border-border bg-surface-muted/80 text-left text-foreground-secondary">
+                    <AdminSortHeader
+                      label="Plan"
+                      sortKey="name"
+                      activeKey={sortBy}
+                      dir={sortDir}
+                      onSort={toggleSort}
+                      className="px-4 py-3"
+                    />
+                    <AdminSortHeader
+                      label="Price"
+                      sortKey="price"
+                      activeKey={sortBy}
+                      dir={sortDir}
+                      onSort={toggleSort}
+                      className="px-4 py-3"
+                    />
+                    <AdminSortHeader
+                      label="Status"
+                      sortKey="is_active"
+                      activeKey={sortBy}
+                      dir={sortDir}
+                      onSort={toggleSort}
+                      className="px-4 py-3"
+                    />
+                    <th className="px-4 py-3 font-medium">Modules</th>
+                    <th className="px-4 py-3 font-medium">Models</th>
+                    <th className="px-4 py-3 text-right font-medium">
                       <span className="sr-only">Actions</span>
                     </th>
                   </tr>
