@@ -25,7 +25,6 @@ import {
   Users,
   X,
 } from 'lucide-react'
-import { BugReportFab } from '../BugReportFab'
 import { ThemeToggle } from '../ThemeToggle'
 import { useAuth } from '../../context/AuthContext'
 import { btnBase, btnCompact } from '../../lib/classes'
@@ -182,7 +181,6 @@ export function AdminLayout() {
           </div>
         </main>
       </div>
-      <BugReportFab />
     </div>
   )
 }
