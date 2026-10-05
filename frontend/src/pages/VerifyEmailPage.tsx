@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { authApi } from '../api/endpoints'
+import { AuthPageFrame } from '../components/auth/AuthPageFrame'
 import { StatusMessage } from '../components/StatusMessage'
-import { btnPrimary, btnWide, cardPanel, pageIntro } from '../lib/classes'
 
 export function VerifyEmailPage() {
   const [params] = useSearchParams()
@@ -38,23 +38,27 @@ export function VerifyEmailPage() {
   }, [token])
 
   return (
-    <section className="mx-auto flex min-h-[70vh] max-w-md flex-col justify-center px-1">
-      <div className={`${cardPanel} space-y-4`}>
-        <header>
-          <h2 className="m-0 text-2xl font-semibold tracking-tight text-foreground">
-            Verify email
-          </h2>
-          <p className={`${pageIntro} mt-2`}>Confirming your LabCD account email address.</p>
-        </header>
-
-        {busy && <p className="m-0 text-sm text-muted-text">Verifying…</p>}
+    <AuthPageFrame title="Verify email" subtitle="Confirming your LabCD account email address.">
+      <div className="login-auth__messages">
+        {busy && <p className="login-auth__subtitle">Verifying…</p>}
         {error && <StatusMessage type="error" message={error} />}
         {success && <StatusMessage type="success" message={success} />}
+      </div>
 
-        <Link to="/login" className={`${btnPrimary} ${btnWide} inline-flex justify-center`}>
-          Go to sign in
+      <div className="login-auth__form">
+        <Link to="/login" className="login-auth__submit">
+          Go to Log In
         </Link>
       </div>
-    </section>
+
+      {error && (
+        <p className="login-auth__footer">
+          Need a new link?{' '}
+          <Link to="/resend-verification" className="login-auth__link">
+            Resend verification
+          </Link>
+        </p>
+      )}
+    </AuthPageFrame>
   )
 }

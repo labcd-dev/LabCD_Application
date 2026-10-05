@@ -41,6 +41,7 @@ import { ProfilePage } from './pages/ProfilePage'
 import { ProjectDetailPage } from './pages/ProjectDetailPage'
 import { ProjectsPage } from './pages/ProjectsPage'
 import { RegisterPage } from './pages/RegisterPage'
+import { ResendVerificationPage } from './pages/ResendVerificationPage'
 import { ResetPasswordPage } from './pages/ResetPasswordPage'
 import { MuloPage } from './pages/MuloPage'
 import { AdaptivePage } from './pages/AdaptivePage'
@@ -69,6 +70,7 @@ export default function App() {
                 <Route path="login/sso" element={<LoginSsoPage />} />
                 <Route path="register" element={<RegisterPage />} />
                 <Route path="verify-email" element={<VerifyEmailPage />} />
+                <Route path="resend-verification" element={<ResendVerificationPage />} />
                 <Route path="forgot-password" element={<ForgotPasswordPage />} />
                 <Route path="reset-password" element={<ResetPasswordPage />} />
                 <Route element={<ProtectedRoute />}>

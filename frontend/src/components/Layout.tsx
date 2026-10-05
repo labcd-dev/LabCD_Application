@@ -8,6 +8,17 @@ const AUTH_PATHS = new Set([
   '/login/sso',
   '/register',
   '/verify-email',
+  '/resend-verification',
+  '/forgot-password',
+  '/reset-password',
+])
+
+const IMMERSIVE_AUTH_PATHS = new Set([
+  '/',
+  '/login',
+  '/register',
+  '/verify-email',
+  '/resend-verification',
   '/forgot-password',
   '/reset-password',
 ])
@@ -16,6 +27,7 @@ export function Layout() {
   const location = useLocation()
   const { user } = useAuth()
   const isAuthPage = AUTH_PATHS.has(location.pathname)
+  const isImmersiveAuth = IMMERSIVE_AUTH_PATHS.has(location.pathname)
   const useAppShell = Boolean(user) && !isAuthPage
 
   if (useAppShell) {
@@ -23,6 +35,14 @@ export function Layout() {
       <AppShell>
         <Outlet />
       </AppShell>
+    )
+  }
+
+  if (isImmersiveAuth) {
+    return (
+      <div className="min-h-screen bg-[#eef0f5]">
+        <Outlet />
+      </div>
     )
   }
 
