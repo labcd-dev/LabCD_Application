@@ -67,20 +67,20 @@ export function MpcThinkingBlock({
   const activeIdx = stageIndex >= 0 ? stageIndex : isRunning ? 0 : 3
 
   return (
-    <div className="my-2.5 overflow-hidden rounded-2xl border border-purple-500/25 bg-gradient-to-b from-purple-950/15 via-surface-elevated/70 to-surface-elevated/90 shadow-sm backdrop-blur-md transition-all">
+    <div className="my-2.5 overflow-hidden rounded-2xl border border-purple-200/90 dark:border-purple-500/25 bg-purple-50/40 dark:bg-gradient-to-b dark:from-purple-950/15 dark:via-surface-elevated/70 dark:to-surface-elevated/90 shadow-xs backdrop-blur-md transition-all">
       {/* Thinking Header Bar */}
       <button
         type="button"
         onClick={() => setExpanded((prev) => !prev)}
-        className="flex w-full items-center justify-between px-3.5 py-2.5 text-left transition-colors hover:bg-purple-500/10 focus:outline-none"
+        className="flex w-full items-center justify-between px-3.5 py-2.5 text-left transition-colors hover:bg-purple-500/5 dark:hover:bg-purple-500/10 focus:outline-none"
         aria-expanded={expanded}
       >
         <div className="flex items-center gap-2.5 min-w-0">
           <div
             className={`flex size-6 shrink-0 items-center justify-center rounded-lg border ${
               isRunning
-                ? 'border-purple-500/40 bg-purple-500/20 text-purple-400 animate-pulse'
-                : 'border-purple-500/30 bg-purple-500/15 text-purple-400'
+                ? 'border-purple-300 dark:border-purple-500/40 bg-purple-100 dark:bg-purple-500/20 text-purple-600 dark:text-purple-400 animate-pulse'
+                : 'border-purple-200 dark:border-purple-500/30 bg-purple-100/70 dark:bg-purple-500/15 text-purple-600 dark:text-purple-400'
             }`}
           >
             {isRunning ? (
@@ -91,23 +91,23 @@ export function MpcThinkingBlock({
           </div>
 
           <div className="flex items-center gap-2 truncate text-xs">
-            <span className="font-semibold text-purple-300">
+            <span className="font-semibold text-purple-700 dark:text-purple-300">
               {isRunning ? 'Thinking & Synthesizing...' : `Thought for ${durationSec ?? elapsedSec}s`}
             </span>
 
             {isRunning && (
-              <span className="flex items-center gap-1 rounded-full border border-purple-500/30 bg-purple-500/10 px-2 py-0.5 font-mono text-[10.5px] text-purple-300">
-                <span className="size-1.5 rounded-full bg-purple-400 animate-ping" />
+              <span className="flex items-center gap-1 rounded-full border border-purple-300 dark:border-purple-500/30 bg-purple-100/80 dark:bg-purple-500/10 px-2 py-0.5 font-mono text-[10.5px] text-purple-700 dark:text-purple-300">
+                <span className="size-1.5 rounded-full bg-purple-500 dark:bg-purple-400 animate-ping" />
                 {formatTimer(elapsedSec)}
               </span>
             )}
 
-            <span className="rounded-md border border-border/80 bg-surface-muted px-2 py-0.5 font-mono text-[10.5px] text-muted-text">
+            <span className="rounded-md border border-border bg-surface-muted px-2 py-0.5 font-mono text-[10.5px] text-muted-text">
               Iter {iteration}/{maxIterations}
             </span>
 
             {currentStage && (
-              <span className="hidden sm:inline-block truncate rounded-md bg-purple-500/15 px-2 py-0.5 text-[10.5px] font-medium text-purple-300 capitalize">
+              <span className="hidden sm:inline-block truncate rounded-md border border-purple-200 dark:border-transparent bg-purple-100/80 dark:bg-purple-500/15 px-2 py-0.5 text-[10.5px] font-medium text-purple-700 dark:text-purple-300 capitalize">
                 Stage: {currentStage}
               </span>
             )}
@@ -119,24 +119,24 @@ export function MpcThinkingBlock({
             {logs.length} reasoning trace{logs.length === 1 ? '' : 's'}
           </span>
           {expanded ? (
-            <ChevronDown className="size-4 text-purple-400 transition-transform" />
+            <ChevronDown className="size-4 text-purple-600 dark:text-purple-400 transition-transform" />
           ) : (
-            <ChevronRight className="size-4 text-purple-400 transition-transform" />
+            <ChevronRight className="size-4 text-purple-600 dark:text-purple-400 transition-transform" />
           )}
         </div>
       </button>
 
       {/* Expandable Thinking Content */}
       {expanded && (
-        <div className="border-t border-purple-500/20 px-3.5 py-3 space-y-3 animate-in fade-in-50 duration-150">
+        <div className="border-t border-purple-200/80 dark:border-purple-500/20 px-3.5 py-3 space-y-3 animate-in fade-in-50 duration-150">
           {/* Mini Agent Pipeline DAG */}
           <div>
             <div className="mb-1.5 flex items-center justify-between text-[11px] font-semibold text-muted-text">
               <span className="flex items-center gap-1">
-                <Layers className="size-3 text-purple-400" />
+                <Layers className="size-3 text-purple-500 dark:text-purple-400" />
                 Multi-Agent Synthesis Pipeline
               </span>
-              <span className="text-[10px] text-muted">
+              <span className="text-[10px] text-muted-text">
                 Discrete-Time Receding-Horizon
               </span>
             </div>
@@ -150,10 +150,10 @@ export function MpcThinkingBlock({
                     key={s.id}
                     className={`relative overflow-hidden rounded-xl border p-2 transition-all ${
                       isCurrent
-                        ? 'border-purple-500/60 bg-purple-500/20 shadow-xs shadow-purple-500/20'
+                        ? 'border-purple-400 dark:border-purple-500/60 bg-purple-100/80 dark:bg-purple-500/20 shadow-xs shadow-purple-500/10'
                         : isPassed
-                        ? 'border-emerald-500/30 bg-emerald-500/10 text-foreground'
-                        : 'border-border/60 bg-surface/40 text-muted opacity-70'
+                        ? 'border-emerald-300 dark:border-emerald-500/30 bg-emerald-50/80 dark:bg-emerald-500/10 text-foreground'
+                        : 'border-border bg-surface-muted/60 dark:bg-surface/40 text-muted-text opacity-75'
                     }`}
                   >
                     <div className="flex items-center justify-between">
@@ -163,10 +163,10 @@ export function MpcThinkingBlock({
                       <span
                         className={`size-1.5 rounded-full ${
                           isCurrent
-                            ? 'bg-purple-400 animate-ping'
+                            ? 'bg-purple-600 dark:bg-purple-400 animate-ping'
                             : isPassed
-                            ? 'bg-emerald-400'
-                            : 'bg-muted'
+                            ? 'bg-emerald-500 dark:bg-emerald-400'
+                            : 'bg-muted-text/40'
                         }`}
                       />
                     </div>
@@ -186,11 +186,11 @@ export function MpcThinkingBlock({
           <div>
             <div className="mb-1 flex items-center justify-between text-[11px] font-semibold text-muted-text">
               <span className="flex items-center gap-1">
-                <Terminal className="size-3 text-cyan-400" />
+                <Terminal className="size-3 text-cyan-600 dark:text-cyan-400" />
                 Agent Thought Stream
               </span>
               {isRunning && (
-                <span className="flex items-center gap-1 text-[10px] text-purple-400 font-mono">
+                <span className="flex items-center gap-1 text-[10px] text-purple-600 dark:text-purple-400 font-mono">
                   <Cpu className="size-2.5 animate-spin" /> streaming telemetry...
                 </span>
               )}
@@ -198,10 +198,10 @@ export function MpcThinkingBlock({
 
             <div
               ref={logContainerRef}
-              className="max-h-48 overflow-y-auto rounded-xl border border-border/70 bg-black/40 p-2.5 font-mono text-[11px] leading-relaxed shadow-inner scrollbar-thin scrollbar-thumb-purple-500/30"
+              className="max-h-48 overflow-y-auto rounded-xl border border-border bg-surface-muted/90 dark:bg-black/40 p-2.5 font-mono text-[11px] leading-relaxed shadow-inner scrollbar-thin scrollbar-thumb-purple-500/30"
             >
               {logs.length === 0 ? (
-                <div className="py-2 text-center text-xs text-muted">
+                <div className="py-2 text-center text-xs text-muted-text">
                   Awaiting agent telemetry stream...
                 </div>
               ) : (
@@ -209,7 +209,7 @@ export function MpcThinkingBlock({
                   {logs.map((item) => (
                     <div
                       key={item.id}
-                      className="flex items-start gap-2 border-b border-white/[0.04] pb-1 last:border-b-0 last:pb-0"
+                      className="flex items-start gap-2 border-b border-border/40 dark:border-white/[0.04] pb-1 last:border-b-0 last:pb-0"
                     >
                       <span
                         className={`shrink-0 rounded px-1.5 py-0.2 text-[9.5px] font-semibold uppercase tracking-wide ${item.badgeColor}`}
@@ -217,11 +217,11 @@ export function MpcThinkingBlock({
                         {item.agent}
                       </span>
                       {item.round !== null && (
-                        <span className="shrink-0 text-[9.5px] text-muted">
+                        <span className="shrink-0 text-[9.5px] text-muted-text">
                           R{item.round}
                         </span>
                       )}
-                      <span className="text-zinc-200 dark:text-zinc-300 break-words">
+                      <span className="text-foreground dark:text-zinc-200 break-words">
                         {item.text}
                       </span>
                     </div>
