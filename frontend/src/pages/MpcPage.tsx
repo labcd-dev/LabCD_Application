@@ -18,6 +18,7 @@ import type {
 } from '../api/types'
 import { MpcChatPane, type ChatMessage } from '../components/mpc/MpcChatPane'
 import { MpcCanvasPane, type CanvasTab } from '../components/mpc/MpcCanvasPane'
+import { MpcSetupSection } from '../components/mpc/MpcSetupSection'
 import type { MpcTuningParams } from '../components/mpc/MpcParameterDrawer'
 import { DesignCompletedToast } from '../components/DesignCompletedToast'
 import { GradeDesignModal } from '../components/GradeDesignModal'
@@ -34,6 +35,11 @@ export function MpcPage() {
   const [results, setResults] = useState<MPCJobResultsResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
 
+  // View mode: 'setup' (pre-launch configuration) or 'workspace' (chat & canvas)
+  const [viewMode, setViewMode] = useState<'setup' | 'workspace'>(() => {
+    return searchParams.get('job_id') || searchParams.get('job') ? 'workspace' : 'setup'
+  })
+
   const [gradeModalOpen, setGradeModalOpen] = useState(false)
   const [showCompletedToast, setShowCompletedToast] = useState(false)
   const hasPromptedGradeRef = useRef(false)
@@ -42,6 +48,7 @@ export function MpcPage() {
 
   // Pre-flight Diagnostics
   const [diagnostics, setDiagnostics] = useState<MPCDiagnosticsResponse | null>(null)
+  const [testingDynamics, setTestingDynamics] = useState(false)
   const hasAutoTestedDynamicsRef = useRef(false)
 
   // Tuning Parameters
@@ -748,6 +755,47 @@ if __name__ == '__main__':
     setResults(null)
     setError(null)
     setMessages([])
+    setViewMode('setup')
+  }
+
+  const handleTestDynamics = async () => {
+    setTestingDynamics(true)
+    try {
+      const payload = resolveDynamicsPayload()
+      const res = await mpcApi.testDynamics({
+        dynamics: payload,
+        dt: params.dtMpc,
+        sim_time: 2.0,
+      })
+      if (!res.error) {
+        setDiagnostics(res)
+        if (res.suggested_dt) {
+          setParams((prev) => ({ ...prev, dtMpc: res.suggested_dt! }))
+        }
+        if (res.bryson_q && res.bryson_q.length) {
+          setParams((prev) => ({
+            ...prev,
+            qWeightsInput: res.bryson_q!.map((v) => v.toFixed(3)).join(', '),
+          }))
+        }
+        if (res.bryson_r && res.bryson_r.length) {
+          setParams((prev) => ({
+            ...prev,
+            rWeightsInput: res.bryson_r!.map((v) => v.toFixed(3)).join(', '),
+          }))
+        }
+      }
+    } catch (err) {
+      console.error('Failed to probe dynamics:', err)
+    } finally {
+      setTestingDynamics(false)
+    }
+  }
+
+  const handleStartTuningFromSetup = (userGuidance: string) => {
+    setViewMode('workspace')
+    const prompt = userGuidance.trim() || 'Run autonomous MPC tuning with configured parameters.'
+    void handleSendMessage(prompt, params)
   }
 
   const handleDownloadReportPdf = async () => {
@@ -788,39 +836,46 @@ if __name__ == '__main__':
 
   return (
     <div className="relative flex h-full min-h-0 w-full flex-col bg-surface overflow-hidden">
-      {/* Mobile Top Navigation Toggle (only visible below lg) */}
-      <div className="lg:hidden flex h-11 shrink-0 items-center justify-between border-b border-border bg-surface-elevated px-4">
-        <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
-          <Compass className="size-4 text-purple-400" />
-          Agentic MPC Tuning
-        </span>
+      {/* Mobile Top Navigation Toggle (only visible below lg in workspace mode) */}
+      {viewMode === 'workspace' && (
+        <div className="lg:hidden flex h-11 shrink-0 items-center justify-between border-b border-border bg-surface-elevated px-4">
+          <button
+            type="button"
+            onClick={() => setViewMode('setup')}
+            className="text-xs font-bold text-foreground flex items-center gap-1.5 hover:text-purple-400 transition-colors"
+            title="Return to Setup Screen"
+          >
+            <Compass className="size-4 text-purple-400" />
+            Agentic MPC Tuning
+          </button>
 
-        <div className="flex items-center rounded-lg border border-border bg-surface-muted p-0.5 text-xs">
-          <button
-            type="button"
-            onClick={() => setMobileView('chat')}
-            className={`rounded-md px-2.5 py-1 flex items-center gap-1 transition-all ${
-              mobileView === 'chat'
-                ? 'bg-purple-600 text-white font-semibold shadow-xs'
-                : 'text-muted-text hover:text-foreground'
-            }`}
-          >
-            <MessageSquare className="size-3.5" /> Chat &amp; Thinking
-          </button>
-          <button
-            type="button"
-            onClick={() => setMobileView('canvas')}
-            className={`rounded-md px-2.5 py-1 flex items-center gap-1 transition-all ${
-              mobileView === 'canvas'
-                ? 'bg-purple-600 text-white font-semibold shadow-xs'
-                : 'text-muted-text hover:text-foreground'
-            }`}
-          >
-            <Activity className="size-3.5" /> Canvas &amp; Waveforms
-            {results && <span className="size-1.5 rounded-full bg-emerald-400" />}
-          </button>
+          <div className="flex items-center rounded-lg border border-border bg-surface-muted p-0.5 text-xs">
+            <button
+              type="button"
+              onClick={() => setMobileView('chat')}
+              className={`rounded-md px-2.5 py-1 flex items-center gap-1 transition-all ${
+                mobileView === 'chat'
+                  ? 'bg-purple-600 text-white font-semibold shadow-xs'
+                  : 'text-muted-text hover:text-foreground'
+              }`}
+            >
+              <MessageSquare className="size-3.5" /> Chat &amp; Thinking
+            </button>
+            <button
+              type="button"
+              onClick={() => setMobileView('canvas')}
+              className={`rounded-md px-2.5 py-1 flex items-center gap-1 transition-all ${
+                mobileView === 'canvas'
+                  ? 'bg-purple-600 text-white font-semibold shadow-xs'
+                  : 'text-muted-text hover:text-foreground'
+              }`}
+            >
+              <Activity className="size-3.5" /> Canvas &amp; Waveforms
+              {results && <span className="size-1.5 rounded-full bg-emerald-400" />}
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {error && (
         <div className="flex items-center justify-between border-b border-rose-500/30 bg-rose-500/10 px-4 py-2 text-xs text-rose-400">
@@ -838,155 +893,172 @@ if __name__ == '__main__':
         </div>
       )}
 
-      {/* Main 2-Column Split Workspace with Draggable Splitter */}
-      <div
-        ref={splitContainerRef}
-        className={`flex flex-1 min-h-0 min-w-0 flex-row overflow-hidden relative ${
-          isDraggingSplitter ? 'select-none cursor-col-resize' : ''
-        }`}
-      >
-        {/* Left Column: Chat & Thinking Pane */}
-        <div
-          style={{
-            width: isCanvasExpanded
-              ? '0%'
-              : isCanvasCollapsed
-              ? '100%'
-              : undefined,
-          }}
-          className={`h-full min-h-0 flex-col overflow-hidden transition-[width] duration-150 ${
-            isCanvasExpanded
-              ? 'hidden'
-              : mobileView === 'chat'
-              ? 'flex w-full'
-              : 'hidden lg:flex'
-          }`}
-          // On desktop when neither expanded nor collapsed, apply splitPct width
-          ref={(el) => {
-            if (el && !isCanvasExpanded && !isCanvasCollapsed && window.innerWidth >= 1024) {
-              el.style.width = `${splitPct}%`
-            }
-          }}
-        >
-          <MpcChatPane
+      {/* Main View: Setup Screen vs. 2-Column Split Workspace */}
+      {viewMode === 'setup' ? (
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <MpcSetupSection
             systemName={systemName}
-            isRunning={isRunning}
-            elapsedSec={elapsedSec}
-            job={job}
-            results={results}
-            reasoningLogs={reasoningLogs}
-            messages={messages}
-            onSendMessage={handleSendMessage}
-            onAskFollowUp={handleAskFollowUp}
-            onCancelJob={handleCancel}
-            onResetSession={handleResetSession}
-            onSelectTab={(tab) => {
-              setCanvasTab(tab)
-              setIsCanvasCollapsed(false)
-              setMobileView('canvas')
-            }}
-            onDownloadReport={handleDownloadReportPdf}
-            downloadingPdf={downloadingPdf}
-            currentParams={params}
+            params={params}
             onChangeParams={(updated) => setParams((p) => ({ ...p, ...updated }))}
-            onResetParamsDefaults={() =>
-              setParams({
-                np: 12,
-                nc: 4,
-                dtMpc: 0.02,
-                simTime: 3.0,
-                maxIterations: 8,
-                qWeightsInput: '10.0, 1.0, 10.0, 1.0',
-                rWeightsInput: '0.1',
-                scenarioLevel: 1,
-                customDriftPct: 20,
-                disturbanceAmp: 1.0,
-                trajectoryMode: 'reg',
-                trajectoryAmplitude: 0.5,
-                trajectoryFrequency: 0.5,
-                noiseStd: 0.0,
-              })
-            }
-          />
-        </div>
-
-        {/* Draggable Vertical Splitter Bar (Desktop only, when neither collapsed nor expanded) */}
-        {!isCanvasExpanded && !isCanvasCollapsed && (
-          <div
-            onMouseDown={(e) => {
-              e.preventDefault()
-              setIsDraggingSplitter(true)
-            }}
-            onDoubleClick={() => setSplitPct(64)}
-            className="hidden lg:flex group relative w-1.5 hover:w-2 bg-border hover:bg-purple-500/50 cursor-col-resize items-center justify-center transition-all z-20 shrink-0"
-            title="Drag to resize Chat and Artifact Canvas (Double-click to reset to 64/36)"
-          >
-            <div className="flex h-8 w-3 items-center justify-center rounded-sm bg-surface-elevated border border-border shadow-xs opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-              <GripVertical className="size-2.5 text-muted-text group-hover:text-purple-300" />
-            </div>
-          </div>
-        )}
-
-        {/* Right Column: Live Artifact Canvas Pane */}
-        <div
-          style={{
-            width: isCanvasCollapsed
-              ? '0%'
-              : isCanvasExpanded
-              ? '100%'
-              : undefined,
-          }}
-          className={`h-full min-h-0 flex-col overflow-hidden transition-[width] duration-150 ${
-            isCanvasCollapsed
-              ? 'hidden'
-              : isCanvasExpanded
-              ? 'flex w-full'
-              : mobileView === 'canvas'
-              ? 'flex w-full'
-              : 'hidden lg:flex'
-          }`}
-          // On desktop when neither expanded nor collapsed, apply 100 - splitPct width
-          ref={(el) => {
-            if (el && !isCanvasCollapsed && !isCanvasExpanded && window.innerWidth >= 1024) {
-              el.style.width = `${100 - splitPct}%`
-            }
-          }}
-        >
-          <MpcCanvasPane
-            systemName={systemName}
-            job={job}
-            results={results}
             diagnostics={diagnostics}
-            activeTab={canvasTab}
-            onTabChange={setCanvasTab}
-            onDownloadReport={handleDownloadReportPdf}
-            downloadingPdf={downloadingPdf}
-            onRetryFromDiagnosis={() => {
-              setMobileView('chat')
-            }}
-            onApplyDiagnosisSuggestion={handleApplyDiagnosisSuggestion}
-            diagnosisApplyUsed={diagnosisApplyUsed}
-            isExpanded={isCanvasExpanded}
-            onToggleExpand={() => setIsCanvasExpanded((prev) => !prev)}
-            onToggleCollapse={() => setIsCanvasCollapsed(true)}
+            testingDynamics={testingDynamics}
+            onTestDynamics={handleTestDynamics}
+            onStartTuning={handleStartTuningFromSetup}
+            onOpenWorkspaceDirectly={() => setViewMode('workspace')}
+            isRunning={isRunning}
           />
         </div>
-
-        {/* Floating Slide-out button to re-open Canvas when collapsed on desktop */}
-        {isCanvasCollapsed && !isCanvasExpanded && (
-          <button
-            type="button"
-            onClick={() => setIsCanvasCollapsed(false)}
-            className="hidden lg:flex fixed right-0 top-1/2 -translate-y-1/2 z-30 items-center gap-1.5 rounded-l-xl border-y border-l border-purple-500/40 bg-surface-elevated/95 px-2.5 py-3 shadow-xl backdrop-blur-md hover:bg-purple-500/10 text-xs font-semibold text-purple-300 transition-all hover:pr-3.5 animate-in fade-in slide-in-from-right-4"
-            title="Slide open controller artifacts canvas"
+      ) : (
+        <div
+          ref={splitContainerRef}
+          className={`flex flex-1 min-h-0 min-w-0 flex-row overflow-hidden relative ${
+            isDraggingSplitter ? 'select-none cursor-col-resize' : ''
+          }`}
+        >
+          {/* Left Column: Chat & Thinking Pane */}
+          <div
+            style={{
+              width: isCanvasExpanded
+                ? '0%'
+                : isCanvasCollapsed
+                ? '100%'
+                : undefined,
+            }}
+            className={`h-full min-h-0 flex-col overflow-hidden transition-[width] duration-150 ${
+              isCanvasExpanded
+                ? 'hidden'
+                : mobileView === 'chat'
+                ? 'flex w-full'
+                : 'hidden lg:flex'
+            }`}
+            // On desktop when neither expanded nor collapsed, apply splitPct width
+            ref={(el) => {
+              if (el && !isCanvasExpanded && !isCanvasCollapsed && window.innerWidth >= 1024) {
+                el.style.width = `${splitPct}%`
+              }
+            }}
           >
-            <PanelRightOpen className="size-4 text-purple-400" />
-            <span className="[writing-mode:vertical-rl] rotate-180 text-[11px] font-mono tracking-wide">
-              Artifacts Canvas
-            </span>
-          </button>
-        )}
-      </div>
+            <MpcChatPane
+              systemName={systemName}
+              isRunning={isRunning}
+              elapsedSec={elapsedSec}
+              job={job}
+              results={results}
+              reasoningLogs={reasoningLogs}
+              messages={messages}
+              onSendMessage={handleSendMessage}
+              onAskFollowUp={handleAskFollowUp}
+              onCancelJob={handleCancel}
+              onResetSession={handleResetSession}
+              onOpenSetup={() => setViewMode('setup')}
+              onSelectTab={(tab) => {
+                setCanvasTab(tab)
+                setIsCanvasCollapsed(false)
+                setMobileView('canvas')
+              }}
+              onDownloadReport={handleDownloadReportPdf}
+              downloadingPdf={downloadingPdf}
+              currentParams={params}
+              onChangeParams={(updated) => setParams((p) => ({ ...p, ...updated }))}
+              onResetParamsDefaults={() =>
+                setParams({
+                  np: 12,
+                  nc: 4,
+                  dtMpc: 0.02,
+                  simTime: 3.0,
+                  maxIterations: 8,
+                  qWeightsInput: '10.0, 1.0, 10.0, 1.0',
+                  rWeightsInput: '0.1',
+                  scenarioLevel: 1,
+                  customDriftPct: 20,
+                  disturbanceAmp: 1.0,
+                  trajectoryMode: 'reg',
+                  trajectoryAmplitude: 0.5,
+                  trajectoryFrequency: 0.5,
+                  noiseStd: 0.0,
+                })
+              }
+            />
+          </div>
+
+          {/* Draggable Vertical Splitter Bar (Desktop only, when neither collapsed nor expanded) */}
+          {!isCanvasExpanded && !isCanvasCollapsed && (
+            <div
+              onMouseDown={(e) => {
+                e.preventDefault()
+                setIsDraggingSplitter(true)
+              }}
+              onDoubleClick={() => setSplitPct(64)}
+              className="hidden lg:flex group relative w-1.5 hover:w-2 bg-border hover:bg-purple-500/50 cursor-col-resize items-center justify-center transition-all z-20 shrink-0"
+              title="Drag to resize Chat and Artifact Canvas (Double-click to reset to 64/36)"
+            >
+              <div className="flex h-8 w-3 items-center justify-center rounded-sm bg-surface-elevated border border-border shadow-xs opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                <GripVertical className="size-2.5 text-muted-text group-hover:text-purple-300" />
+              </div>
+            </div>
+          )}
+
+          {/* Right Column: Live Artifact Canvas Pane */}
+          <div
+            style={{
+              width: isCanvasCollapsed
+                ? '0%'
+                : isCanvasExpanded
+                ? '100%'
+                : undefined,
+            }}
+            className={`h-full min-h-0 flex-col overflow-hidden transition-[width] duration-150 ${
+              isCanvasCollapsed
+                ? 'hidden'
+                : isCanvasExpanded
+                ? 'flex w-full'
+                : mobileView === 'canvas'
+                ? 'flex w-full'
+                : 'hidden lg:flex'
+            }`}
+            // On desktop when neither expanded nor collapsed, apply 100 - splitPct width
+            ref={(el) => {
+              if (el && !isCanvasCollapsed && !isCanvasExpanded && window.innerWidth >= 1024) {
+                el.style.width = `${100 - splitPct}%`
+              }
+            }}
+          >
+            <MpcCanvasPane
+              systemName={systemName}
+              job={job}
+              results={results}
+              diagnostics={diagnostics}
+              activeTab={canvasTab}
+              onTabChange={setCanvasTab}
+              onDownloadReport={handleDownloadReportPdf}
+              downloadingPdf={downloadingPdf}
+              onRetryFromDiagnosis={() => {
+                setMobileView('chat')
+              }}
+              onApplyDiagnosisSuggestion={handleApplyDiagnosisSuggestion}
+              diagnosisApplyUsed={diagnosisApplyUsed}
+              isExpanded={isCanvasExpanded}
+              onToggleExpand={() => setIsCanvasExpanded((prev) => !prev)}
+              onToggleCollapse={() => setIsCanvasCollapsed(true)}
+            />
+          </div>
+
+          {/* Floating Slide-out button to re-open Canvas when collapsed on desktop */}
+          {isCanvasCollapsed && !isCanvasExpanded && (
+            <button
+              type="button"
+              onClick={() => setIsCanvasCollapsed(false)}
+              className="hidden lg:flex fixed right-0 top-1/2 -translate-y-1/2 z-30 items-center gap-1.5 rounded-l-xl border-y border-l border-purple-500/40 bg-surface-elevated/95 px-2.5 py-3 shadow-xl backdrop-blur-md hover:bg-purple-500/10 text-xs font-semibold text-purple-300 transition-all hover:pr-3.5 animate-in fade-in slide-in-from-right-4"
+              title="Slide open controller artifacts canvas"
+            >
+              <PanelRightOpen className="size-4 text-purple-400" />
+              <span className="[writing-mode:vertical-rl] rotate-180 text-[11px] font-mono tracking-wide">
+                Artifacts Canvas
+              </span>
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Grade Design Modal & Toast */}
       {showCompletedToast && results && !results.design_grade && (

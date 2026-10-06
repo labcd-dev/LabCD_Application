@@ -62,6 +62,7 @@ interface MpcChatPaneProps {
   currentParams: MpcTuningParams
   onChangeParams: (updated: Partial<MpcTuningParams>) => void
   onResetParamsDefaults: () => void
+  onOpenSetup?: () => void
 }
 
 const PRESETS = [
@@ -105,6 +106,7 @@ export function MpcChatPane({
   currentParams,
   onChangeParams,
   onResetParamsDefaults,
+  onOpenSetup,
 }: MpcChatPaneProps) {
   const [inputText, setInputText] = useState('')
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
@@ -180,6 +182,18 @@ export function MpcChatPane({
         </div>
 
         <div className="flex items-center gap-1.5">
+          {onOpenSetup && (
+            <button
+              type="button"
+              onClick={onOpenSetup}
+              className="flex items-center gap-1.5 rounded-lg border border-purple-500/30 bg-purple-500/10 px-2.5 py-1 text-xs font-medium text-purple-300 hover:bg-purple-500/20 transition-colors"
+              title="Return to setup and reference trajectory configuration"
+            >
+              <Sliders className="size-3.5 text-purple-400" />
+              <span className="hidden sm:inline">Setup Screen</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={() => setIsDrawerOpen(true)}
