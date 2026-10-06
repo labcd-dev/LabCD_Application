@@ -165,13 +165,13 @@ export function MpcChatPane({
       {/* Chat Header Bar */}
       <header className="flex h-13 shrink-0 items-center justify-between border-b border-border bg-surface-elevated/75 px-4 backdrop-blur-md">
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className="flex size-7 items-center justify-center rounded-lg border border-purple-500/30 bg-purple-500/15 text-purple-400">
+          <div className="flex size-7 items-center justify-center rounded-lg border border-purple-200 dark:border-purple-500/30 bg-purple-100/70 dark:bg-purple-500/15 text-purple-600 dark:text-purple-400">
             <Sparkles className="size-4" />
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold text-foreground">Agentic MPC Copilot</span>
-              <span className="rounded-md border border-purple-500/30 bg-purple-500/10 px-1.5 py-0.2 text-[10px] font-semibold text-purple-300">
+              <span className="rounded-md border border-purple-200 dark:border-purple-500/30 bg-purple-100/70 dark:bg-purple-500/10 px-1.5 py-0.2 text-[10px] font-semibold text-purple-700 dark:text-purple-300">
                 Autonomous Tuning
               </span>
             </div>
@@ -186,10 +186,10 @@ export function MpcChatPane({
             <button
               type="button"
               onClick={onOpenSetup}
-              className="flex items-center gap-1.5 rounded-lg border border-purple-500/30 bg-purple-500/10 px-2.5 py-1 text-xs font-medium text-purple-300 hover:bg-purple-500/20 transition-colors"
+              className="flex items-center gap-1.5 rounded-lg border border-purple-200 dark:border-purple-500/30 bg-purple-100/60 dark:bg-purple-500/10 px-2.5 py-1 text-xs font-medium text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-500/20 transition-colors"
               title="Return to setup and reference trajectory configuration"
             >
-              <Sliders className="size-3.5 text-purple-400" />
+              <Sliders className="size-3.5 text-purple-600 dark:text-purple-400" />
               <span className="hidden sm:inline">Setup Screen</span>
             </button>
           )}
@@ -200,7 +200,7 @@ export function MpcChatPane({
             className="flex items-center gap-1 rounded-lg border border-border bg-surface-muted px-2.5 py-1 text-xs text-foreground hover:bg-surface-hover transition-colors"
             title="Configure controller levers & horizons"
           >
-            <Sliders className="size-3.5 text-purple-400" />
+            <Sliders className="size-3.5 text-purple-600 dark:text-purple-400" />
             <span className="hidden sm:inline font-mono text-[11px]">
               Np={currentParams.np} Nc={currentParams.nc}
             </span>
@@ -227,7 +227,7 @@ export function MpcChatPane({
         {/* Empty State Welcome Card */}
         {messages.length === 0 && (
           <div className="mx-auto max-w-xl py-6 text-center space-y-4 animate-in fade-in-50 duration-300">
-            <div className="mx-auto flex size-14 items-center justify-center rounded-2xl border border-purple-500/30 bg-gradient-to-tr from-purple-500/20 via-indigo-500/10 to-transparent shadow-lg shadow-purple-500/10 text-purple-400">
+            <div className="mx-auto flex size-14 items-center justify-center rounded-2xl border border-purple-200 dark:border-purple-500/30 bg-gradient-to-tr from-purple-500/20 via-indigo-500/10 to-transparent shadow-lg shadow-purple-500/10 text-purple-600 dark:text-purple-400">
               <Brain className="size-7" />
             </div>
 
@@ -247,9 +247,9 @@ export function MpcChatPane({
                   key={idx}
                   type="button"
                   onClick={() => handlePresetClick(p)}
-                  className="group flex flex-col justify-between rounded-xl border border-border bg-surface-elevated/70 p-3 hover:border-purple-500/50 hover:bg-purple-500/5 transition-all text-left"
+                  className="group flex flex-col justify-between rounded-xl border border-border bg-surface-elevated/70 p-3 hover:border-purple-400 dark:hover:border-purple-500/50 hover:bg-purple-50/50 dark:hover:bg-purple-500/5 transition-all text-left"
                 >
-                  <span className="text-xs font-semibold text-foreground group-hover:text-purple-300 transition-colors">
+                  <span className="text-xs font-semibold text-foreground group-hover:text-purple-600 dark:group-hover:text-purple-300 transition-colors">
                     {p.title}
                   </span>
                   <span className="mt-1 text-[11px] text-muted-text line-clamp-2">
@@ -267,13 +267,13 @@ export function MpcChatPane({
             {/* User Message */}
             {msg.role === 'user' && (
               <div className="flex justify-end gap-2.5">
-                <div className="max-w-[85%] rounded-2xl rounded-tr-xs border border-purple-500/30 bg-gradient-to-br from-purple-600/20 via-purple-700/15 to-indigo-600/20 px-4 py-2.5 text-foreground shadow-sm">
+                <div className="max-w-[85%] rounded-2xl rounded-tr-xs border border-purple-200/90 dark:border-purple-500/30 bg-purple-100/60 dark:bg-gradient-to-br dark:from-purple-600/20 dark:via-purple-700/15 dark:to-indigo-600/20 px-4 py-2.5 text-purple-950 dark:text-foreground shadow-xs">
                   <div className="text-xs font-medium leading-relaxed whitespace-pre-wrap">
                     {msg.content}
                   </div>
                   {msg.paramsSummary && (
-                    <div className="mt-2 flex flex-wrap gap-1 border-t border-purple-500/20 pt-1.5">
-                      <span className="rounded bg-black/20 px-1.5 py-0.5 font-mono text-[9.5px] text-purple-300">
+                    <div className="mt-2 flex flex-wrap gap-1 border-t border-purple-200 dark:border-purple-500/20 pt-1.5">
+                      <span className="rounded bg-purple-200/70 dark:bg-black/20 px-1.5 py-0.5 font-mono text-[9.5px] text-purple-800 dark:text-purple-300">
                         {msg.paramsSummary}
                       </span>
                     </div>
@@ -331,19 +331,19 @@ export function MpcChatPane({
                         {/* Parameter Quick Strip */}
                         <div className="grid grid-cols-3 gap-2 font-mono text-center text-[10.5px]">
                           <div className="rounded-lg border border-border bg-surface-muted p-1.5">
-                            <span className="text-muted block text-[9px]">Horizon</span>
-                            <span className="font-bold text-purple-300">
+                            <span className="text-muted-text block text-[9px]">Horizon</span>
+                            <span className="font-bold text-purple-700 dark:text-purple-300">
                               Np={String(msg.results.best_params?.Np ?? currentParams.np)} Nc={String(msg.results.best_params?.Nc ?? currentParams.nc)}
                             </span>
                           </div>
                           <div className="rounded-lg border border-border bg-surface-muted p-1.5">
-                            <span className="text-muted block text-[9px]">Sample dt</span>
-                            <span className="font-bold text-cyan-300">
+                            <span className="text-muted-text block text-[9px]">Sample dt</span>
+                            <span className="font-bold text-cyan-700 dark:text-cyan-300">
                               {Number(msg.results.best_params?.dt || currentParams.dtMpc).toFixed(3)}s
                             </span>
                           </div>
                           <div className="rounded-lg border border-border bg-surface-muted p-1.5">
-                            <span className="text-muted block text-[9px]">Iterations</span>
+                            <span className="text-muted-text block text-[9px]">Iterations</span>
                             <span className="font-bold text-foreground">
                               {msg.results.iteration || 1} rounds
                             </span>
@@ -365,7 +365,7 @@ export function MpcChatPane({
                             onClick={() => onSelectTab('code')}
                             className={`${btnBase} ${btnCompact} flex items-center gap-1 text-[11px] border border-border hover:bg-surface-hover`}
                           >
-                            <FileCode className="size-3.5 text-purple-400" /> Python Deliverable (.py)
+                            <FileCode className="size-3.5 text-purple-600 dark:text-purple-400" /> Python Deliverable (.py)
                           </button>
 
                           <button
