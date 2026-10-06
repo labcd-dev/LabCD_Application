@@ -7,12 +7,10 @@ import {
   Cpu,
   Download,
   FileCode,
-  FileText,
   Maximize2,
   Minimize2,
   PanelRightClose,
   Play,
-  TrendingDown,
   Workflow,
 } from 'lucide-react'
 import { MpcDashboard, type MpcDashboardTab } from './MpcDashboard'
@@ -25,7 +23,7 @@ import type {
 } from '../../api/types'
 import { btnBase, btnCompact } from '../../lib/classes'
 
-export type CanvasTab = 'waveform' | 'convergence' | 'code' | 'logs' | 'schematic' | 'sandbox'
+export type CanvasTab = 'waveform' | 'code' | 'schematic' | 'sandbox'
 
 interface MpcCanvasPaneProps {
   systemName: string
@@ -136,8 +134,6 @@ if __name__ == '__main__':
 
   const handleDashboardTabChange = (dTab: MpcDashboardTab) => {
     if (dTab === 'dashboard') onTabChange('waveform')
-    else if (dTab === 'convergence') onTabChange('convergence')
-    else if (dTab === 'logs') onTabChange('logs')
     else if (dTab === 'schematic') onTabChange('schematic')
     else if (dTab === 'sandbox') onTabChange('sandbox')
   }
@@ -192,18 +188,6 @@ if __name__ == '__main__':
 
             <button
               type="button"
-              onClick={() => onTabChange('convergence')}
-              className={`rounded-md px-2 py-1 transition-all flex items-center gap-1 whitespace-nowrap ${
-                activeTab === 'convergence'
-                  ? 'bg-purple-600 text-white shadow-xs font-semibold'
-                  : 'text-muted-text hover:text-foreground'
-              }`}
-            >
-              <TrendingDown className="size-3.5" /> Convergence
-            </button>
-
-            <button
-              type="button"
               onClick={() => onTabChange('code')}
               className={`rounded-md px-2 py-1 transition-all flex items-center gap-1 whitespace-nowrap ${
                 activeTab === 'code'
@@ -212,18 +196,6 @@ if __name__ == '__main__':
               }`}
             >
               <FileCode className="size-3.5" /> Python (.py)
-            </button>
-
-            <button
-              type="button"
-              onClick={() => onTabChange('logs')}
-              className={`rounded-md px-2 py-1 transition-all flex items-center gap-1 whitespace-nowrap ${
-                activeTab === 'logs'
-                  ? 'bg-purple-600 text-white shadow-xs font-semibold'
-                  : 'text-muted-text hover:text-foreground'
-              }`}
-            >
-              <FileText className="size-3.5" /> Logs
             </button>
 
             <button
@@ -365,53 +337,7 @@ if __name__ == '__main__':
           </div>
         )}
 
-        {/* Multi-Agent Reasoning Logs Tab */}
-        {activeTab === 'logs' && (
-          <div className="animate-in fade-in-50 duration-200">
-            <MpcDashboard
-              job={job}
-              results={results}
-              activeTab="logs"
-              onTabChange={handleDashboardTabChange}
-              hideTabBar={true}
-              downloadingPdf={downloadingPdf}
-              onDownloadReport={onDownloadReport}
-              onRetryFromDiagnosis={onRetryFromDiagnosis}
-              onApplyDiagnosisSuggestion={onApplyDiagnosisSuggestion}
-              diagnosisApplyUsed={diagnosisApplyUsed}
-              currentDiagnosisInputs={{
-                prediction_horizon: candidateParams.np,
-                control_horizon: candidateParams.nc,
-                simulation_time: 3.0,
-                dt_mpc: candidateParams.dt,
-              }}
-            />
-          </div>
-        )}
 
-        {/* Convergence Curves Tab */}
-        {activeTab === 'convergence' && (
-          <div className="animate-in fade-in-50 duration-200">
-            <MpcDashboard
-              job={job}
-              results={results}
-              activeTab="convergence"
-              onTabChange={handleDashboardTabChange}
-              hideTabBar={true}
-              downloadingPdf={downloadingPdf}
-              onDownloadReport={onDownloadReport}
-              onRetryFromDiagnosis={onRetryFromDiagnosis}
-              onApplyDiagnosisSuggestion={onApplyDiagnosisSuggestion}
-              diagnosisApplyUsed={diagnosisApplyUsed}
-              currentDiagnosisInputs={{
-                prediction_horizon: candidateParams.np,
-                control_horizon: candidateParams.nc,
-                simulation_time: 3.0,
-                dt_mpc: candidateParams.dt,
-              }}
-            />
-          </div>
-        )}
 
         {/* Waveforms & KPI Dashboard View */}
         {activeTab === 'waveform' && job && (

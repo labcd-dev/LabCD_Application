@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Activity,
-  ArrowRight,
   CheckCircle2,
   Download,
   Gauge,
@@ -12,8 +11,6 @@ import {
   Play,
   FileText,
   Loader2,
-  Search,
-  Sparkles,
   Coins,
   Workflow,
   Stethoscope,
@@ -30,30 +27,13 @@ import { mpcApi } from '../../api/endpoints'
 import { btnBase, btnCompact, btnPrimary } from '../../lib/classes'
 import { MpcConvergenceCharts } from './MpcConvergenceCharts'
 import { MpcSimulationPlot, type SimSeriesData } from './MpcSimulationPlot'
-import { MpcAgentFlowStrip } from './MpcAgentFlowStrip'
 import { MpcDiagnosisChat } from './MpcDiagnosisChat'
 import { ControlBlockDiagram } from '../common/ControlBlockDiagram'
 import { ScoreReportBadge } from '../ScoreReportBadge'
 import { AdaptiveDiagnosisModal } from '../adaptive/AdaptiveDiagnosisModal'
 import { AdaptiveDiagnosisView } from '../adaptive/AdaptiveDiagnosisView'
 
-/**
- * Strictly truncates reasoning logs to maximum 7 words followed by '...'
- */
-function summarizeToSevenWords(text: string, maxWords = 7): string {
-  if (!text) return ''
-  const stripped = text
-    .replace(/^\[?(Actor|Evaluator|Critic|Juror|Terminator|Agent)\]?[:\s-]*/i, '')
-    .trim()
-  const words = stripped.split(/\s+/).filter(Boolean)
-  if (words.length === 0) return ''
-  if (words.length > maxWords) {
-    return words.slice(0, maxWords).join(' ') + ' ...'
-  }
-  return words.join(' ') + ' ...'
-}
-
-export type MpcDashboardTab = 'dashboard' | 'convergence' | 'logs' | 'schematic' | 'sandbox' | 'diagnosis'
+export type MpcDashboardTab = 'dashboard' | 'schematic' | 'sandbox' | 'diagnosis'
 
 interface MpcDashboardProps {
   job?: MPCJobStatusResponse | null
@@ -196,8 +176,6 @@ export function MpcDashboard({
     setInternalTab(tab)
     onTabChange?.(tab)
   }
-  const [reasoningFilter, setReasoningFilter] = useState('')
-  const logScrollRef = useRef<HTMLDivElement>(null)
   const [diagnosisModalOpen, setDiagnosisModalOpen] = useState(false)
   const diagnosisModalShownForJob = useRef<string | null>(null)
   const [localApplyUsed, setLocalApplyUsed] = useState(false)
@@ -498,65 +476,6 @@ print(f"MPC Controller initialized: Np={Np}, Nc={Nc}, dt={dt}")
     }
   }
 
-  // Multi-agent reasoning events
-  const reasoningLogs = useMemo(() => {
-    const rawHistory =
-      results?.history && results.history.length > 0
-        ? results.history
-        : job?.progress && job.progress.length > 0
-        ? job.progress
-        : []
-
-    return rawHistory.map((item, idx) => {
-      let text = ''
-      let round: number | null = null
-      if (typeof item === 'string') {
-        text = item
-      } else if (typeof item === 'object' && item !== null) {
-        const obj = item as Record<string, unknown>
-        text = String(obj.text || obj.message || JSON.stringify(item))
-        round = typeof obj.round === 'number' ? obj.round : null
-      }
-
-      let agent = 'Agent'
-      let badgeColor = 'bg-purple-500/20 text-purple-600 dark:text-purple-300'
-      const lower = text.toLowerCase()
-      if (lower.includes('[actor]') || lower.includes('actor:')) {
-        agent = 'Actor'
-        badgeColor = 'bg-blue-500/20 text-blue-600 dark:text-blue-300'
-      } else if (lower.includes('[evaluator]') || lower.includes('evaluator:')) {
-        agent = 'Evaluator'
-        badgeColor = 'bg-cyan-500/20 text-cyan-600 dark:text-cyan-300'
-      } else if (lower.includes('[critic]') || lower.includes('critic:')) {
-        agent = 'Critic'
-        badgeColor = 'bg-amber-500/20 text-amber-600 dark:text-amber-300'
-      } else if (lower.includes('[juror]') || lower.includes('juror:')) {
-        agent = 'Juror'
-        badgeColor = 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-300'
-      } else if (lower.includes('[terminator]') || lower.includes('terminator:')) {
-        agent = 'Terminator'
-        badgeColor = 'bg-rose-500/20 text-rose-600 dark:text-rose-300'
-      }
-      return { id: idx, agent, badgeColor, text, round }
-    })
-  }, [results, job])
-
-  useEffect(() => {
-    if (logScrollRef.current) {
-      logScrollRef.current.scrollTop = logScrollRef.current.scrollHeight
-    }
-  }, [reasoningLogs.length])
-
-
-  const filteredLogs = useMemo(() => {
-    if (!reasoningFilter) return reasoningLogs
-    return reasoningLogs.filter(
-      (log) =>
-        log.agent.toLowerCase().includes(reasoningFilter.toLowerCase()) ||
-        log.text.toLowerCase().includes(reasoningFilter.toLowerCase())
-    )
-  }, [reasoningLogs, reasoningFilter])
-
   return (
     <div className="space-y-3 text-foreground">
       {/* Greenfield WS02 Score & Deliverables Header Banner */}
@@ -702,29 +621,7 @@ print(f"MPC Controller initialized: Np={Np}, Nc={Nc}, dt={dt}")
               <Activity className="size-3.5" /> Dashboard &amp; Waveform
             </button>
 
-            <button
-              type="button"
-              onClick={() => setActiveTab('convergence')}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 transition-all shrink-0 whitespace-nowrap ${
-                activeTab === 'convergence'
-                  ? 'bg-purple-600 text-white shadow-sm'
-                  : 'text-muted-text hover:text-foreground'
-              }`}
-            >
-              <TrendingDown className="size-3.5" /> Convergence
-            </button>
 
-            <button
-              type="button"
-              onClick={() => setActiveTab('logs')}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 transition-all shrink-0 whitespace-nowrap ${
-                activeTab === 'logs'
-                  ? 'bg-purple-600 text-white shadow-sm'
-                  : 'text-muted-text hover:text-foreground'
-              }`}
-            >
-              <FileText className="size-3.5" /> Multi-Agent Reasoning Logs
-            </button>
 
             <button
               type="button"
@@ -810,184 +707,77 @@ print(f"MPC Controller initialized: Np={Np}, Nc={Nc}, dt={dt}")
       {/* UNIFIED DASHBOARD TAB: Beautifully Balanced Bento Grid */}
       {activeTab === 'dashboard' && (
         <div className="space-y-3 animate-in fade-in-50 duration-150">
-          {/* Row 1: Agent Pipeline DAG (7 cols) + Optimal Controller & Matrices (5 cols) */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-stretch">
-            {/* Left: Agent Pipeline DAG */}
-            <div className="lg:col-span-7">
-              <MpcAgentFlowStrip
-                currentStage={
-                  job?.stage ||
-                  results?.stage ||
-                  (job?.status === 'completed' || results?.status === 'completed' ? 'done' : undefined)
-                }
-                isCompleted={Boolean(
-                  job?.status === 'completed' ||
-                  results?.status === 'completed' ||
-                  results?.stage === 'done' ||
-                  (typeof results?.iteration === 'number' && results.iteration > 0)
-                )}
-              />
-            </div>
-
-            {/* Right: Optimal Controller & Matrices + Direct Export Buttons */}
-            <div className="lg:col-span-5 rounded-2xl border border-border bg-surface-elevated p-4 shadow-sm flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between mb-2.5">
-                  <div className="flex items-center gap-2">
-                    <div className="flex size-7 items-center justify-center rounded-lg bg-purple-500/15 text-purple-600 dark:text-purple-300 border border-purple-500/30">
-                      <Sliders className="size-4" />
-                    </div>
-                    <div>
-                      <h3 className="text-xs font-bold text-foreground">
-                        Optimal Controller & Matrices
-                      </h3>
-                      <p className="text-[10.5px] text-muted-text">
-                        Certified Discrete-Time Receding Horizon Parameters
-                      </p>
-                    </div>
-                  </div>
-                  <span className="flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/15 px-2.5 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                    <CheckCircle2 className="size-3.5" /> Juror Certified
-                  </span>
+          {/* Row 1: Optimal Controller & Matrices (Full Width) */}
+          <div className="rounded-2xl border border-border bg-surface-elevated p-4 shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="flex size-7 items-center justify-center rounded-lg bg-purple-500/15 text-purple-600 dark:text-purple-300 border border-purple-500/30">
+                  <Sliders className="size-4" />
                 </div>
-
-                {/* 4-cell Parameter Stats */}
-                <div className="grid grid-cols-4 gap-2 font-mono mb-2.5">
-                  <div className="rounded-xl border border-border bg-surface p-2 text-center">
-                    <span className="text-[10px] text-muted-text block">Np (Prediction)</span>
-                    <span className="text-base font-bold text-purple-600 dark:text-purple-300">{candidateParams.np}</span>
-                  </div>
-                  <div className="rounded-xl border border-border bg-surface p-2 text-center">
-                    <span className="text-[10px] text-muted-text block">Nc (Control)</span>
-                    <span className="text-base font-bold text-purple-600 dark:text-purple-300">{candidateParams.nc}</span>
-                  </div>
-                  <div className="rounded-xl border border-border bg-surface p-2 text-center">
-                    <span className="text-[10px] text-muted-text block">dt (Sample)</span>
-                    <span className="text-xs font-bold text-cyan-600 dark:text-cyan-300">{candidateParams.dt.toFixed(3)}s</span>
-                  </div>
-                  <div className="rounded-xl border border-border bg-surface p-2 text-center">
-                    <span className="text-[10px] text-muted-text block">Status</span>
-                    <span className="text-xs font-bold text-emerald-600 dark:text-emerald-300">Optimal</span>
-                  </div>
-                </div>
-
-                {/* Side-by-Side Graphical Matrices Q and R */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  <MpcMatrixDisplay
-                    title="State Weights"
-                    matrixSymbol="Q"
-                    values={candidateParams.q}
-                    dimLabel={`diag ${Array.isArray(candidateParams.q) ? candidateParams.q.length : 1}×${Array.isArray(candidateParams.q) ? candidateParams.q.length : 1}`}
-                    names={stateNames}
-                    accent="purple"
-                  />
-                  <MpcMatrixDisplay
-                    title="Actuator Penalties"
-                    matrixSymbol="R"
-                    values={candidateParams.r}
-                    dimLabel={`diag ${Array.isArray(candidateParams.r) ? candidateParams.r.length : 1}×${Array.isArray(candidateParams.r) ? candidateParams.r.length : 1}`}
-                    names={inputNames}
-                    accent="cyan"
-                  />
+                <div>
+                  <h3 className="text-xs font-bold text-foreground">
+                    Optimal Controller &amp; Matrices
+                  </h3>
+                  <p className="text-[10.5px] text-muted-text">
+                    Certified Discrete-Time Receding Horizon Parameters
+                  </p>
                 </div>
               </div>
+              <span className="inline-flex items-center gap-1 self-start sm:self-auto rounded-full border border-emerald-500/30 bg-emerald-500/15 px-2.5 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                <CheckCircle2 className="size-3.5" /> Juror Certified
+              </span>
+            </div>
+
+            {/* 4-cell Parameter Stats */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 font-mono mb-3">
+              <div className="rounded-xl border border-border bg-surface p-2.5 text-center">
+                <span className="text-[10px] text-muted-text block">Np (Prediction)</span>
+                <span className="text-base font-bold text-purple-600 dark:text-purple-300">{candidateParams.np}</span>
+              </div>
+              <div className="rounded-xl border border-border bg-surface p-2.5 text-center">
+                <span className="text-[10px] text-muted-text block">Nc (Control)</span>
+                <span className="text-base font-bold text-purple-600 dark:text-purple-300">{candidateParams.nc}</span>
+              </div>
+              <div className="rounded-xl border border-border bg-surface p-2.5 text-center">
+                <span className="text-[10px] text-muted-text block">dt (Sample)</span>
+                <span className="text-xs font-bold text-cyan-600 dark:text-cyan-300">{candidateParams.dt.toFixed(3)}s</span>
+              </div>
+              <div className="rounded-xl border border-border bg-surface p-2.5 text-center">
+                <span className="text-[10px] text-muted-text block">Status</span>
+                <span className="text-xs font-bold text-emerald-600 dark:text-emerald-300">Optimal</span>
+              </div>
+            </div>
+
+            {/* Side-by-Side Graphical Matrices Q and R */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <MpcMatrixDisplay
+                title="State Weights"
+                matrixSymbol="Q"
+                values={candidateParams.q}
+                dimLabel={`diag ${Array.isArray(candidateParams.q) ? candidateParams.q.length : 1}×${Array.isArray(candidateParams.q) ? candidateParams.q.length : 1}`}
+                names={stateNames}
+                accent="purple"
+              />
+              <MpcMatrixDisplay
+                title="Actuator Penalties"
+                matrixSymbol="R"
+                values={candidateParams.r}
+                dimLabel={`diag ${Array.isArray(candidateParams.r) ? candidateParams.r.length : 1}×${Array.isArray(candidateParams.r) ? candidateParams.r.length : 1}`}
+                names={inputNames}
+                accent="cyan"
+              />
             </div>
           </div>
 
-          {/* Row 2: 3 Columns Waveform Plot + 1 Column Reasoning Telemetry Box */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-stretch">
-            {/* 3 Columns (lg:col-span-8 xl:col-span-9): Closed-Loop Time-Domain Oscilloscope */}
-            <div className="lg:col-span-8 xl:col-span-9">
-              <MpcSimulationPlot
-                series={(results?.series || job?.series) as SimSeriesData | null}
-                baselineSeries={(results?.baseline_series || job?.baseline_series) as SimSeriesData | null}
-                currentIteration={currentIter}
-                bestMse={bestMse}
-                isCompleted={job?.status === 'completed' || results?.status === 'completed'}
-              />
-            </div>
-
-            {/* 1 Column (lg:col-span-4 xl:col-span-3): Multi-Agent Reasoning Telemetry Box strictly anchored to chart box height */}
-            <div className="lg:col-span-4 xl:col-span-3 relative min-h-[360px]">
-              <div className="lg:absolute lg:inset-0 rounded-2xl border border-border bg-surface-elevated p-4 shadow-sm flex flex-col overflow-hidden">
-                {/* Header */}
-                <div className="flex items-center justify-between border-b border-border/80 pb-3 mb-3 shrink-0">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-purple-500/15 text-purple-600 dark:text-purple-300 border border-purple-500/30">
-                      <Sparkles className="size-3.5" />
-                    </div>
-                    <div className="min-w-0">
-                      <h3 className="text-xs font-bold text-foreground truncate">
-                        Reasoning Telemetry
-                      </h3>
-                      <span className="text-[9.5px] text-muted-text font-mono truncate block">
-                        Max 7 words ...
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <span className="text-[10px] font-mono text-muted-text">
-                      {reasoningLogs.length} events
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab('logs')}
-                      className="text-[10.5px] font-semibold text-purple-600 dark:text-purple-400 hover:text-purple-500 hover:underline flex items-center gap-0.5 transition-colors whitespace-nowrap"
-                    >
-                      Logs <ArrowRight className="size-3" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Scrollable feed: strictly fits the exact height of the chart box, scrolls when overflowing */}
-                <div
-                  ref={logScrollRef}
-                  className="flex-1 min-h-0 overflow-y-auto space-y-1.5 pr-1 rounded-xl border border-border/70 bg-surface p-2 scrollbar-thin"
-                >
-                  {reasoningLogs.length > 0 ? (
-                    reasoningLogs.map((log) => {
-                      const summary = summarizeToSevenWords(log.text)
-                      return (
-                        <div
-                          key={log.id}
-                          title={log.text}
-                          className="flex items-center justify-between gap-1.5 rounded-lg border border-border/60 bg-surface-elevated px-2 py-1.5 text-xs transition-colors hover:border-purple-500/40 hover:bg-surface-hover cursor-help"
-                        >
-                          <div className="flex items-center gap-1.5 min-w-0">
-                            <span
-                              className={`shrink-0 rounded px-1.5 py-0.2 text-[9px] font-bold ${log.badgeColor}`}
-                            >
-                              {log.agent}
-                            </span>
-                            <span className="truncate text-[10.5px] text-foreground font-medium">
-                              {summary}
-                            </span>
-                          </div>
-                          {log.round !== undefined && log.round !== null && (
-                            <span className="shrink-0 text-[9px] font-mono text-muted-text bg-surface-muted px-1 py-0.2 rounded border border-border/50">
-                              R{log.round}
-                            </span>
-                          )}
-                        </div>
-                      )
-                    })
-                  ) : (
-                    <div className="flex items-center justify-center gap-2 h-full py-8 text-[11px] text-muted-text">
-                      <span className="size-1.5 rounded-full bg-purple-500 animate-pulse" />
-                      Awaiting telemetry...
-                    </div>
-                  )}
-                </div>
-
-                {/* Footer */}
-                <div className="mt-2 text-right shrink-0">
-                  <span className="text-[9.5px] text-muted-text font-mono">
-                    Auto-scrolled · Latest active
-                  </span>
-                </div>
-              </div>
-            </div>
+          {/* Row 2: Closed-Loop Time-Domain Oscilloscope (Full Width) */}
+          <div className="w-full">
+            <MpcSimulationPlot
+              series={(results?.series || job?.series) as SimSeriesData | null}
+              baselineSeries={(results?.baseline_series || job?.baseline_series) as SimSeriesData | null}
+              currentIteration={currentIter}
+              bestMse={bestMse}
+              isCompleted={job?.status === 'completed' || results?.status === 'completed'}
+            />
           </div>
 
           {/* Row 3: Full-Width 7-Convergence Curves in 4x2 Grid */}
@@ -1008,85 +798,7 @@ print(f"MPC Controller initialized: Np={Np}, Nc={Nc}, dt={dt}")
         </div>
       )}
 
-      {/* SEPARATE TAB: 7-Convergence Curves & Cost Progression */}
-      {activeTab === 'convergence' && (
-        <div className="space-y-4 rounded-2xl border border-border bg-surface-elevated p-5 shadow-sm animate-in fade-in-50 duration-150">
-          <div className="border-b border-border pb-3">
-            <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
-              <TrendingDown className="size-4 text-purple-500" />
-              Multi-Agent MPC Convergence Curves &amp; Evolution
-            </h3>
-            <p className="text-xs text-muted-text">
-              Multi-round tracking MSE, overshoot decay, settling time envelope, actuation effort, and receding horizon parameter progression across synthesis rounds.
-            </p>
-          </div>
-          <MpcConvergenceCharts
-            mseHistory={results?.mse_history || job?.mse_history}
-            overshootHistory={results?.overshoot_history || job?.overshoot_history}
-            settlingHistory={results?.settling_history || job?.settling_history}
-            effortHistory={results?.effort_history || job?.effort_history}
-            paramsHistory={results?.params_history || job?.params_history}
-            dtHistory={
-              (results?.metrics?.dt_history as number[] | undefined) ||
-              (job?.params_history?.map((p) => ((p.dt as number) ?? (p.dt_mpc as number) ?? 0.02)) as number[] | undefined)
-            }
-            bestMse={bestMse}
-          />
-        </div>
-      )}
 
-      {/* SEPARATE TAB: Multi-Agent Reasoning Logs */}
-      {activeTab === 'logs' && (
-        <div className="space-y-4 rounded-2xl border border-border bg-surface-elevated p-5 shadow-sm animate-in fade-in-50 duration-150">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
-            <div>
-              <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
-                <FileText className="size-4 text-purple-500" />
-                Multi-Agent Reasoning Logs (Cognitive Trail)
-              </h3>
-              <p className="text-xs text-muted-text">
-                Detailed step-by-step hypothesis formulation, evaluation critique, and juror deliberations
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <Search className="absolute left-2.5 top-2.5 size-3.5 text-muted" />
-                <input
-                  type="text"
-                  placeholder="Filter by agent or keyword..."
-                  value={reasoningFilter}
-                  onChange={(e) => setReasoningFilter(e.target.value)}
-                  className="rounded-lg border border-border bg-surface pl-8 pr-3 py-1.5 text-xs text-foreground placeholder:text-muted outline-none focus:border-purple-500"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="max-h-[550px] overflow-y-auto space-y-2.5 pr-1">
-            {filteredLogs.length > 0 ? (
-              filteredLogs.map((log) => (
-                <div
-                  key={log.id}
-                  className="rounded-xl border border-border bg-surface p-3 text-xs font-mono transition-colors hover:border-border-strong"
-                >
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className={`rounded-md px-2 py-0.5 text-[10.5px] font-bold ${log.badgeColor}`}>
-                      {log.agent}
-                    </span>
-                    <span className="text-[10px] text-muted">Step #{log.id + 1}</span>
-                  </div>
-                  <p className="text-foreground leading-relaxed whitespace-pre-wrap">{log.text}</p>
-                </div>
-              ))
-            ) : (
-              <div className="py-12 text-center text-xs text-muted">
-                No reasoning logs match the current filter.
-              </div>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* SEPARATE TAB: Block Diagram Schematic */}
       {activeTab === 'schematic' && (

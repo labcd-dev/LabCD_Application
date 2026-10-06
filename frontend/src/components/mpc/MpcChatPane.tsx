@@ -56,7 +56,7 @@ interface MpcChatPaneProps {
   onAskFollowUp: (text: string) => void
   onCancelJob: () => void
   onResetSession: () => void
-  onSelectTab: (tab: 'waveform' | 'code' | 'logs' | 'schematic' | 'sandbox') => void
+  onSelectTab: (tab: 'waveform' | 'code' | 'schematic' | 'sandbox') => void
   onDownloadReport: () => void
   downloadingPdf: boolean
   currentParams: MpcTuningParams
