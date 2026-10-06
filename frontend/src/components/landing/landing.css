@@ -176,7 +176,26 @@
 .landing-markdown p {
   color: var(--app-foreground-secondary, #334155);
   line-height: 1.75;
-  margin-bottom: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.landing-markdown ul,
+.landing-markdown ol {
+  color: var(--app-foreground-secondary, #334155);
+  margin-bottom: 0.75rem;
+  padding-left: 1.25rem;
+  list-style-type: disc;
+}
+
+.landing-markdown li {
+  color: var(--app-foreground-secondary, #334155);
+  margin-bottom: 0.35rem;
+  line-height: 1.6;
+}
+
+.landing-markdown strong {
+  color: var(--app-foreground, #1a1a2e);
+  font-weight: 600;
 }
 
 .landing-markdown a {

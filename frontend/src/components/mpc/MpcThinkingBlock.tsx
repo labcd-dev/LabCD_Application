@@ -67,7 +67,7 @@ export function MpcThinkingBlock({
   const activeIdx = stageIndex >= 0 ? stageIndex : isRunning ? 0 : 3
 
   return (
-    <div className="my-2.5 overflow-hidden rounded-2xl border border-purple-200/90 dark:border-purple-500/25 bg-purple-50/40 dark:bg-gradient-to-b dark:from-purple-950/15 dark:via-surface-elevated/70 dark:to-surface-elevated/90 shadow-xs backdrop-blur-md transition-all">
+    <div className="my-2.5 overflow-hidden rounded-2xl border border-purple-200/90 dark:border-purple-500/30 bg-purple-50/50 dark:bg-surface-elevated shadow-xs backdrop-blur-md transition-all">
       {/* Thinking Header Bar */}
       <button
         type="button"
@@ -96,7 +96,7 @@ export function MpcThinkingBlock({
             </span>
 
             {isRunning && (
-              <span className="flex items-center gap-1 rounded-full border border-purple-300 dark:border-purple-500/30 bg-purple-100/80 dark:bg-purple-500/10 px-2 py-0.5 font-mono text-[10.5px] text-purple-700 dark:text-purple-300">
+              <span className="flex items-center gap-1 rounded-full border border-purple-300 dark:border-purple-500/30 bg-purple-100/80 dark:bg-purple-900/40 px-2 py-0.5 font-mono text-[10.5px] text-purple-700 dark:text-purple-300">
                 <span className="size-1.5 rounded-full bg-purple-500 dark:bg-purple-400 animate-ping" />
                 {formatTimer(elapsedSec)}
               </span>
@@ -107,7 +107,7 @@ export function MpcThinkingBlock({
             </span>
 
             {currentStage && (
-              <span className="hidden sm:inline-block truncate rounded-md border border-purple-200 dark:border-transparent bg-purple-100/80 dark:bg-purple-500/15 px-2 py-0.5 text-[10.5px] font-medium text-purple-700 dark:text-purple-300 capitalize">
+              <span className="hidden sm:inline-block truncate rounded-md border border-purple-200 dark:border-purple-500/30 bg-purple-100/80 dark:bg-purple-900/40 px-2 py-0.5 text-[10.5px] font-medium text-purple-700 dark:text-purple-300 capitalize">
                 Stage: {currentStage}
               </span>
             )}
@@ -115,7 +115,7 @@ export function MpcThinkingBlock({
         </div>
 
         <div className="flex items-center gap-1.5 text-xs text-muted-text">
-          <span className="hidden sm:inline text-[11px] font-mono opacity-80">
+          <span className="hidden sm:inline text-[11px] font-mono text-muted-text">
             {logs.length} reasoning trace{logs.length === 1 ? '' : 's'}
           </span>
           {expanded ? (
@@ -150,10 +150,10 @@ export function MpcThinkingBlock({
                     key={s.id}
                     className={`relative overflow-hidden rounded-xl border p-2 transition-all ${
                       isCurrent
-                        ? 'border-purple-400 dark:border-purple-500/60 bg-purple-100/80 dark:bg-purple-500/20 shadow-xs shadow-purple-500/10'
+                        ? 'border-purple-400 dark:border-purple-500/60 bg-purple-100/80 dark:bg-purple-950/60 shadow-xs shadow-purple-500/10'
                         : isPassed
-                        ? 'border-emerald-300 dark:border-emerald-500/30 bg-emerald-50/80 dark:bg-emerald-500/10 text-foreground'
-                        : 'border-border bg-surface-muted/60 dark:bg-surface/40 text-muted-text opacity-75'
+                        ? 'border-emerald-300 dark:border-emerald-500/30 bg-emerald-50/80 dark:bg-emerald-950/30 text-foreground'
+                        : 'border-border bg-surface-muted/60 dark:bg-surface-muted/40 text-muted-text opacity-75'
                     }`}
                   >
                     <div className="flex items-center justify-between">
@@ -198,7 +198,7 @@ export function MpcThinkingBlock({
 
             <div
               ref={logContainerRef}
-              className="max-h-48 overflow-y-auto rounded-xl border border-border bg-surface-muted/90 dark:bg-black/40 p-2.5 font-mono text-[11px] leading-relaxed shadow-inner scrollbar-thin scrollbar-thumb-purple-500/30"
+              className="max-h-48 overflow-y-auto rounded-xl border border-border bg-surface-muted/90 dark:bg-black/50 p-2.5 font-mono text-[11px] leading-relaxed shadow-inner scrollbar-thin scrollbar-thumb-purple-500/30"
             >
               {logs.length === 0 ? (
                 <div className="py-2 text-center text-xs text-muted-text">
@@ -209,10 +209,10 @@ export function MpcThinkingBlock({
                   {logs.map((item) => (
                     <div
                       key={item.id}
-                      className="flex items-start gap-2 border-b border-border/40 dark:border-white/[0.04] pb-1 last:border-b-0 last:pb-0"
+                      className="flex items-start gap-2 border-b border-border/40 dark:border-border/20 pb-1 last:border-b-0 last:pb-0"
                     >
                       <span
-                        className={`shrink-0 rounded px-1.5 py-0.2 text-[9.5px] font-semibold uppercase tracking-wide ${item.badgeColor}`}
+                        className={`shrink-0 rounded px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wide border ${item.badgeColor}`}
                       >
                         {item.agent}
                       </span>

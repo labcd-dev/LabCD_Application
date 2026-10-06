@@ -267,13 +267,13 @@ export function MpcChatPane({
             {/* User Message */}
             {msg.role === 'user' && (
               <div className="flex justify-end gap-2.5">
-                <div className="max-w-[85%] rounded-2xl rounded-tr-xs border border-purple-200/90 dark:border-purple-500/30 bg-purple-100/60 dark:bg-gradient-to-br dark:from-purple-600/20 dark:via-purple-700/15 dark:to-indigo-600/20 px-4 py-2.5 text-purple-950 dark:text-foreground shadow-xs">
+                <div className="max-w-[85%] rounded-2xl rounded-tr-xs border border-purple-200/90 dark:border-purple-500/40 bg-purple-100/70 dark:bg-purple-950/50 px-4 py-2.5 text-purple-950 dark:text-purple-100 shadow-xs">
                   <div className="text-xs font-medium leading-relaxed whitespace-pre-wrap">
                     {msg.content}
                   </div>
                   {msg.paramsSummary && (
-                    <div className="mt-2 flex flex-wrap gap-1 border-t border-purple-200 dark:border-purple-500/20 pt-1.5">
-                      <span className="rounded bg-purple-200/70 dark:bg-black/20 px-1.5 py-0.5 font-mono text-[9.5px] text-purple-800 dark:text-purple-300">
+                    <div className="mt-2 flex flex-wrap gap-1 border-t border-purple-200 dark:border-purple-500/30 pt-1.5">
+                      <span className="rounded bg-purple-200/70 dark:bg-purple-900/40 px-1.5 py-0.5 font-mono text-[9.5px] text-purple-800 dark:text-purple-200">
                         {msg.paramsSummary}
                       </span>
                     </div>
