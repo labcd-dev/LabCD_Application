@@ -53,6 +53,8 @@ function summarizeToSevenWords(text: string, maxWords = 7): string {
   return words.join(' ') + ' ...'
 }
 
+export type MpcDashboardTab = 'dashboard' | 'convergence' | 'logs' | 'schematic' | 'sandbox' | 'diagnosis'
+
 interface MpcDashboardProps {
   job?: MPCJobStatusResponse | null
   results?: MPCJobResultsResponse | null
@@ -67,6 +69,9 @@ interface MpcDashboardProps {
     simulation_time?: number
     dt_mpc?: number
   } | null
+  activeTab?: MpcDashboardTab
+  onTabChange?: (tab: MpcDashboardTab) => void
+  hideTabBar?: boolean
 }
 
 function resolveMpcDiagnosis(results?: MPCJobResultsResponse | null): MpcDiagnosis | null {
@@ -181,8 +186,16 @@ export function MpcDashboard({
   onApplyDiagnosisSuggestion,
   diagnosisApplyUsed = false,
   currentDiagnosisInputs = null,
+  activeTab: controlledActiveTab,
+  onTabChange,
+  hideTabBar = false,
 }: MpcDashboardProps) {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'logs' | 'schematic' | 'sandbox' | 'diagnosis'>('dashboard')
+  const [internalTab, setInternalTab] = useState<MpcDashboardTab>('dashboard')
+  const activeTab = controlledActiveTab ?? internalTab
+  const setActiveTab = (tab: MpcDashboardTab) => {
+    setInternalTab(tab)
+    onTabChange?.(tab)
+  }
   const [reasoningFilter, setReasoningFilter] = useState('')
   const logScrollRef = useRef<HTMLDivElement>(null)
   const [diagnosisModalOpen, setDiagnosisModalOpen] = useState(false)
@@ -674,111 +687,125 @@ print(f"MPC Controller initialized: Np={Np}, Nc={Nc}, dt={dt}")
       </div>
 
       {/* Navigation Tab Bar: Single-row horizontal scroll on mobile */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border pb-2">
-        <div className="flex items-center gap-1 rounded-xl border border-border bg-surface-muted p-1 text-xs font-semibold overflow-x-auto max-w-full scrollbar-none">
-          <button
-            type="button"
-            onClick={() => setActiveTab('dashboard')}
-            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 transition-all shrink-0 whitespace-nowrap ${
-              activeTab === 'dashboard'
-                ? 'bg-purple-600 text-white shadow-sm'
-                : 'text-muted-text hover:text-foreground'
-            }`}
-          >
-            <Activity className="size-3.5" /> Dashboard &amp; Waveform
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('logs')}
-            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 transition-all shrink-0 whitespace-nowrap ${
-              activeTab === 'logs'
-                ? 'bg-purple-600 text-white shadow-sm'
-                : 'text-muted-text hover:text-foreground'
-            }`}
-          >
-            <FileText className="size-3.5" /> Multi-Agent Reasoning Logs
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('schematic')}
-            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 transition-all shrink-0 whitespace-nowrap ${
-              activeTab === 'schematic'
-                ? 'bg-purple-600 text-white shadow-sm'
-                : 'text-muted-text hover:text-foreground'
-            }`}
-          >
-            <Workflow className="size-3.5" /> Block Diagram
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('sandbox')}
-            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 transition-all shrink-0 whitespace-nowrap ${
-              activeTab === 'sandbox'
-                ? 'bg-purple-600 text-white shadow-sm'
-                : 'text-muted-text hover:text-foreground'
-            }`}
-          >
-            <Play className="size-3.5" /> Manual Simulation Sandbox
-          </button>
-
-          {hasDiagnosis && (
+      {!hideTabBar && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border pb-2">
+          <div className="flex items-center gap-1 rounded-xl border border-border bg-surface-muted p-1 text-xs font-semibold overflow-x-auto max-w-full scrollbar-none">
             <button
               type="button"
-              onClick={() => setActiveTab('diagnosis')}
+              onClick={() => setActiveTab('dashboard')}
               className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 transition-all shrink-0 whitespace-nowrap ${
-                activeTab === 'diagnosis'
-                  ? 'bg-amber-600 text-white shadow-sm'
-                  : 'text-amber-800 dark:text-amber-200 hover:text-amber-950 dark:hover:text-amber-50'
+                activeTab === 'dashboard'
+                  ? 'bg-purple-600 text-white shadow-sm'
+                  : 'text-muted-text hover:text-foreground'
               }`}
             >
-              <Stethoscope className="size-3.5" /> Diagnoser
-              {suggestionCount > 0 && (
-                <span className="rounded-full bg-black/20 px-1.5 text-[10px] font-bold">
-                  {suggestionCount}
-                </span>
-              )}
+              <Activity className="size-3.5" /> Dashboard &amp; Waveform
             </button>
-          )}
-        </div>
 
-        {/* Action shortcut buttons */}
-        <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
-          <button
-            type="button"
-            onClick={handleDownloadScript}
-            className={`${btnBase} ${btnCompact} flex items-center gap-1.5 text-xs text-foreground border border-border hover:bg-surface-hover`}
-            title="Download executable Python controller script (.py)"
-          >
-            <Download className="size-3.5 text-purple-500" /> PY
-          </button>
-
-          <button
-            type="button"
-            onClick={handleExportCsv}
-            disabled={!results?.series && !job?.series}
-            className={`${btnBase} ${btnCompact} flex items-center gap-1.5 text-xs text-muted-text hover:text-foreground border border-border hover:bg-surface-hover disabled:opacity-40`}
-            title="Download time series data as CSV (.csv)"
-          >
-            <Download className="size-3.5 text-cyan-500" /> CSV
-          </button>
-
-          {onDownloadReport && (
             <button
               type="button"
-              onClick={onDownloadReport}
-              disabled={downloadingPdf}
-              className={`${btnBase} ${btnCompact} flex items-center gap-1.5 text-xs text-muted-text hover:text-foreground border border-border hover:bg-surface-hover disabled:opacity-50 disabled:cursor-not-allowed`}
-              title={downloadingPdf ? "Generating authenticated PDF report..." : "Download authenticated engineering PDF report (.pdf)"}
+              onClick={() => setActiveTab('convergence')}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 transition-all shrink-0 whitespace-nowrap ${
+                activeTab === 'convergence'
+                  ? 'bg-purple-600 text-white shadow-sm'
+                  : 'text-muted-text hover:text-foreground'
+              }`}
             >
-              {downloadingPdf ? <Loader2 className="size-3.5 animate-spin text-primary" /> : <FileText className="size-3.5" />}
-              {downloadingPdf ? 'Generating…' : 'PDF'}
+              <TrendingDown className="size-3.5" /> Convergence
             </button>
-          )}
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('logs')}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 transition-all shrink-0 whitespace-nowrap ${
+                activeTab === 'logs'
+                  ? 'bg-purple-600 text-white shadow-sm'
+                  : 'text-muted-text hover:text-foreground'
+              }`}
+            >
+              <FileText className="size-3.5" /> Multi-Agent Reasoning Logs
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('schematic')}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 transition-all shrink-0 whitespace-nowrap ${
+                activeTab === 'schematic'
+                  ? 'bg-purple-600 text-white shadow-sm'
+                  : 'text-muted-text hover:text-foreground'
+              }`}
+            >
+              <Workflow className="size-3.5" /> Block Diagram
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('sandbox')}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 transition-all shrink-0 whitespace-nowrap ${
+                activeTab === 'sandbox'
+                  ? 'bg-purple-600 text-white shadow-sm'
+                  : 'text-muted-text hover:text-foreground'
+              }`}
+            >
+              <Play className="size-3.5" /> Manual Simulation Sandbox
+            </button>
+
+            {hasDiagnosis && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('diagnosis')}
+                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 transition-all shrink-0 whitespace-nowrap ${
+                  activeTab === 'diagnosis'
+                    ? 'bg-amber-600 text-white shadow-sm'
+                    : 'text-amber-800 dark:text-amber-200 hover:text-amber-950 dark:hover:text-amber-50'
+                }`}
+              >
+                <Stethoscope className="size-3.5" /> Diagnoser
+                {suggestionCount > 0 && (
+                  <span className="rounded-full bg-black/20 px-1.5 text-[10px] font-bold">
+                    {suggestionCount}
+                  </span>
+                )}
+              </button>
+            )}
+          </div>
+
+          {/* Action shortcut buttons */}
+          <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+            <button
+              type="button"
+              onClick={handleDownloadScript}
+              className={`${btnBase} ${btnCompact} flex items-center gap-1.5 text-xs text-foreground border border-border hover:bg-surface-hover`}
+              title="Download executable Python controller script (.py)"
+            >
+              <Download className="size-3.5 text-purple-500" /> PY
+            </button>
+
+            <button
+              type="button"
+              onClick={handleExportCsv}
+              disabled={!results?.series && !job?.series}
+              className={`${btnBase} ${btnCompact} flex items-center gap-1.5 text-xs text-muted-text hover:text-foreground border border-border hover:bg-surface-hover disabled:opacity-40`}
+              title="Download time series data as CSV (.csv)"
+            >
+              <Download className="size-3.5 text-cyan-500" /> CSV
+            </button>
+
+            {onDownloadReport && (
+              <button
+                type="button"
+                onClick={onDownloadReport}
+                disabled={downloadingPdf}
+                className={`${btnBase} ${btnCompact} flex items-center gap-1.5 text-xs text-muted-text hover:text-foreground border border-border hover:bg-surface-hover disabled:opacity-50 disabled:cursor-not-allowed`}
+                title={downloadingPdf ? "Generating authenticated PDF report..." : "Download authenticated engineering PDF report (.pdf)"}
+              >
+                {downloadingPdf ? <Loader2 className="size-3.5 animate-spin text-primary" /> : <FileText className="size-3.5" />}
+                {downloadingPdf ? 'Generating…' : 'PDF'}
+              </button>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* UNIFIED DASHBOARD TAB: Beautifully Balanced Bento Grid */}
       {activeTab === 'dashboard' && (
@@ -978,6 +1005,33 @@ print(f"MPC Controller initialized: Np={Np}, Nc={Nc}, dt={dt}")
               bestMse={bestMse}
             />
           </div>
+        </div>
+      )}
+
+      {/* SEPARATE TAB: 7-Convergence Curves & Cost Progression */}
+      {activeTab === 'convergence' && (
+        <div className="space-y-4 rounded-2xl border border-border bg-surface-elevated p-5 shadow-sm animate-in fade-in-50 duration-150">
+          <div className="border-b border-border pb-3">
+            <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+              <TrendingDown className="size-4 text-purple-500" />
+              Multi-Agent MPC Convergence Curves &amp; Evolution
+            </h3>
+            <p className="text-xs text-muted-text">
+              Multi-round tracking MSE, overshoot decay, settling time envelope, actuation effort, and receding horizon parameter progression across synthesis rounds.
+            </p>
+          </div>
+          <MpcConvergenceCharts
+            mseHistory={results?.mse_history || job?.mse_history}
+            overshootHistory={results?.overshoot_history || job?.overshoot_history}
+            settlingHistory={results?.settling_history || job?.settling_history}
+            effortHistory={results?.effort_history || job?.effort_history}
+            paramsHistory={results?.params_history || job?.params_history}
+            dtHistory={
+              (results?.metrics?.dt_history as number[] | undefined) ||
+              (job?.params_history?.map((p) => ((p.dt as number) ?? (p.dt_mpc as number) ?? 0.02)) as number[] | undefined)
+            }
+            bestMse={bestMse}
+          />
         </div>
       )}
 

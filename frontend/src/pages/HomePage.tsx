@@ -59,7 +59,7 @@ export function HomePage() {
     setLoading(true)
     try {
       const uploaded = await uploadApi.upload(file)
-      pipeline.setFile(uploaded.file_name, uploaded.file_type, uploaded.file_content)
+      pipeline.setFile(uploaded.file_name || file.name, uploaded.file_type || 'text', uploaded.file_content || '')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed')
     } finally {
