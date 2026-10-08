@@ -16,6 +16,7 @@ from backend_api.db.models import (
     ErrorEvent,
     FeedbackSurveyResponse,
     LoginHistory,
+    PlantModelConversation,
     Project,
     User,
 )
@@ -174,6 +175,80 @@ def _count(db: Session, model, *filters) -> int:
     return int(db.query(func.count(model.id)).filter(*filters).scalar() or 0)
 
 
+def _merge_model_counts(*row_groups: list[tuple[str | None, int]]) -> list[dict]:
+    totals: dict[str, int] = {}
+    for rows in row_groups:
+        for model, count in rows:
+            name = (model or "").strip()
+            if not name:
+                continue
+            totals[name] = totals.get(name, 0) + int(count or 0)
+    return [
+        {"model": model, "count": count}
+        for model, count in sorted(totals.items(), key=lambda item: (-item[1], item[0]))
+    ]
+
+
+def _llm_counts_from_events(
+    db: Session,
+    *,
+    start: datetime | None = None,
+    end: datetime | None = None,
+) -> list[dict]:
+    query = db.query(AnalyticsEvent.module, func.count(AnalyticsEvent.id)).filter(
+        AnalyticsEvent.event_type == EVENT_LLM,
+        AnalyticsEvent.module.isnot(None),
+    )
+    if start is not None:
+        query = query.filter(AnalyticsEvent.created_at >= start)
+    if end is not None:
+        query = query.filter(AnalyticsEvent.created_at < end)
+    rows = query.group_by(AnalyticsEvent.module).all()
+    return _merge_model_counts(rows)
+
+
+def _llm_counts_fallback(
+    db: Session,
+    *,
+    start: datetime | None = None,
+    end: datetime | None = None,
+) -> list[dict]:
+    """Approximate LLM usage from projects and plant chats when no llm events exist."""
+    project_query = db.query(Project.llm_model, func.count(Project.id)).filter(
+        Project.llm_model.isnot(None),
+        Project.llm_model != "",
+    )
+    plant_query = db.query(
+        PlantModelConversation.llm_model, func.count(PlantModelConversation.id)
+    ).filter(
+        PlantModelConversation.llm_model.isnot(None),
+        PlantModelConversation.llm_model != "",
+    )
+    if start is not None:
+        project_query = project_query.filter(Project.created_at >= start)
+        plant_query = plant_query.filter(PlantModelConversation.created_at >= start)
+    if end is not None:
+        project_query = project_query.filter(Project.created_at < end)
+        plant_query = plant_query.filter(PlantModelConversation.created_at < end)
+    return _merge_model_counts(
+        project_query.group_by(Project.llm_model).all(),
+        plant_query.group_by(PlantModelConversation.llm_model).all(),
+    )
+
+
+def get_llm_usage(
+    db: Session,
+    *,
+    start: datetime | None = None,
+    end: datetime | None = None,
+) -> list[dict]:
+    """LLM model counts from analytics events, with durable fallback if empty."""
+    rows = _llm_counts_from_events(db, start=start, end=end)
+    if rows:
+        return rows
+    return _llm_counts_fallback(db, start=start, end=end)
+
+
 def get_digest_extras(db: Session) -> dict:
     """Cheap UTC-day aggregates for the Telegram daily digest."""
     today_start = _utc_day_start()
@@ -193,6 +268,9 @@ def get_digest_extras(db: Session) -> dict:
     if credits_spent < 0:
         credits_spent = 0.0
 
+    llms_today = get_llm_usage(db, start=today_start, end=tomorrow)
+    llms_all_time = get_llm_usage(db)
+
     return {
         "users_total": _count(db, User),
         "users_new_today": _count(db, User, *day_filters(User.created_at)),
@@ -210,6 +288,10 @@ def get_digest_extras(db: Session) -> dict:
             db, FeedbackSurveyResponse, *day_filters(FeedbackSurveyResponse.created_at)
         ),
         "credits_spent_today": credits_spent,
+        "llms_today": llms_today,
+        "most_used_llm_today": llms_today[0]["model"] if llms_today else None,
+        "llms_all_time": llms_all_time,
+        "most_used_llm_all_time": llms_all_time[0]["model"] if llms_all_time else None,
     }
 
 
@@ -280,23 +362,7 @@ def get_analytics(db: Session, days: int = 30, tz_name: str | None = None) -> di
         if module
     ]
 
-    llm_rows = (
-        db.query(AnalyticsEvent.module, func.count(AnalyticsEvent.id))
-        .filter(
-            AnalyticsEvent.event_type == EVENT_LLM,
-            AnalyticsEvent.created_at >= range_start,
-            AnalyticsEvent.created_at < tomorrow,
-            AnalyticsEvent.module.isnot(None),
-        )
-        .group_by(AnalyticsEvent.module)
-        .order_by(func.count(AnalyticsEvent.id).desc())
-        .all()
-    )
-    llms = [
-        {"model": model or "", "count": int(count)}
-        for model, count in llm_rows
-        if model
-    ]
+    llms = get_llm_usage(db, start=range_start, end=tomorrow)
     most_used_llm = llms[0]["model"] if llms else None
 
     return {

@@ -742,9 +742,10 @@ def submit_job(
     job_id = record.job_id
 
     credit_service.begin_job_usage(request.user_id, "adaptive", job_id=job_id, check_balance=False)
-    from backend_api.http.services.analytics_service import record_module_use
+    from backend_api.http.services.analytics_service import record_llm_use, record_module_use
 
     record_module_use(request.user_id, "adaptive")
+    record_llm_use(request.user_id, options.get("model") or "gpt-4o")
 
     # Automatically link or create in Project database so it appears in Projects history
     sys_name = _system_name(spec) or "adaptive_system"

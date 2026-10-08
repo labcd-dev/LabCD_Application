@@ -11,7 +11,7 @@ HTML-formatted Telegram message (`parse_mode: HTML`) with section icons, includi
 - Projects: total and created today
 - Module run counts for today (always lists every known module, including zeros, plus a total):
   Regularizer, Plant Model, SILO, Recommender, Trimmer, MULO, MPC, Adaptive
-- LLM usage for today (top model plus per-model run counts)
+- LLM usage for today and all-time (top model plus per-model counts; falls back to project/plant-chat model choices when no `llm` analytics events exist yet)
 - Credits spent today (usage debits)
 - Health: errors, bug reports, and feedback surveys recorded today
 

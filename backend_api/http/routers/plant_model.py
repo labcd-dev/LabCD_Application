@@ -20,7 +20,7 @@ from backend_api.http.schemas.plant_model import (
     ValidationRequest,
     ValidationResponse,
 )
-from backend_api.http.services.analytics_service import record_module_use
+from backend_api.http.services.analytics_service import record_llm_use, record_module_use
 from backend_api.http.services.plant_model_chat_service import (
     ConversationAccessDenied,
     assert_conversation_access,
@@ -114,6 +114,7 @@ def plant_model_chat(
                 raise HTTPException(status_code=403, detail=str(exc)) from exc
 
     record_module_use(user.id, "plant_model")
+    record_llm_use(user.id, request.model)
     from backend_api.http.services.credit_service import (
         InsufficientCreditsError,
         begin_job_usage,

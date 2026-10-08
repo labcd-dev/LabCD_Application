@@ -163,15 +163,28 @@ def format_daily_message(db: Session) -> str:
         f"• Total: <b>{total_runs}</b>",
         "",
         "🧠 <b>LLM usage</b>",
+        "<i>Today</i>",
     ]
-    llms = data.get("llms") or []
-    most_used = data.get("most_used_llm")
-    if most_used:
-        lines.append(f"• Top: <code>{html.escape(str(most_used))}</code>")
-    if not llms:
+    llms_today = extras.get("llms_today") or data.get("llms") or []
+    most_used_today = extras.get("most_used_llm_today") or data.get("most_used_llm")
+    if most_used_today:
+        lines.append(f"• Top: <code>{html.escape(str(most_used_today))}</code>")
+    if not llms_today:
         lines.append("• (none)")
     else:
-        for row in llms:
+        for row in llms_today:
+            model = html.escape(str(row["model"]))
+            lines.append(f"• {model}: {row['count']}")
+
+    lines.append("<i>All time</i>")
+    llms_all_time = extras.get("llms_all_time") or []
+    most_used_all_time = extras.get("most_used_llm_all_time")
+    if most_used_all_time:
+        lines.append(f"• Top: <code>{html.escape(str(most_used_all_time))}</code>")
+    if not llms_all_time:
+        lines.append("• (none)")
+    else:
+        for row in llms_all_time:
             model = html.escape(str(row["model"]))
             lines.append(f"• {model}: {row['count']}")
 

@@ -10,7 +10,7 @@ from backend_api.http.schemas.regularizer import (
     StandardizeRequest,
     StandardizeResponse,
 )
-from backend_api.http.services.analytics_service import record_module_use
+from backend_api.http.services.analytics_service import record_llm_use, record_module_use
 from backend_api.http.services.credit_service import (
     InsufficientCreditsError,
     begin_job_usage,
@@ -32,6 +32,7 @@ def regularize_file(
     except InsufficientCreditsError as exc:
         raise HTTPException(status_code=402, detail=str(exc)) from exc
     record_module_use(user.id, "regularize")
+    record_llm_use(user.id, request.model)
     try:
         result = run_regularize(
             request.file_content,
@@ -59,6 +60,7 @@ def standardize_file(
     except InsufficientCreditsError as exc:
         raise HTTPException(status_code=402, detail=str(exc)) from exc
     record_module_use(user.id, "regularize")
+    record_llm_use(user.id, request.model)
     try:
         result = run_standardize(request.file_content, request.model, request.silo_pipeline)
     finally:
