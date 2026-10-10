@@ -114,7 +114,8 @@ def plant_model_chat(
                 raise HTTPException(status_code=403, detail=str(exc)) from exc
 
     record_module_use(user.id, "plant_model")
-    record_llm_use(user.id, request.model)
+    if not getattr(request, "force_complete", False):
+        record_llm_use(user.id, request.model)
     from backend_api.http.services.credit_service import (
         InsufficientCreditsError,
         begin_job_usage,
@@ -126,13 +127,19 @@ def plant_model_chat(
     except InsufficientCreditsError as exc:
         raise HTTPException(status_code=402, detail=str(exc)) from exc
     try:
-        response = run_plant_model_chat(request)
+        try:
+            response = run_plant_model_chat(request)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        user_message = request.user_message.strip()
+        if getattr(request, "force_complete", False) and not user_message:
+            user_message = "Complete"
         with SessionLocal() as db:
             conversation = persist_turn(
                 db,
                 user_id=user.id,
                 conversation_id=request.conversation_id,
-                user_message=request.user_message.strip(),
+                user_message=user_message,
                 assistant_reply=response.reply,
                 llm_model=request.model,
                 session_state=response.session_state,

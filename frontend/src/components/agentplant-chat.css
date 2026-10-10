@@ -159,6 +159,10 @@ html, body, #root {
 }
 
 .ap-user__edit-btn--primary {
+  background: var(--ap-text, #1a1a2e);
+  color: var(--ap-bg, #f4f6fb);
+}
+.dark .ap-user__edit-btn--primary {
   background: #ececec;
   color: #1a1a1a;
 }
@@ -239,6 +243,9 @@ html, body, #root {
 
 .ap-meta__btn--active {
   color: var(--ap-text);
+  background: color-mix(in srgb, var(--ap-text) 8%, transparent);
+}
+.dark .ap-meta__btn--active {
   background: rgba(255, 255, 255, 0.06);
 }
 
@@ -255,11 +262,15 @@ html, body, #root {
   padding: 6px;
   border-radius: 10px;
   border: 1px solid var(--ap-border-strong);
-  background: #2a2a2a;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  background: var(--ap-elevated, #ffffff);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+.dark .ap-meta__menu {
+  background: #2a2a2a;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
 }
 
 .ap-meta--assistant .ap-meta__menu {
@@ -339,17 +350,25 @@ html, body, #root {
 .ap-md code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.9em;
-  background: rgba(255, 255, 255, 0.06);
+  background: color-mix(in srgb, var(--ap-text) 8%, transparent);
   padding: 0.1em 0.35em;
   border-radius: 4px;
+}
+.dark .ap-md code {
+  background: rgba(255, 255, 255, 0.06);
 }
 .ap-md pre {
   margin: 0.6em 0;
   padding: 12px 14px;
-  background: #1a1a1a;
-  border: 1px solid var(--ap-border, #2a2a2a);
+  background: var(--ap-code-bg, #0f172a);
+  border: 1px solid var(--ap-border, #e2e8f0);
   border-radius: 8px;
   overflow-x: auto;
+  color: var(--app-code-text, #e2e8f0);
+}
+.dark .ap-md pre {
+  background: #1a1a1a;
+  border-color: var(--ap-border, #2a2a2a);
 }
 .ap-md pre code {
   background: transparent;
@@ -358,9 +377,12 @@ html, body, #root {
   line-height: 1.45;
 }
 .ap-md a {
-  color: #8ab4ff;
+  color: #2563eb;
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+.dark .ap-md a {
+  color: #8ab4ff;
 }
 .ap-md strong {
   font-weight: 600;
@@ -368,7 +390,11 @@ html, body, #root {
 .ap-md blockquote {
   margin: 0.5em 0;
   padding-left: 0.9em;
-  border-left: 3px solid #3a3a3a;
+  border-left: 3px solid var(--ap-border-strong, #ccd4e0);
+  color: var(--ap-muted, #556677);
+}
+.dark .ap-md blockquote {
+  border-left-color: #3a3a3a;
   color: #b0b0b0;
 }
 .ap-md table {
@@ -378,8 +404,12 @@ html, body, #root {
 }
 .ap-md th,
 .ap-md td {
-  border: 1px solid #333;
+  border: 1px solid var(--ap-border-strong, #ccd4e0);
   padding: 4px 8px;
+}
+.dark .ap-md th,
+.dark .ap-md td {
+  border-color: #333;
 }
 
 .ap-pill {
@@ -453,6 +483,10 @@ html, body, #root {
 }
 
 .ap-artifact[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--app-primary, #5b7fff) 35%, var(--ap-border-strong));
+  background: color-mix(in srgb, var(--app-primary, #5b7fff) 10%, var(--ap-elevated));
+}
+.dark .ap-artifact[aria-pressed="true"] {
   border-color: rgba(255, 255, 255, 0.22);
   background: #383838;
 }
@@ -605,13 +639,21 @@ html, body, #root {
 }
 
 .ap-search-btn:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: color-mix(in srgb, var(--ap-text) 6%, transparent);
 }
 
 .ap-search-btn.active {
+  background-color: color-mix(in srgb, #3b82f6 12%, var(--ap-elevated, #fff));
+  color: #2563eb;
+  border-color: #3b82f6;
+}
+.dark .ap-search-btn.active {
   background-color: #1e293b;
   color: #60a5fa;
   border-color: #3b82f6;
+}
+.dark .ap-search-btn:hover {
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .ap-search-btn svg {
@@ -622,7 +664,7 @@ html, body, #root {
 .ap-attach-btn {
   background: none;
   border: none;
-  color: #94a3b8;
+  color: var(--ap-muted, #556677);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -632,6 +674,12 @@ html, body, #root {
 }
 
 .ap-attach-btn:hover:not(:disabled) {
+  color: var(--ap-text, #1a1a2e);
+}
+.dark .ap-attach-btn {
+  color: #94a3b8;
+}
+.dark .ap-attach-btn:hover:not(:disabled) {
   color: #cbd5e1;
 }
 
@@ -831,7 +879,10 @@ html, body, #root {
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  background: var(--ap-code-bg);
+  background: var(--ap-elevated, #ffffff);
+}
+.dark .ap-panel {
+  background: var(--ap-code-bg, #0a0d12);
 }
 
 .ap-panel__header {
@@ -840,8 +891,11 @@ html, body, #root {
   gap: 12px;
   padding: 10px 14px;
   border-bottom: 1px solid var(--ap-border);
-  background: #1e1e1e;
+  background: var(--ap-elevated, #ffffff);
   flex-shrink: 0;
+}
+.dark .ap-panel__header {
+  background: #1e1e1e;
 }
 
 .ap-panel__title {
@@ -907,8 +961,11 @@ html, body, #root {
 .ap-lab-card {
   border: 1px solid var(--ap-border-strong);
   border-radius: 14px;
-  background: #242424;
+  background: var(--ap-elevated, #ffffff);
   padding: 14px 16px;
+}
+.dark .ap-lab-card {
+  background: #242424;
 }
 
 .ap-lab-toggle {
@@ -980,13 +1037,17 @@ html, body, #root {
   height: 36px;
   border-radius: 10px;
   border: 1px solid var(--ap-border-strong);
-  background: #1a1a1a;
+  background: var(--ap-input, #f8fafc);
   color: var(--ap-text);
   padding: 0 10px;
   font-size: 13px;
   font-family: inherit;
   outline: none;
   width: 100%;
+}
+.dark .ap-field input,
+.dark .ap-field select {
+  background: #1a1a1a;
 }
 
 .ap-run {
@@ -1052,9 +1113,12 @@ html, body, #root {
 .ap-plot {
   border: 1px solid var(--ap-border-strong);
   border-radius: 14px;
-  background: #1e1e1e;
+  background: var(--ap-elevated, #ffffff);
   padding: 8px;
   min-height: 280px;
+}
+.dark .ap-plot {
+  background: #1e1e1e;
 }
 
 /* legacy .ap-empty rules removed — see hero block above */
@@ -1179,3 +1243,35 @@ html, body, #root {
   min-height: 48px;
 }
 
+
+/* Force-complete control (promotes latest draft without LLM) */
+.ap-complete-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+.ap-complete-btn {
+  appearance: none;
+  border: none;
+  border-radius: 10px;
+  padding: 8px 16px;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  color: #fff;
+  background: linear-gradient(135deg, #5b7fff 0%, #7c5cff 100%);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+.ap-complete-btn:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+.ap-complete-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.ap-complete-hint {
+  font-size: 12px;
+  color: var(--ap-muted, #8b93a7);
+}

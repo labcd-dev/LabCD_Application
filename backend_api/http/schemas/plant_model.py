@@ -42,6 +42,8 @@ class PlantModelChatRequest(BaseModel):
     web_search_enabled: bool = False
     # When true, ground this turn on session-uploaded files (first message only from UI).
     use_attachments: bool = False
+    # When true, promote session_state.latest_draft to status=complete without an LLM call.
+    force_complete: bool = False
 
 
 class TokenUsageOut(BaseModel):

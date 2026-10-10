@@ -314,6 +314,7 @@ export function AgentPlantChat({ model = "gpt-4o-mini", onUseModel }: Props) {
   const [session, setSession] = useState<PlantModelSessionState | null>(null)
   const [conversationId, setConversationId] = useState<number | null>(null)
   const [draft, setDraft] = useState<PlantModelResult | null>(null)
+  const [isComplete, setIsComplete] = useState(false)
   const [panel, setPanel] = useState<PanelView>(null)
   const [traceOpen, setTraceOpen] = useState(false)
   const [labOpen, setLabOpen] = useState(false)
@@ -398,6 +399,7 @@ export function AgentPlantChat({ model = "gpt-4o-mini", onUseModel }: Props) {
       setTurns(restored)
       setSession(detail.session_state)
       setDraft(detail.final_result ?? detail.session_state?.latest_draft ?? null)
+      setIsComplete(detail.status === 'complete' || !!detail.final_result)
       if (detail.final_result || detail.session_state?.latest_draft) {
         setPanel('code')
       }
@@ -435,6 +437,7 @@ export function AgentPlantChat({ model = "gpt-4o-mini", onUseModel }: Props) {
     setSession(null)
     setConversationId(null)
     setDraft(null)
+    setIsComplete(false)
     setPanel(null)
     setSim(null)
     setInput('')
@@ -779,8 +782,11 @@ export function AgentPlantChat({ model = "gpt-4o-mini", onUseModel }: Props) {
           },
         ]
       })
-      if (res.status === 'complete' && nextDraft && onUseModel) {
-        // expose complete for pipeline handoff without forcing navigation
+      if (res.status === 'complete') {
+        setIsComplete(true)
+        if (nextDraft && onUseModel) {
+          // expose complete for pipeline handoff without forcing navigation
+        }
       }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
@@ -803,6 +809,115 @@ export function AgentPlantChat({ model = "gpt-4o-mini", onUseModel }: Props) {
       setLoading(false)
     }
   }, [input, loading, messages, model, session, conversationId, searchOn, attachment, onUseModel])
+
+  const forceComplete = useCallback(async () => {
+    if (!draft || loading || isComplete) return
+    setError(null)
+    setLoading(true)
+    const nowTs = Date.now()
+    const userTurn: Turn = {
+      id: `u-${nowTs}`,
+      role: 'user',
+      content: 'Complete',
+      at: nowTs,
+    }
+    const pendingId = `p-${nowTs}`
+    const pendingTurn: Turn = {
+      id: pendingId,
+      role: 'assistant',
+      content: '',
+      pending: true,
+      startedAt: nowTs,
+      at: nowTs,
+      steps: [
+        {
+          kind: 'agent',
+          label: 'Completing from draft…',
+          detail: 'No LLM call — promoting latest draft',
+          ok: true,
+        },
+      ],
+    }
+    setTurns((prev) => [...prev, userTurn, pendingTurn])
+    setTraceOpen(true)
+    try {
+      const res: PlantModelChatResponse = await plantModelApi.chat({
+        messages,
+        user_message: 'Complete',
+        model,
+        session_state: session,
+        conversation_id: conversationId,
+        force_complete: true,
+      })
+      setSession(res.session_state)
+      if (res.conversation_id != null) {
+        setConversationId(res.conversation_id)
+        syncConversationParam(res.conversation_id)
+      }
+      const nextDraft = res.final_result ?? res.session_state?.latest_draft ?? draft
+      if (nextDraft) {
+        setDraft(nextDraft)
+        setPanel((p) => p ?? 'code')
+      }
+      setTraceOpen(false)
+      setTurns((prev) => {
+        const withoutPending = prev.filter((t) => t.id !== pendingId)
+        return [
+          ...withoutPending,
+          {
+            id: `a-${Date.now()}`,
+            role: 'assistant',
+            content: res.reply,
+            status: res.status,
+            steps: res.steps ?? [],
+            at: Date.now(),
+            durationMs: Date.now() - nowTs,
+          },
+        ]
+      })
+      if (res.status === 'complete') {
+        setIsComplete(true)
+        if (nextDraft && onUseModel) {
+          // expose complete for pipeline handoff without forcing navigation
+        }
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setError(msg)
+      setTraceOpen(false)
+      setTurns((prev) => {
+        const withoutPending = prev.filter((t) => t.id !== pendingId)
+        return [
+          ...withoutPending,
+          {
+            id: `a-err-${Date.now()}`,
+            role: 'assistant',
+            content: `Error: ${msg}`,
+            status: 'continue',
+            at: Date.now(),
+          },
+        ]
+      })
+    } finally {
+      setLoading(false)
+    }
+  }, [
+    draft,
+    loading,
+    isComplete,
+    messages,
+    model,
+    session,
+    conversationId,
+    onUseModel,
+    syncConversationParam,
+  ])
+
+  /** Hand off completed plant to DesignPage → PreLaunch → Case Studies. */
+  const handleLaunch = useCallback(() => {
+    if (!draft || !onUseModel) return
+    onUseModel(draft, conversationId)
+  }, [draft, conversationId, onUseModel])
 
   const formatBytes = (n: number) => {
     if (n < 1024) return `${n} B`
@@ -1115,6 +1230,40 @@ export function AgentPlantChat({ model = "gpt-4o-mini", onUseModel }: Props) {
                     </div>
                     <span className="ap-artifact__action">Open</span>
                   </button>
+                )}
+              </div>
+            )}
+
+            {draft && (
+              <div className="ap-complete-bar">
+                {isComplete ? (
+                  <>
+                    <button
+                      type="button"
+                      className="ap-complete-btn"
+                      disabled={!onUseModel}
+                      onClick={handleLaunch}
+                    >
+                      Save &amp; View in Case Studies →
+                    </button>
+                    <span className="ap-complete-hint">
+                      Model ready — open Case Studies to continue design
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      className="ap-complete-btn"
+                      disabled={loading}
+                      onClick={() => void forceComplete()}
+                    >
+                      Complete
+                    </button>
+                    <span className="ap-complete-hint">
+                      Finish with the current draft (no extra LLM call)
+                    </span>
+                  </>
                 )}
               </div>
             )}
