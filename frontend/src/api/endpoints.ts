@@ -858,6 +858,8 @@ export const plantModelApi = {
     min_user_turns_before_completion?: number
     web_search_enabled?: boolean
     use_attachments?: boolean
+    /** Promote latest draft to complete without an LLM round-trip. */
+    force_complete?: boolean
   }) =>
     apiFetch<PlantModelChatResponse>('/plant-model/chat', {
       method: 'POST',

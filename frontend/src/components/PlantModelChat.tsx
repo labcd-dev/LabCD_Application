@@ -396,10 +396,41 @@ export function PlantModelChat({
   }
 
   const handleConfirmDraft = async () => {
-    if (!draft || loading) return
-    const confirmedDraft = draft
-    setFinalResult(confirmedDraft)
-    await sendMessage('confirm')
+    if (!draft || loading || chatDisabled) return
+    setError(null)
+    setLoading(true)
+    const historyBefore = messages
+    const userMessage: PlantModelChatMessage = { role: 'user', content: 'Complete' }
+    setMessages((prev) => [...prev, userMessage])
+    try {
+      const response = await plantModelApi.chat({
+        messages: historyBefore,
+        user_message: 'Complete',
+        model: resolvedModel,
+        session_state: sessionState,
+        conversation_id: conversationId,
+        force_complete: true,
+      })
+      onModelChange(resolvedModel)
+      if (response.conversation_id != null) {
+        setConversationId(response.conversation_id)
+        deepLinkHandled.current = String(response.conversation_id)
+        syncConversationParam(response.conversation_id)
+      }
+      setMessages((prev) => [...prev, { role: 'assistant', content: response.reply }])
+      setSessionState(response.session_state)
+      if (response.final_result) {
+        setFinalResult(response.final_result)
+      } else {
+        setFinalResult(draft)
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Complete request failed')
+      setMessages((prev) => prev.slice(0, -1))
+    } finally {
+      setLoading(false)
+      requestAnimationFrame(() => threadInputRef.current?.focus())
+    }
   }
 
   const handleDownload = () => {
@@ -845,7 +876,7 @@ export function PlantModelChat({
                       disabled={!draft || disabled || loading}
                       onClick={() => void handleConfirmDraft()}
                     >
-                      Confirm system
+                      Complete
                     </button>
                   )}
                 </div>
@@ -854,7 +885,7 @@ export function PlantModelChat({
           </div>
         )}
 
-        {/* Confirm bar: mobile always; desktop when plant panel is collapsed */}
+        {/* Complete bar: mobile always; desktop when plant panel is collapsed */}
         {inChat && (finalResult || draft) && (
           <div
             className={`border-t border-border px-4 py-3 ${
@@ -874,10 +905,10 @@ export function PlantModelChat({
               <button
                 type="button"
                 className={`${btnPrimary} w-full justify-center`}
-                disabled={disabled || loading}
+                disabled={disabled || loading || !draft}
                 onClick={() => void handleConfirmDraft()}
               >
-                Confirm system
+                Complete
               </button>
             )}
           </div>

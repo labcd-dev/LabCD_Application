@@ -125,6 +125,7 @@ def _infer_status(
 def run_plant_model_chat(request: PlantModelChatRequest) -> PlantModelChatResponse:
     from backend_api.http.schemas.plant_model import (
         PlantModelRagChunk,
+        PlantModelStep,
         PlantModelWebSearch,
     )
     from backend_api.http.services import plant_model_extras as extras
@@ -137,10 +138,38 @@ def run_plant_model_chat(request: PlantModelChatRequest) -> PlantModelChatRespon
     apply_session_state(agent, _to_agent_session_state(request.session_state))
     prev_draft_count = agent._draft_count
 
+    # Force-complete: promote the latest draft to final without an LLM round-trip.
+    if getattr(request, "force_complete", False):
+        draft = agent._latest_draft
+        if not draft or not draft.get("system_name") or not draft.get("python_code"):
+            raise ValueError("No draft available to complete; produce a draft first.")
+        final_result = PlantModelResult(
+            system_name=draft["system_name"],
+            python_code=draft["python_code"],
+            metadata=_resolved_metadata(draft),
+        )
+        session_state = _from_agent_session_state(export_session_state(agent))
+        reply = f"Model ready — **{final_result.system_name}**."
+        return PlantModelChatResponse(
+            reply=reply,
+            status="complete",
+            final_result=final_result,
+            session_state=session_state,
+            usage=None,
+            steps=[
+                PlantModelStep(
+                    kind="agent",
+                    label="Completed from draft",
+                    detail="Forced complete without LLM",
+                    ok=True,
+                )
+            ],
+            rag_chunks=[],
+            web_search=PlantModelWebSearch(status="empty"),
+        )
+
     history = [{"role": m.role, "content": m.content} for m in request.messages]
     user_message = request.user_message.strip()
-
-    from backend_api.http.schemas.plant_model import PlantModelStep
 
     # RAG: prefer vector-store file_search; fall back to local extracted text.
     steps_acc: list[PlantModelStep] = []
