@@ -107,7 +107,10 @@ def compile_dynamics(source: str) -> Callable[[float, np.ndarray, Any], Any]:
     tree = validate_ast(source)
     code = compile(tree, filename="<dynamics>", mode="exec")
 
-    sandbox_globals: Dict[str, Any] = {
+    # Single shared namespace so module-level bindings (R = 1.0, etc.) are
+    # visible inside dynamics() — functions look up free names in globals,
+    # not in a separate locals dict.
+    ns: Dict[str, Any] = {
         "__builtins__": _SAFE_BUILTINS,
         "np": np,
         "numpy": np,
@@ -116,17 +119,16 @@ def compile_dynamics(source: str) -> Callable[[float, np.ndarray, Any], Any]:
     try:
         import scipy  # noqa: F401  (optional, only if the code imports it)
 
-        sandbox_globals["scipy"] = scipy
+        ns["scipy"] = scipy
     except Exception:
         pass
 
-    local_ns: Dict[str, Any] = {}
     try:
-        exec(code, sandbox_globals, local_ns)  # noqa: S102 - intentional, restricted namespace
+        exec(code, ns, ns)  # noqa: S102 - intentional, restricted namespace
     except Exception as exc:
         raise DynamicsCodeError(f"Drafted code raised an error while loading: {exc}") from exc
 
-    fn = local_ns.get("dynamics") or sandbox_globals.get("dynamics")
+    fn = ns.get("dynamics")
     if fn is None or not callable(fn):
         raise DynamicsCodeError("No callable `dynamics(t, x, u)` was defined by the drafted code.")
 
@@ -234,13 +236,118 @@ def _make_divergence_event():
     return _event
 
 
+# Plant-preview integration uses fixed-step Euler (ode1), not adaptive RK45.
+# Coulomb friction (np.sign of velocity) and similar switches force RK45 into
+# sub-microstep territory near zero crossings and hang the HTTP worker; Euler
+# advances on a fixed grid and still catches real code bugs (NameError, NaN,
+# wrong shape, runaway state).
+_SIM_WALL_CLOCK_S = 8.0
+
+
+@dataclass
+class _EulerSol:
+    """Minimal solve_ivp-like result from fixed-step Euler."""
+
+    t: np.ndarray
+    y: np.ndarray  # shape (n_states, n_times)
+    success: bool
+    message: str
+    status: int = 0  # 0 ok, 1 stopped early (divergence event analogue)
+    t_events: tuple = ()
+    nfev: int = 0
+
+
+def _euler_integrate(
+    rhs,
+    t_final: float,
+    x0_arr: np.ndarray,
+    dt: float,
+    *,
+    wall_clock_s: float = _SIM_WALL_CLOCK_S,
+) -> _EulerSol:
+    """Fixed-step forward Euler from 0 → t_final.
+
+    Stops early if state magnitude exceeds ``_DIVERGENCE_THRESHOLD`` or a
+    wall-clock budget is exceeded. Propagates ``DynamicsCodeError`` from rhs.
+    """
+    import time as _time
+
+    if dt <= 0 or t_final <= 0:
+        raise DynamicsCodeError("Simulation duration and step size must both be positive.")
+    n_steps = max(int(np.ceil(t_final / dt)), 1)
+    t_out = np.linspace(0.0, n_steps * dt, n_steps + 1)
+    if t_out[-1] > t_final:
+        t_out[-1] = t_final
+    x = np.asarray(x0_arr, dtype=float).reshape(-1).copy()
+    ys = [x.copy()]
+    nfev = 0
+    t0_wall = _time.monotonic()
+    for k in range(n_steps):
+        if (_time.monotonic() - t0_wall) > wall_clock_s:
+            return _EulerSol(
+                t=np.asarray(t_out[: len(ys)], dtype=float),
+                y=np.column_stack(ys),
+                success=False,
+                message=(
+                    f"Euler integration hit wall-clock limit ({wall_clock_s:.0f}s) "
+                    f"at t={t_out[k]:.4g} after {nfev} RHS evaluations."
+                ),
+                status=1,
+                nfev=nfev,
+            )
+        t_k = float(t_out[k])
+        h = float(t_out[k + 1] - t_out[k])
+        with np.errstate(over="ignore", invalid="ignore"):
+            dx = np.atleast_1d(np.asarray(rhs(t_k, x), dtype=float)).reshape(-1)
+        nfev += 1
+        if dx.shape != x.shape:
+            raise DynamicsCodeError(
+                f"dynamics() returned shape {dx.shape}, expected {x.shape} at t={t_k:.4g}."
+            )
+        if not np.all(np.isfinite(dx)):
+            raise DynamicsCodeError(
+                f"dynamics() produced a non-finite value (inf/nan) at t={t_k:.4g}, "
+                f"x={np.round(x, 4).tolist()}. Guard divisions by (near-)zero."
+            )
+        deriv_mag = float(np.max(np.abs(dx)))
+        if deriv_mag > _DERIVATIVE_MAGNITUDE_THRESHOLD:
+            raise DynamicsCodeError(
+                f"dynamics() produced an extremely large derivative "
+                f"(|dx|~{deriv_mag:.2e}) at t={t_k:.4g}, x={np.round(x, 4).tolist()}."
+            )
+        x = x + h * dx
+        if not np.all(np.isfinite(x)):
+            raise DynamicsCodeError(
+                f"State became non-finite at t={t_out[k + 1]:.4g} after Euler step."
+            )
+        if float(np.max(np.abs(x))) > _DIVERGENCE_THRESHOLD:
+            ys.append(x.copy())
+            return _EulerSol(
+                t=np.asarray(t_out[: len(ys)], dtype=float),
+                y=np.column_stack(ys),
+                success=True,
+                message=(
+                    f"State magnitude exceeded {_DIVERGENCE_THRESHOLD:.0e} at "
+                    f"t={t_out[k + 1]:.3g}s, so the simulation was stopped early."
+                ),
+                status=1,
+                t_events=(np.array([t_out[k + 1]]),),
+                nfev=nfev,
+            )
+        ys.append(x.copy())
+    return _EulerSol(
+        t=np.asarray(t_out, dtype=float),
+        y=np.column_stack(ys),
+        success=True,
+        message="ok",
+        status=0,
+        nfev=nfev,
+    )
+
+
 def _run_solve_ivp(rhs, t_final: float, x0_arr: np.ndarray, dt: float, method: str):
-    t_eval = np.arange(0.0, t_final + dt / 2, dt)
-    with np.errstate(over="ignore", invalid="ignore"):
-        return solve_ivp(
-            rhs, (0.0, t_final), x0_arr, t_eval=t_eval, method=method,
-            max_step=dt, rtol=1e-6, atol=1e-9, events=_make_divergence_event(),
-        )
+    """Backward-compatible name: plant sandbox uses Euler regardless of method."""
+    return _euler_integrate(rhs, t_final, x0_arr, dt)
 
 
 def simulate(
@@ -254,17 +361,13 @@ def simulate(
     input_params: Dict[str, float],
     state_names: Optional[List[str]] = None,
 ) -> SimResult:
-    """Restricted-exec ``python_code``, then integrate it under a chosen input.
+    """Restricted-exec ``python_code``, then integrate under a chosen input.
 
-    Numerically fragile drafts (an unstable/insufficiently-damped pole, a
-    1/x-style singularity in the kinematics, ...) are handled rather than
-    left to crash the solver: a state that runs away stops integration
-    cleanly at a fixed magnitude threshold (``diverged=True``, partial
-    trajectory still returned); a non-finite derivative (a genuine
-    singularity) is caught immediately with a message naming the likely
-    cause; and if RK45 still fails outright for some other reason, one
-    retry with a stiff-aware implicit solver (LSODA) is attempted before
-    giving up.
+    Uses fixed-step Euler (ode1). Adaptive RK45 is intentionally avoided:
+    discontinuous plant terms (Coulomb friction via ``np.sign``) stall adaptive
+    steppers and produced opaque HTTP timeouts. Euler still surfaces real draft
+    bugs — NameError, wrong shape, non-finite dx, runaway state — with clear
+    messages, and finishes within a bounded number of RHS evaluations.
     """
     attempts: List[str] = []
     try:
@@ -298,78 +401,50 @@ def simulate(
                     f"dynamics() returned {dx_arr.shape[0]} value(s) but the state "
                     f"vector has {n_states}. dx must be the same shape as x."
                 )
-            if not np.all(np.isfinite(dx_arr)):
-                raise DynamicsCodeError(
-                    f"dynamics() produced a non-finite value (inf/nan) at t={t:.4g}, "
-                    f"x={np.round(x, 4).tolist()}. This usually means a division by "
-                    f"(near-)zero or a singularity in the equations (e.g. 1/cos(theta) "
-                    f"near +/-90deg, or 1/x as x crosses 0) rather than an unstable pole."
-                )
-            # Checked on every call -- including the solver's own internal,
-            # unaccepted trial-stage evaluations, not just accepted steps.
-            # That matters: empirically, a real near-singularity's *trial*
-            # evaluations reach an enormous derivative long before the
-            # eventual *accepted* state does, so only a check reached this
-            # early actually interrupts the runaway step-size search in
-            # reasonable wall-clock time (a post-step scipy event does not).
-            deriv_mag = float(np.max(np.abs(dx_arr)))
-            if deriv_mag > _DERIVATIVE_MAGNITUDE_THRESHOLD:
-                raise DynamicsCodeError(
-                    f"dynamics() produced an extremely large derivative "
-                    f"(|dx|~{deriv_mag:.2e}) at t={t:.4g}, x={np.round(x, 4).tolist()}, "
-                    f"well before the state itself reached a large magnitude. This "
-                    f"usually means either a near-singularity in the equations (e.g. "
-                    f"1/cos(theta) close to +/-90deg, or dividing by a state variable "
-                    f"that passes through zero), or a very strongly unstable/positive "
-                    f"pole whose growth rate itself is unrealistically fast."
-                )
             return dx_arr
 
         if t_final <= 0 or dt <= 0:
             raise DynamicsCodeError("Simulation duration and step size must both be positive.")
 
-        def finalize(sol, method: str) -> SimResult:
-            u_trace = np.array([u_of_t(t) for t in sol.t])
-            diverged = bool(len(sol.t_events) and len(sol.t_events[0]))
-            message = "ok"
-            if diverged:
-                t_hit = sol.t_events[0][0]
-                message = (
-                    f"State magnitude exceeded {_DIVERGENCE_THRESHOLD:.0e} at t={t_hit:.3g}s, "
-                    f"so the simulation was stopped early. This points to numerically "
-                    f"unstable dynamics -- e.g. an insufficiently damped or positive-feedback "
-                    f"pole, a sign error in a restoring/damping term, or an unrealistic "
-                    f"parameter value -- rather than a solver problem."
-                )
+        attempts.append("euler")
+        sol = _euler_integrate(rhs, t_final, x0_arr, dt)
+        u_trace = np.array([u_of_t(t) for t in sol.t])
+        diverged = bool(sol.status == 1 and sol.t_events)
+        message = sol.message or "ok"
+        if diverged and message == "ok":
+            message = (
+                f"State magnitude exceeded {_DIVERGENCE_THRESHOLD:.0e}, "
+                "so the simulation was stopped early."
+            )
+        if not sol.success:
             return SimResult(
-                True, message,
-                t=sol.t, x=sol.y.T, u=u_trace,
-                n_states=n_states, n_inputs=n_inputs,
-                input_channel=input_channel, input_kind=input_kind,
-                state_names=state_names, diverged=diverged, solver_used=method,
+                False,
+                message,
+                t=sol.t,
+                x=sol.y.T if sol.y is not None else None,
+                u=u_trace if sol.t is not None else None,
+                n_states=n_states,
+                n_inputs=n_inputs,
+                input_channel=input_channel,
+                input_kind=input_kind,
+                state_names=state_names,
+                diverged=diverged,
+                solver_used="euler",
                 attempts=attempts,
             )
-
-        sol = _run_solve_ivp(rhs, t_final, x0_arr, dt, "RK45")
-        attempts.append("RK45" + (" (stopped early, state diverged)" if sol.status == 1 else ""))
-        if sol.success:
-            return finalize(sol, "RK45")
-
-        # RK45 failed for a reason other than the divergence guard (e.g. a
-        # genuinely stiff system) -- retry once with LSODA, which switches
-        # automatically between stiff (implicit) and non-stiff methods.
-        attempts.append(f"RK45 failed ({sol.message}); retrying with LSODA")
-        sol2 = _run_solve_ivp(rhs, t_final, x0_arr, dt, "LSODA")
-        attempts.append("LSODA" + (" (stopped early, state diverged)" if sol2.status == 1 else ""))
-        if sol2.success:
-            result = finalize(sol2, "LSODA")
-            result.message = "Solved with the stiff-aware LSODA method after RK45 failed to converge. " + result.message
-            return result
-
         return SimResult(
-            False,
-            f"Integration failed even after a stiff-solver retry.\n"
-            f"RK45: {sol.message}\nLSODA: {sol2.message}",
+            True,
+            message,
+            t=sol.t,
+            x=sol.y.T,
+            u=u_trace,
+            n_states=n_states,
+            n_inputs=n_inputs,
+            input_channel=input_channel,
+            input_kind=input_kind,
+            state_names=state_names,
+            diverged=diverged,
+            solver_used="euler",
             attempts=attempts,
         )
     except DynamicsCodeError as exc:
@@ -377,6 +452,7 @@ def simulate(
     except Exception as exc:  # noqa: BLE001 - never let a bad draft crash the app
         tail = traceback.format_exc(limit=2)
         return SimResult(False, f"{exc}\n{tail}", attempts=attempts)
+
 
 
 def run_default_simulation(python_code: str, state_names: Optional[List[str]] = None) -> SimResult:
@@ -392,6 +468,145 @@ def run_default_simulation(python_code: str, state_names: Optional[List[str]] = 
         input_params={"t0": 1.0, "amplitude": 1.0},
         state_names=state_names,
     )
+
+
+@dataclass
+class SmokeResult:
+    """Compile + one-shot call + short integration probe."""
+
+    ok: bool
+    message: str
+    n_states: int = 0
+    n_inputs: int = 0
+
+
+# Short probe used by smoke_test_dynamics — must stay well under HTTP timeouts.
+_SMOKE_T_FINAL = 0.5
+_SMOKE_DT = 0.05
+_SMOKE_WALL_S = 2.5
+
+
+def smoke_test_dynamics(python_code: str) -> SmokeResult:
+    """Fast sandbox check used on draft/complete.
+
+    1. AST validate + load ``dynamics``.
+    2. One-shot call at zero / epsilon state (shape + finite).
+    3. Short fixed-step Euler probe (0.5 s). Catches NameError, wrong shape,
+       non-finite dx, and runaway state — without stalling on discontinuous
+       friction the way adaptive RK45 did.
+    """
+    try:
+        n_states, n_inputs, scalar_u = infer_dims(python_code)
+        n_states = max(int(n_states), 1)
+        n_inputs = max(int(n_inputs), 1)
+        fn = compile_dynamics(python_code)
+        x0 = np.zeros(n_states, dtype=float)
+        if scalar_u and n_inputs == 1:
+            u0: Any = 0.0
+        else:
+            u0 = np.zeros(n_inputs, dtype=float)
+        try:
+            out = fn(0.0, x0, u0)
+        except Exception:
+            # Retry with vector u / epsilon state for models that divide by state
+            u_vec = np.zeros(n_inputs, dtype=float)
+            x_eps = np.full(n_states, 1e-8, dtype=float)
+            try:
+                out = fn(0.0, x_eps, u_vec)
+            except Exception as exc2:
+                return SmokeResult(
+                    False,
+                    f"dynamics() raised at zero and epsilon state: {exc2}",
+                    n_states=n_states,
+                    n_inputs=n_inputs,
+                )
+        arr = np.atleast_1d(np.asarray(out, dtype=float)).reshape(-1)
+        if arr.size != n_states:
+            return SmokeResult(
+                False,
+                f"dynamics() returned shape {arr.shape}, expected ({n_states},)",
+                n_states=n_states,
+                n_inputs=n_inputs,
+            )
+        if not np.all(np.isfinite(arr)):
+            # One more try at epsilon
+            x_eps = np.full(n_states, 1e-8, dtype=float)
+            u_vec = np.zeros(n_inputs, dtype=float)
+            try:
+                out2 = fn(0.0, x_eps, u_vec)
+                arr2 = np.atleast_1d(np.asarray(out2, dtype=float)).reshape(-1)
+                if not (arr2.size == n_states and np.all(np.isfinite(arr2))):
+                    return SmokeResult(
+                        False,
+                        "dynamics() returned non-finite values at zero and at x=1e-8. "
+                        "Guard denominators (e.g. max(r, 1e-8), max(m_dot, 1e-8)).",
+                        n_states=n_states,
+                        n_inputs=n_inputs,
+                    )
+            except Exception as exc3:
+                return SmokeResult(
+                    False,
+                    f"dynamics() non-finite at zero and raised on epsilon: {exc3}. "
+                    "Guard denominators that can be zero.",
+                    n_states=n_states,
+                    n_inputs=n_inputs,
+                )
+
+        # --- short         # --- short fixed-step Euler probe (not RK45) --------------------
+        # Adaptive solvers stall on discontinuous friction; Euler advances
+        # on a fixed grid and still catches NameError / NaN / wrong shape.
+        def rhs(t: float, x: np.ndarray) -> np.ndarray:
+            if scalar_u and n_inputs == 1:
+                u_arg: Any = 0.5 if t >= 0.1 else 0.0
+            else:
+                u_arg = np.zeros(n_inputs, dtype=float)
+                u_arg[0] = 0.5 if t >= 0.1 else 0.0
+            dx = fn(float(t), np.asarray(x, dtype=float), u_arg)
+            dx_arr = np.atleast_1d(np.asarray(dx, dtype=float)).reshape(-1)
+            if dx_arr.size != n_states:
+                raise DynamicsCodeError(
+                    f"dynamics() returned shape {dx_arr.shape}, expected ({n_states},) "
+                    f"during probe at t={t:.4g}."
+                )
+            if not np.all(np.isfinite(dx_arr)):
+                raise DynamicsCodeError(
+                    f"dynamics() produced non-finite derivative during probe at t={t:.4g}."
+                )
+            if float(np.max(np.abs(dx_arr))) > _DERIVATIVE_MAGNITUDE_THRESHOLD:
+                raise DynamicsCodeError(
+                    f"dynamics() derivative |dx| too large during probe at t={t:.4g}."
+                )
+            return dx_arr
+
+        sol = _euler_integrate(
+            rhs,
+            _SMOKE_T_FINAL,
+            np.zeros(n_states, dtype=float),
+            _SMOKE_DT,
+            wall_clock_s=_SMOKE_WALL_S,
+        )
+        if not sol.success and sol.status != 1:
+            # status==1 is early stop from divergence — still a valid probe result
+            return SmokeResult(
+                False,
+                f"Short Euler probe failed: {sol.message}",
+                n_states=n_states,
+                n_inputs=n_inputs,
+            )
+        # Divergence during probe is informational OK for smoke (code runs);
+        # only hard failures above block draft/complete.
+        return SmokeResult(
+            True,
+            f"OK (euler probe nfev={sol.nfev}"
+            + ("; state diverged early" if sol.status == 1 else "")
+            + ")",
+            n_states=n_states,
+            n_inputs=n_inputs,
+        )
+    except DynamicsCodeError as exc:
+        return SmokeResult(False, str(exc))
+    except Exception as exc:  # noqa: BLE001
+        return SmokeResult(False, f"{exc}")
 
 
 def build_figure(sim: SimResult):

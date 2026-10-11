@@ -132,10 +132,26 @@ class DynamicLoader:
                 f"dynamics() must return shape ({config.n_states},), got {dx.shape}"
             )
         if not np.all(np.isfinite(dx)):
-            raise DynamicsPluginError(
-                "dynamics() returned non-finite values at the zero state "
-                "(check for division by zero in the model parameters)."
-            )
+            # Many physical models divide by a state (pressure ratio, mass flow, …)
+            # that is legitimately zero only at the artificial zero initial state.
+            # Retry once with a tiny epsilon state before rejecting the plugin.
+            x_eps = np.full(config.n_states, 1e-8, dtype=float)
+            try:
+                dx_eps = np.asarray(instance.dynamics(x_eps, u0), dtype=float)
+            except Exception as e:  # noqa: BLE001
+                raise DynamicsPluginError(
+                    "dynamics() returned non-finite values at the zero state and "
+                    f"raised on epsilon retry (x=1e-8): {e}. "
+                    "Check for division by zero or undefined operations; "
+                    "ensure denominators are guarded (e.g. max(r, 1e-8))."
+                ) from e
+            if dx_eps.shape != (config.n_states,) or not np.all(np.isfinite(dx_eps)):
+                raise DynamicsPluginError(
+                    "dynamics() returned non-finite values at the zero state and "
+                    "again at x=1e-8 * ones (check for division by zero in the model). "
+                    "Guard denominators that can be zero (e.g. r, m_dot) with a small epsilon."
+                )
+            # Epsilon state is finite — accept the plugin (zero-state singularity only).
 
     # ------------------------------------------------------------------
     def create_dynamics(self, params: Optional[Dict[str, Any]] = None) -> BaseDynamics:

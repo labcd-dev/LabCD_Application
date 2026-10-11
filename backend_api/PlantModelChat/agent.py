@@ -39,6 +39,16 @@ _FORCE_DRAFT_NOTE = (
     'finish. Otherwise emit status "continue" with one concrete question. Output ONLY JSON.'
 )
 
+_SANDBOX_REPAIR_SYSTEM_SUFFIX = (
+    "\n\nIMPORTANT — sandbox repair mode: the previous dynamics() draft failed an "
+    "automated numerical smoke test. You MUST emit a corrected draft. Reply with ONLY "
+    "a single JSON object of shape "
+    '{"status":"draft","reply":"...","system_name":"...","python_code":"..."}. '
+    "Apply the concrete fix suggested by the sandbox error (e.g. replace discontinuous "
+    "np.sign Coulomb friction with a smooth tanh law, guard near-zero denominators). "
+    "Do not emit status complete. Do not ask the user to fix it — fix the code yourself."
+)
+
 _FINISH_RE = re.compile(
     r"\b(finish|done|confirm|confirm\s+system|accept|accept\s+draft|ship\s*it|looks?\s+good|totally\s+good|finalize|finalise|"
     r"good\s+to\s+go|that'?s\s+(fine|good|ok|okay)|perfect|approved)\b",
@@ -261,6 +271,70 @@ class PlantModelAgent(BaseAgent):
         final = self._draft_payload(payload)
         self._latest_draft = final
         return f"Model ready — **{final['system_name']}**.", final
+
+    def repair_dynamics_from_sandbox(
+        self,
+        *,
+        system_name: str,
+        python_code: str,
+        sandbox_error: str,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[str, Optional[Dict[str, Any]]]:
+        """One-shot LLM repair after a sandbox smoke failure.
+
+        Returns ``(display_reply, draft_payload_or_None)``. On success the
+        payload has ``system_name`` / ``python_code`` (and optional metadata)
+        and is also stored as ``self._latest_draft``. Does not claim complete.
+        """
+        user_prompt = (
+            "The dynamics model below failed the automated sandbox smoke test. "
+            "Fix the python_code so the short integration probe succeeds, then "
+            "return a corrected draft JSON.\n\n"
+            f"system_name: {system_name}\n\n"
+            "Sandbox error:\n"
+            f"{sandbox_error}\n\n"
+            "Current python_code:\n"
+            "```python\n"
+            f"{python_code}\n"
+            "```\n\n"
+            "Common fixes:\n"
+            "- Replace Coulomb friction `np.sign(v)` with `np.tanh(v / 1e-2)` "
+            "(or drop discontinuous friction).\n"
+            "- Guard denominators that can be zero: `max(r, 1e-8)`, `max(m_dot, 1e-8)`.\n"
+            "- Keep signature `dynamics(t, x, u)` and return a 1-D array of length n_states.\n"
+        )
+        response_text, _ = self.invoke_llm(
+            system_prompt=self._system_prompt + _SANDBOX_REPAIR_SYSTEM_SUFFIX,
+            user_prompt=user_prompt,
+        )
+        parsed = self._parse_structured_response(response_text)
+        if parsed is None:
+            response_text, _ = self.invoke_llm(
+                system_prompt=self._system_prompt + _SANDBOX_REPAIR_SYSTEM_SUFFIX + _REPAIR_NOTE,
+                user_prompt=user_prompt,
+            )
+            parsed = self._parse_structured_response(response_text)
+            if parsed is None:
+                return (
+                    response_text.strip()
+                    or "Sandbox repair failed: model did not return valid JSON.",
+                    None,
+                )
+
+        if not self._has_code(parsed):
+            reply = (parsed.get("reply") or response_text or "").strip()
+            return reply or "Sandbox repair did not return corrected python_code.", None
+
+        parsed = self._sanitize_code_fields(parsed)
+        # Never promote a sandbox repair to complete in this path.
+        if parsed.get("status") == "complete":
+            parsed["status"] = "draft"
+        if metadata and not isinstance(parsed.get("metadata"), dict):
+            parsed["metadata"] = metadata
+        self._draft_count += 1
+        self._latest_draft = self._draft_payload(parsed)
+        display = self._format_draft_display(parsed)
+        return display, dict(self._latest_draft)
 
     @staticmethod
     def _draft_payload(parsed: Dict[str, Any]) -> Dict[str, Any]:
