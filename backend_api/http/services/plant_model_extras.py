@@ -318,18 +318,14 @@ def _run_simulate(body: SimulateRequest) -> SimulateResponse:
     import numpy as np
     from backend_api.PlantModelChat.plant_tools import sandbox as sandbox_mod
 
-    # Hard wall-clock guard for pathological dynamics
+    # Outer wall-clock is a last-resort backstop; sandbox.simulate itself
+    # enforces nfev + internal wall-clock limits with repairable messages.
     deadline = time.time() + float(os.getenv("AGENTPLANT_SIM_TIMEOUT", "20"))
 
     def guarded():
-        if time.time() > deadline:
-            raise TimeoutError("simulation wall-clock timeout")
-
         # plant_tools.sandbox.simulate signature:
         #   simulate(python_code, *, x0, t_final, dt, input_channel,
         #            input_kind, input_params, state_names=None)
-        # Older wrappers passed T/amplitude/t0 and silently fell through to
-        # run_default_simulation — which ignores UI controls (always step, T=10).
         kind = (body.input_kind or "step").lower().strip()
         if kind not in {"step", "ramp", "sine"}:
             kind = "step"
@@ -343,7 +339,7 @@ def _run_simulate(body: SimulateRequest) -> SimulateResponse:
         n_states, _n_in, _scalar = sandbox_mod.infer_dims(body.python_code)
         x0 = body.x0 if body.x0 is not None else [0.0] * max(int(n_states), 1)
 
-        return sandbox_mod.simulate(
+        result = sandbox_mod.simulate(
             body.python_code,
             x0=list(x0),
             t_final=float(body.T),
@@ -353,11 +349,26 @@ def _run_simulate(body: SimulateRequest) -> SimulateResponse:
             input_params=input_params,
             state_names=body.state_names,
         )
+        if time.time() > deadline and not result.success:
+            # Annotate only; simulate should already have returned a clear cause.
+            result.message = (
+                (result.message or "")
+                + " (outer simulation wall-clock budget also elapsed)"
+            )
+        return result
 
     try:
         sim = guarded()
     except TimeoutError as exc:
-        return SimulateResponse(success=False, message=str(exc), attempts=["timeout"])
+        return SimulateResponse(
+            success=False,
+            message=(
+                f"{exc}. Integration did not finish in time — usually a discontinuous "
+                "RHS (e.g. Coulomb friction via np.sign(velocity)) or a near-singularity. "
+                "Smooth discontinuities (tanh) or guard singular denominators."
+            ),
+            attempts=["timeout"],
+        )
     except Exception as exc:
         return SimulateResponse(
             success=False,

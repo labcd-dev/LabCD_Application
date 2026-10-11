@@ -68,11 +68,24 @@ def _short_hash(payload: Dict[str, Any]) -> str:
 
 
 def _safe_class_name(system_name: str) -> str:
-    """Turn 'Cart-Pole' into 'CartPoleDynamics' base identifier."""
+    """Turn a free-form system name into a valid Python class-name base.
+
+    Never returns an identifier that starts with a digit (invalid in Python);
+    prefixes ``Sys`` when the first character would otherwise be numeric.
+    Examples: ``'Cart-Pole'`` → ``'CartPole'``, ``'2-DOF Arm'`` → ``'Sys2DofArm'``.
+    """
     parts = re.findall(r"[A-Za-z0-9]+", system_name or "System")
     if not parts:
         parts = ["System"]
-    return "".join(p[:1].upper() + p[1:] for p in parts)
+    name = "".join(p[:1].upper() + p[1:] for p in parts)
+    if not name or not name[0].isalpha() and name[0] != "_":
+        name = "Sys" + name
+    # Final guard: identifier must match [A-Za-z_][A-Za-z_0-9]*
+    if not _IDENT_RE.match(name):
+        name = "Sys" + re.sub(r"[^A-Za-z0-9_]", "", name) or "SysSystem"
+        if not name[0].isalpha() and name[0] != "_":
+            name = "Sys" + name
+    return name
 
 
 
@@ -1078,52 +1091,74 @@ class PlantCompiler:
         # Sanitize: strip sympy imports, rewrite bare sin→np.sin, etc.
         user_code = sanitize_python_code(python_code.strip())
 
-        # If metadata states or inputs are not provided, infer from python_code or dynamic probe
-        if not states or not inputs:
-            x_indices = [int(m) for m in re.findall(r"x\[(\d+)\]", user_code)]
-            inferred_n_states = (max(x_indices) + 1) if x_indices else len(states)
+        # Always scan code for x[i] / u[i] so incomplete or wrong metadata cannot
+        # under-declare n_inputs (Vehicle-style multi-input models index u[0..2]).
+        x_indices = [int(m) for m in re.findall(r"x\[(\d+)\]", user_code)]
+        u_indices = [int(m) for m in re.findall(r"u\[(\d+)\]", user_code)]
+        code_n_states = (max(x_indices) + 1) if x_indices else 0
+        if u_indices:
+            code_n_inputs = max(u_indices) + 1
+            scalar_u = False
+        elif re.search(r"\bu\b", user_code):
+            code_n_inputs = 1
+            scalar_u = True
+        else:
+            code_n_inputs = 0
+            scalar_u = False
 
-            u_indices = [int(m) for m in re.findall(r"u\[(\d+)\]", user_code)]
-            if u_indices:
-                inferred_n_inputs = max(u_indices) + 1
-            elif re.search(r"\bu\b", user_code):
-                inferred_n_inputs = 1
-            else:
-                inferred_n_inputs = max(1, len(inputs))
+        inferred_n_states = code_n_states or len(states) or 1
+        inferred_n_inputs = code_n_inputs or len(inputs) or 1
 
+        # Dynamic probe when metadata is incomplete
+        if not states or not inputs or code_n_inputs:
             try:
-                probe_loc = {"np": np, "numpy": np}
-                exec(user_code, probe_loc)
+                probe_loc: Dict[str, Any] = {"np": np, "numpy": np}
+                exec(user_code, probe_loc)  # noqa: S102
                 dyn_fn = probe_loc.get("dynamics")
                 if callable(dyn_fn):
-                    test_x = np.zeros(max(inferred_n_states, 10))
+                    test_x = np.zeros(max(inferred_n_states, 1))
+                    # Prefer array u when code indexes u[i]
                     try:
-                        out = dyn_fn(0.0, test_x, 0.0)
+                        if code_n_inputs and not scalar_u:
+                            out = dyn_fn(0.0, test_x, np.zeros(max(inferred_n_inputs, 1)))
+                        else:
+                            out = dyn_fn(0.0, test_x, 0.0)
                         out_size = np.asarray(out).size
                         if out_size > 0:
                             inferred_n_states = out_size
-                    except TypeError:
-                        out = dyn_fn(0.0, test_x, np.zeros(max(inferred_n_inputs, 1)))
-                        out_size = np.asarray(out).size
-                        if out_size > 0:
-                            inferred_n_states = out_size
+                    except (TypeError, IndexError):
+                        try:
+                            out = dyn_fn(0.0, test_x, np.zeros(max(inferred_n_inputs, 1)))
+                            out_size = np.asarray(out).size
+                            if out_size > 0:
+                                inferred_n_states = out_size
+                        except Exception:
+                            pass
             except Exception:
                 pass
 
-            if not states:
-                n_states = max(1, inferred_n_states)
-                states = [f"x{i+1}" for i in range(n_states)]
-            else:
-                n_states = len(states)
-
-            if not inputs:
-                n_inputs = max(1, inferred_n_inputs)
-                inputs = ["u"] if n_inputs == 1 else [f"u{i+1}" for i in range(n_inputs)]
-            else:
-                n_inputs = len(inputs)
+        # Prefer code-inferred arity over incomplete metadata
+        if states:
+            n_states = max(len(states), code_n_states or 0, 1)
+            if len(states) < n_states:
+                states = list(states) + [f"x{i+1}" for i in range(len(states), n_states)]
         else:
-            n_states = max(1, len(states))
+            n_states = max(1, inferred_n_states)
+            states = [f"x{i+1}" for i in range(n_states)]
+
+        if code_n_inputs:
+            n_inputs = max(code_n_inputs, len(inputs) if inputs else 0, 1)
+        elif inputs:
             n_inputs = max(1, len(inputs))
+        else:
+            n_inputs = max(1, inferred_n_inputs)
+
+        if not inputs or len(inputs) < n_inputs:
+            if n_inputs == 1 and scalar_u:
+                inputs = ["u"]
+            else:
+                base = list(inputs) if inputs else []
+                inputs = base + [f"u{i+1}" for i in range(len(base), n_inputs)]
 
         initial_state = pre_launch.get("initial_state")
         if not isinstance(initial_state, list) or len(initial_state) != n_states:
@@ -1162,17 +1197,28 @@ def create_config() -> SystemConfig:
 
 class {class_name}(BaseDynamics):
     def dynamics(self, x: np.ndarray, u: np.ndarray) -> np.ndarray:
-        # Always pass 1-D float arrays. AgentPlant python_code is expected to
-        # index u[0], u[1], ... or scalar u.
+        # Always pass 1-D float arrays. Prefer a length-n_inputs vector when the
+        # model indexes u[i]; only pass a scalar when n_inputs == 1 and the
+        # drafted code treats u as a scalar.
         x_arr = np.asarray(x, dtype=float).reshape(-1)
         u_arr = np.atleast_1d(np.asarray(u, dtype=float).reshape(-1))
-        if u_arr.size == 0:
-            u_arr = np.zeros(1)
-        u_arg = u_arr[0] if u_arr.size == 1 else u_arr
-        try:
-            out = dynamics(0.0, x_arr, u_arg)
-        except (TypeError, IndexError):
-            out = dynamics(0.0, x_arr, u_arr)
+        if u_arr.size < {n_inputs}:
+            padded = np.zeros({n_inputs}, dtype=float)
+            padded[: u_arr.size] = u_arr
+            u_arr = padded
+        elif u_arr.size > {n_inputs}:
+            u_arr = u_arr[:{n_inputs}]
+        if {n_inputs} <= 1:
+            u_arg = float(u_arr[0]) if u_arr.size else 0.0
+            try:
+                out = dynamics(0.0, x_arr, u_arg)
+            except TypeError:
+                out = dynamics(0.0, x_arr, u_arr)
+        else:
+            try:
+                out = dynamics(0.0, x_arr, u_arr)
+            except TypeError:
+                out = dynamics(0.0, x_arr, float(u_arr[0]))
         if isinstance(out, (list, tuple)):
             try:
                 out_arr = np.asarray(out, dtype=float).reshape(-1)

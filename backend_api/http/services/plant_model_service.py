@@ -143,6 +143,117 @@ def run_plant_model_chat(request: PlantModelChatRequest) -> PlantModelChatRespon
         draft = agent._latest_draft
         if not draft or not draft.get("system_name") or not draft.get("python_code"):
             raise ValueError("No draft available to complete; produce a draft first.")
+        force_steps = [
+            PlantModelStep(
+                kind="agent",
+                label="Completed from draft",
+                detail="Forced complete without LLM",
+                ok=True,
+            )
+        ]
+        # Smoke-test so a broken draft is not silently marked complete.
+        # On failure: 1× LLM repair, re-test; only complete if the repair passes.
+        try:
+            from backend_api.PlantModelChat.plant_tools.sandbox import smoke_test_dynamics
+
+            smoke = smoke_test_dynamics(draft["python_code"])
+            force_steps.append(
+                PlantModelStep(
+                    kind="sandbox",
+                    label="Sandbox smoke test" + (" passed" if smoke.ok else " failed"),
+                    detail=smoke.message,
+                    ok=bool(smoke.ok),
+                )
+            )
+            if not smoke.ok:
+                force_steps.append(
+                    PlantModelStep(
+                        kind="agent",
+                        label="Sandbox repair attempt",
+                        detail="Re-prompting model with smoke error (1×)",
+                        ok=True,
+                    )
+                )
+                try:
+                    repair_reply, repaired = agent.repair_dynamics_from_sandbox(
+                        system_name=str(draft.get("system_name") or "draft"),
+                        python_code=str(draft["python_code"]),
+                        sandbox_error=smoke.message,
+                        metadata=draft.get("metadata")
+                        if isinstance(draft.get("metadata"), dict)
+                        else None,
+                    )
+                except Exception as repair_exc:  # noqa: BLE001
+                    repaired = None
+                    repair_reply = str(repair_exc)
+                    force_steps.append(
+                        PlantModelStep(
+                            kind="agent",
+                            label="Sandbox repair failed",
+                            detail=str(repair_exc),
+                            ok=False,
+                        )
+                    )
+
+                if repaired and repaired.get("python_code"):
+                    smoke2 = smoke_test_dynamics(repaired["python_code"])
+                    force_steps.append(
+                        PlantModelStep(
+                            kind="sandbox",
+                            label="Sandbox re-test after repair"
+                            + (" passed" if smoke2.ok else " failed"),
+                            detail=smoke2.message,
+                            ok=bool(smoke2.ok),
+                        )
+                    )
+                    if smoke2.ok:
+                        # Repair fixed it — complete with repaired code.
+                        draft = repaired
+                        agent._latest_draft = repaired
+                    else:
+                        agent._latest_draft = repaired
+                        session_state = _from_agent_session_state(export_session_state(agent))
+                        return PlantModelChatResponse(
+                            reply=(
+                                f"Could not complete **{repaired.get('system_name', draft.get('system_name'))}** "
+                                "— sandbox still failing after one automatic repair:\n"
+                                f"```\n{smoke2.message}\n```\n"
+                                "Review the draft and try again."
+                            ),
+                            status="draft",
+                            final_result=None,
+                            session_state=session_state,
+                            usage=None,
+                            steps=force_steps,
+                            rag_chunks=[],
+                            web_search=PlantModelWebSearch(status="empty"),
+                        )
+                else:
+                    session_state = _from_agent_session_state(export_session_state(agent))
+                    return PlantModelChatResponse(
+                        reply=(
+                            f"Could not complete **{draft['system_name']}** — sandbox check failed:\n"
+                            f"```\n{smoke.message}\n```\n"
+                            f"{repair_reply or 'Automatic repair did not return corrected code.'}"
+                        ),
+                        status="draft",
+                        final_result=None,
+                        session_state=session_state,
+                        usage=None,
+                        steps=force_steps,
+                        rag_chunks=[],
+                        web_search=PlantModelWebSearch(status="empty"),
+                    )
+        except Exception as smoke_exc:  # noqa: BLE001
+            force_steps.append(
+                PlantModelStep(
+                    kind="sandbox",
+                    label="Sandbox smoke test error",
+                    detail=str(smoke_exc),
+                    ok=False,
+                )
+            )
+
         final_result = PlantModelResult(
             system_name=draft["system_name"],
             python_code=draft["python_code"],
@@ -156,14 +267,7 @@ def run_plant_model_chat(request: PlantModelChatRequest) -> PlantModelChatRespon
             final_result=final_result,
             session_state=session_state,
             usage=None,
-            steps=[
-                PlantModelStep(
-                    kind="agent",
-                    label="Completed from draft",
-                    detail="Forced complete without LLM",
-                    ok=True,
-                )
-            ],
+            steps=force_steps,
             rag_chunks=[],
             web_search=PlantModelWebSearch(status="empty"),
         )
@@ -334,6 +438,130 @@ def run_plant_model_chat(request: PlantModelChatRequest) -> PlantModelChatRespon
         )
 
     reply, final_payload = agent.step(history, agent_user_message)
+
+    # Sandbox smoke on any new draft or complete payload with code.
+    # On failure: 1× LLM repair with the smoke error, re-test; if still bad,
+    # demote to draft with error text — never claim complete with broken code.
+    code_for_smoke: str | None = None
+    smoke_payload: dict | None = None
+    if final_payload and final_payload.get("python_code"):
+        code_for_smoke = final_payload["python_code"]
+        smoke_payload = final_payload
+    elif agent._draft_count > prev_draft_count and agent._latest_draft:
+        code_for_smoke = agent._latest_draft.get("python_code")
+        smoke_payload = agent._latest_draft
+
+    if code_for_smoke and smoke_payload is not None:
+        try:
+            from backend_api.PlantModelChat.plant_tools.sandbox import smoke_test_dynamics
+
+            smoke = smoke_test_dynamics(code_for_smoke)
+            steps_acc.append(
+                PlantModelStep(
+                    kind="sandbox",
+                    label="Sandbox smoke test" + (" passed" if smoke.ok else " failed"),
+                    detail=smoke.message
+                    + (f" (n_states={smoke.n_states}, n_inputs={smoke.n_inputs})" if smoke.n_states else ""),
+                    ok=bool(smoke.ok),
+                )
+            )
+            if not smoke.ok:
+                # --- 1× LLM repair using the sandbox error as feedback ---
+                was_complete = final_payload is not None
+                steps_acc.append(
+                    PlantModelStep(
+                        kind="agent",
+                        label="Sandbox repair attempt",
+                        detail="Re-prompting model with smoke error (1×)",
+                        ok=True,
+                    )
+                )
+                try:
+                    repair_reply, repaired = agent.repair_dynamics_from_sandbox(
+                        system_name=str(smoke_payload.get("system_name") or "draft"),
+                        python_code=str(code_for_smoke),
+                        sandbox_error=smoke.message,
+                        metadata=smoke_payload.get("metadata")
+                        if isinstance(smoke_payload.get("metadata"), dict)
+                        else None,
+                    )
+                except Exception as repair_exc:  # noqa: BLE001
+                    repaired = None
+                    repair_reply = f"Sandbox repair invoke failed: {repair_exc}"
+                    steps_acc.append(
+                        PlantModelStep(
+                            kind="agent",
+                            label="Sandbox repair failed",
+                            detail=str(repair_exc),
+                            ok=False,
+                        )
+                    )
+
+                if repaired and repaired.get("python_code"):
+                    smoke2 = smoke_test_dynamics(repaired["python_code"])
+                    steps_acc.append(
+                        PlantModelStep(
+                            kind="sandbox",
+                            label="Sandbox re-test after repair"
+                            + (" passed" if smoke2.ok else " failed"),
+                            detail=smoke2.message
+                            + (
+                                f" (n_states={smoke2.n_states}, n_inputs={smoke2.n_inputs})"
+                                if smoke2.n_states
+                                else ""
+                            ),
+                            ok=bool(smoke2.ok),
+                        )
+                    )
+                    if smoke2.ok:
+                        # Accept repaired code as draft (never auto-complete
+                        # from a repair path — user confirms).
+                        agent._latest_draft = repaired
+                        final_payload = None
+                        reply = (
+                            (repair_reply or "")
+                            + "\n\n_Sandbox smoke failed on the first draft; "
+                            "applied an automatic repair that now passes the probe. "
+                            "Review the updated code, then confirm when ready._"
+                        )
+                    else:
+                        # Still broken after one repair — keep as draft with errors.
+                        agent._latest_draft = repaired
+                        final_payload = None
+                        reply = (
+                            (repair_reply or "")
+                            + "\n\n_Sandbox still failing after one automatic repair "
+                            "— kept as draft (not complete):_\n"
+                            f"```\n{smoke2.message}\n```"
+                        )
+                else:
+                    # No usable repair payload — demote original, surface error.
+                    agent._latest_draft = {
+                        "system_name": smoke_payload.get("system_name") or "draft",
+                        "python_code": code_for_smoke,
+                    }
+                    if isinstance(smoke_payload.get("metadata"), dict):
+                        agent._latest_draft["metadata"] = smoke_payload["metadata"]
+                    final_payload = None
+                    reply = (
+                        (reply or "")
+                        + (f"\n\n{repair_reply}" if repair_reply else "")
+                        + "\n\n_Sandbox check failed and automatic repair did not "
+                        "produce corrected code — kept as draft:_\n"
+                        f"```\n{smoke.message}\n```"
+                    )
+                # Explicit: never leave a failed smoke as status complete.
+                if was_complete:
+                    final_payload = None
+        except Exception as smoke_exc:  # noqa: BLE001 - never break the chat path
+            steps_acc.append(
+                PlantModelStep(
+                    kind="sandbox",
+                    label="Sandbox smoke test error",
+                    detail=str(smoke_exc),
+                    ok=False,
+                )
+            )
 
     # NOTE: this also resolves metadata for session_state.latest_draft (via
     # _from_agent_session_state), so the sidebar has real metadata to show

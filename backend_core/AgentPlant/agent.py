@@ -479,8 +479,8 @@ class PlantModelAgent(BaseAgent):
         parts = []
         if reply:
             parts.append(reply)
-        parts.append(f"**Draft: {name}**")
-        parts.append(f"```python\n{code}\n```")
+        # parts.append(f"**Draft: {name}**")
+        # parts.append(f"```python\n{code}\n```")
         parts.append("_Say what to change, or click **Confirm system** (or reply **finish**) to accept this draft._")
         return "\n\n".join(parts)
 
