@@ -70,6 +70,34 @@ function buildPendingSteps(opts: {
   return steps
 }
 
+/**
+ * Prefer server-reported tool steps; if the API returns none (plain draft with
+ * no RAG/web), keep a completed agent row so the collapsible tool-trace stays
+ * visible after the reply lands (pending steps alone would otherwise vanish).
+ */
+function resolveCompletedSteps(
+  serverSteps: PlantModelStep[] | null | undefined,
+  fallback?: PlantModelStep[] | null,
+): PlantModelStep[] {
+  if (serverSteps && serverSteps.length > 0) return serverSteps
+  if (fallback && fallback.length > 0) {
+    return fallback.map((s) => ({
+      ...s,
+      label: s.label.replace(/…\s*$/, '').replace(/\.\.\.\s*$/, '') || s.label,
+      detail: s.detail,
+      ok: s.ok !== false,
+    }))
+  }
+  return [
+    {
+      kind: 'agent',
+      label: 'Drafted plant model',
+      detail: 'AgentPlant pipeline finished',
+      ok: true,
+    },
+  ]
+}
+
 
 /** Relative time like the mockup (“24 minutes ago”), not wall-clock. */
 function formatRelativeTime(at: number, now: number = Date.now()): string {
@@ -117,8 +145,12 @@ function formatTraceSummary(opts: {
   if (opts.webSearch) {
     parts.push('searched the web')
   }
+  // Only mention commands when there were real tool steps (RAG/web/etc.).
+  // Plain drafts still show "Worked for Xs" with no command count.
   const n = opts.commandCount
-  parts.push(`ran ${n} command${n === 1 ? '' : 's'}`)
+  if (n > 0) {
+    parts.push(`ran ${n} command${n === 1 ? '' : 's'}`)
+  }
   return parts.join(', ')
 }
 
@@ -536,7 +568,7 @@ export function AgentPlantChat({ model = "gpt-4o-mini", onUseModel }: Props) {
           setDraft(nextDraft)
           setPanel((p) => p ?? 'code')
         }
-        const nextSteps = res.steps ?? []
+        const nextSteps = resolveCompletedSteps(res.steps, pendingTurn.steps)
         setTraceOpen(false)
         setTurns((all) => {
           const withoutPending = all.filter((t) => t.id !== pendingId)
@@ -633,7 +665,7 @@ export function AgentPlantChat({ model = "gpt-4o-mini", onUseModel }: Props) {
           setDraft(nextDraft)
           setPanel((p) => p ?? 'code')
         }
-        const nextSteps = res.steps ?? []
+        const nextSteps = resolveCompletedSteps(res.steps, pendingTurn.steps)
         setTraceOpen(false)
         // Attachment is single-use: only the first message after upload grounds on the file.
         setAttachment(null)
@@ -762,8 +794,8 @@ export function AgentPlantChat({ model = "gpt-4o-mini", onUseModel }: Props) {
         setDraft(nextDraft)
         setPanel((p) => p ?? 'code')
       }
-      const nextSteps = res.steps ?? []
-      // Collapse by default once the real reply lands
+      const nextSteps = resolveCompletedSteps(res.steps, pendingTurn.steps)
+      // Collapse by default once the real reply lands (summary row stays visible)
       setTraceOpen(false)
       setAttachment(null)
       setTurns((prev) => {
@@ -860,6 +892,7 @@ export function AgentPlantChat({ model = "gpt-4o-mini", onUseModel }: Props) {
         setPanel((p) => p ?? 'code')
       }
       setTraceOpen(false)
+      const nextSteps = resolveCompletedSteps(res.steps, pendingTurn.steps)
       setTurns((prev) => {
         const withoutPending = prev.filter((t) => t.id !== pendingId)
         return [
@@ -869,7 +902,7 @@ export function AgentPlantChat({ model = "gpt-4o-mini", onUseModel }: Props) {
             role: 'assistant',
             content: res.reply,
             status: res.status,
-            steps: res.steps ?? [],
+            steps: nextSteps,
             at: Date.now(),
             durationMs: Date.now() - nowTs,
           },
@@ -1113,7 +1146,9 @@ export function AgentPlantChat({ model = "gpt-4o-mini", onUseModel }: Props) {
                 </div>
               ) : (
                 <div className={`ap-assistant${t.pending ? ' ap-assistant--pending' : ''}`} key={t.id}>
-                  {!!t.steps?.length && (
+                  {(t.pending ||
+                    t.durationMs != null ||
+                    (t.steps?.length ?? 0) > 0) && (
                     <div className="ap-trace">
                       <button
                         type="button"
@@ -1121,6 +1156,8 @@ export function AgentPlantChat({ model = "gpt-4o-mini", onUseModel }: Props) {
                         aria-expanded={t.pending ? true : traceOpen}
                         onClick={() => {
                           if (t.pending) return
+                          // Only expand when there are steps to show.
+                          if (!(t.steps?.length)) return
                           setTraceOpen((v) => !v)
                         }}
                       >
@@ -1134,15 +1171,21 @@ export function AgentPlantChat({ model = "gpt-4o-mini", onUseModel }: Props) {
                             {formatTraceSummary({
                               durationMs: t.durationMs,
                               webSearch: t.webSearch,
-                              commandCount: t.steps?.length ?? 0,
+                              // Count real tools only; plain agent/draft steps
+                              // still get "Worked for Xs" without "ran N commands".
+                              commandCount: (t.steps ?? []).filter(
+                                (s) => s.kind && s.kind !== 'agent',
+                              ).length,
                             })}
-                            <span aria-hidden>{traceOpen ? '▴' : '▾'}</span>
+                            {(t.steps?.length ?? 0) > 0 && (
+                              <span aria-hidden>{traceOpen ? '▴' : '▾'}</span>
+                            )}
                           </>
                         )}
                       </button>
-                      {(t.pending || traceOpen) && (
+                      {(t.pending || traceOpen) && (t.steps?.length ?? 0) > 0 && (
                         <div className="ap-trace-list" role="region" aria-label="Step log">
-                          {t.steps.map((s, i) => (
+                          {t.steps!.map((s, i) => (
                             <div
                               className={`ap-trace-item ap-trace-item--${s.kind || 'agent'}${t.pending ? ' ap-trace-item--pending' : ''}${s.ok === false ? ' ap-trace-item--fail' : ''}`}
                               key={`${t.id}-s-${i}`}
@@ -1261,7 +1304,7 @@ export function AgentPlantChat({ model = "gpt-4o-mini", onUseModel }: Props) {
                       Complete
                     </button>
                     <span className="ap-complete-hint">
-                      Finish with the current draft (no extra LLM call)
+                      Finish with the current draft
                     </span>
                   </>
                 )}
