@@ -24,6 +24,8 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from labcd_agents import BaseAgent, PromptLibrary, extract_json_from_response
 
+from backend_core.plant_complexity import add_complexity_to_metadata
+
 PROMPTS_DIR = Path(__file__).parent / "prompts"
 PROMPT_FILE_NAME = "plant_model_agent"
 METADATA_PROMPT_FILE_NAME = "plant_model_metadata"
@@ -345,6 +347,8 @@ class PlantModelAgent(BaseAgent):
         }
         meta = self._generate_metadata(parsed["system_name"], parsed["python_code"])
         if meta:
+            # Compute and attach plant complexity grade after metadata is verified
+            meta = add_complexity_to_metadata(meta)
             out["metadata"] = meta
         return out
 

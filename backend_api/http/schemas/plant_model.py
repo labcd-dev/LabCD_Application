@@ -93,6 +93,7 @@ class PlantModelConversationSummary(BaseModel):
     status: Literal["active", "complete"]
     llm_model: str
     system_name: str | None = None
+    complexity: int | None = None
     user_id: int | None = None
     owner_email: str | None = None
     created_at: datetime

@@ -67,12 +67,25 @@ def conversation_to_summary(
     *,
     include_owner: bool = False,
 ) -> dict[str, Any]:
+    from backend_core.plant_complexity import complexity_grade_from_metadata
+    
+    # Extract complexity from session state if available
+    complexity_val = None
+    session_state = conversation.session_state
+    if isinstance(session_state, dict):
+        latest_draft = session_state.get("latest_draft")
+        if isinstance(latest_draft, dict):
+            metadata = latest_draft.get("metadata")
+            if isinstance(metadata, dict):
+                complexity_val = complexity_grade_from_metadata(metadata)
+    
     data: dict[str, Any] = {
         "id": conversation.id,
         "title": conversation.title,
         "status": conversation.status,
         "llm_model": conversation.llm_model,
         "system_name": conversation.final_system_name,
+        "complexity": complexity_val,
         "created_at": conversation.created_at,
         "updated_at": conversation.updated_at,
     }

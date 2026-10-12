@@ -76,6 +76,7 @@ export function AdminPlantModelChatsPage() {
       title: (c: PlantModelConversationSummary) => c.system_name || c.title,
       owner_email: (c: PlantModelConversationSummary) => c.owner_email ?? '',
       llm_model: (c: PlantModelConversationSummary) => c.llm_model,
+      complexity: (c: PlantModelConversationSummary) => c.complexity ?? 0,
       status: (c: PlantModelConversationSummary) => c.status,
       updated_at: (c: PlantModelConversationSummary) => c.updated_at ?? '',
     }),
@@ -239,6 +240,14 @@ export function AdminPlantModelChatsPage() {
                     className="px-4 py-3"
                   />
                   <AdminSortHeader
+                    label="Complexity"
+                    sortKey="complexity"
+                    activeKey={sortBy}
+                    dir={sortDir}
+                    onSort={toggleSort}
+                    className="px-4 py-3"
+                  />
+                  <AdminSortHeader
                     label="Status"
                     sortKey="status"
                     activeKey={sortBy}
@@ -272,6 +281,9 @@ export function AdminPlantModelChatsPage() {
                       {chat.owner_email ?? (chat.user_id != null ? `#${chat.user_id}` : '—')}
                     </td>
                     <td className="px-4 py-3 text-muted-text">{chat.llm_model}</td>
+                    <td className="px-4 py-3 text-muted-text">
+                      {chat.complexity != null ? chat.complexity : '—'}
+                    </td>
                     <td className="px-4 py-3">
                       <span className={statusBadgeClass(chat.status)}>{chat.status}</span>
                     </td>

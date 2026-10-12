@@ -145,6 +145,7 @@ export interface PlantModelConversationSummary {
   status: 'active' | 'complete'
   llm_model: string
   system_name: string | null
+  complexity?: number | null
   user_id?: number | null
   owner_email?: string | null
   created_at: string

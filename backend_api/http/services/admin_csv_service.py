@@ -523,6 +523,7 @@ PLANT_CHAT_CSV_FIELDS = [
     "system_name",
     "status",
     "llm_model",
+    "complexity",
     "created_at",
     "updated_at",
 ]
@@ -538,6 +539,7 @@ def export_plant_model_conversations_csv(
     sort_dir: str | None = None,
 ) -> str:
     from backend_api.http.services import plant_model_chat_service
+    from backend_core.plant_complexity import complexity_grade_from_metadata
 
     conversations = plant_model_chat_service.list_all_conversations(
         db,
@@ -553,6 +555,18 @@ def export_plant_model_conversations_csv(
             conversation,
             include_owner=True,
         )
+        # Extract complexity from session state if available
+        complexity_val = ""
+        session_state = conversation.session_state
+        if isinstance(session_state, dict):
+            latest_draft = session_state.get("latest_draft")
+            if isinstance(latest_draft, dict):
+                metadata = latest_draft.get("metadata")
+                if isinstance(metadata, dict):
+                    grade = complexity_grade_from_metadata(metadata)
+                    if grade is not None:
+                        complexity_val = str(grade)
+        
         rows.append(
             {
                 "id": data["id"],
@@ -562,6 +576,7 @@ def export_plant_model_conversations_csv(
                 "system_name": data.get("system_name") or "",
                 "status": data.get("status") or "",
                 "llm_model": data.get("llm_model") or "",
+                "complexity": complexity_val,
                 "created_at": _iso(data.get("created_at")),
                 "updated_at": _iso(data.get("updated_at")),
             }
