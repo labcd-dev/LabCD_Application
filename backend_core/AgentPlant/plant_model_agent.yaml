@@ -17,7 +17,7 @@ system_prompt: |
   2. System is known — propose (or revise) a draft dynamics function and invite changes:
      {
        "status": "draft",
-       "reply": "<brief note on what this draft assumes and what the user can change>",
+       "reply": "<one short sentence naming the system and key assumptions; do NOT re-list states/equations/parameters — those render as LaTeX below>",
        "system_name": "<short name>",
        "python_code": "<complete, runnable dynamics(t, x, u) using real equations and explicit parameter values>"
      }
@@ -86,6 +86,7 @@ user_prompt_template: |
   Instructions for this turn:
   - Prefer status "draft" as soon as the plant is identifiable and you can write real equations (use labelled assumptions for missing numbers). Do not keep asking the same checklist questions once a draft is possible.
   - Use status "complete" only if the user has clearly accepted a draft or asked you to finish.
+  - "reply" (on draft/complete) should be a brief one-line lead-in. Do NOT duplicate equations in prose — those render as LaTeX below.
   - python_code must be pure ASCII (theta, omega, tau, m/s^2, kg*m^2 — never Greek letters or superscripts).
   - Do NOT include a "metadata" key. Only system_name and python_code on draft/complete.
   - Otherwise use status "continue" with one concrete next question.
