@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useSearchParams } from 'react-router-dom'
 import Plot from 'react-plotly.js'
-import { plantModelApi, siteApi } from '../api/endpoints'
+import { healthApi, plantModelApi, siteApi } from '../api/endpoints'
 import type {
   PlantModelChatMessage,
   PlantModelChatResponse,
@@ -14,11 +14,19 @@ import type {
   PlantModelStep,
   SimulateResponse,
 } from '../api/types'
+import { AUTO_MODEL, resolveChatModel } from '../lib/modelPicker'
 import { MarkdownContent } from './MarkdownContent'
 import { CodePreview } from './CodePreview'
+import { ComposerModelPicker } from './ComposerModelPicker'
 import './agentplant-chat.css'
 
-type PanelView = 'code' | 'sandbox' | null
+type PanelView = 'code' | 'sandbox' | 'metadata' | null
+
+/** Grow the composer textarea with content (capped at max-height CSS). */
+function autoresizeTextarea(el: HTMLTextAreaElement) {
+  el.style.height = 'auto'
+  el.style.height = `${Math.min(el.scrollHeight, 160)}px`
+}
 
 type Turn = {
   id: string
@@ -38,6 +46,143 @@ type Turn = {
   webSearch?: boolean
 }
 
+
+
+// --- Plant metadata formatting (right panel) -------------------------------
+// Canonical order matches PlantCompiler.REQUIRED_METADATA_KEYS; any extra
+// keys a future backend adds are still shown, appended after the known ones.
+const METADATA_KEY_ORDER = [
+  'states',
+  'state_meanings',
+  'inputs',
+  'outputs',
+  'state_equations',
+  'parameters',
+  'system_type',
+  'assumptions',
+] as const
+
+const METADATA_LABELS: Record<string, string> = {
+  states: 'States',
+  state_meanings: 'State meanings',
+  inputs: 'Inputs',
+  outputs: 'Outputs',
+  state_equations: 'State equations',
+  parameters: 'Parameters',
+  system_type: 'System type',
+  assumptions: 'Assumptions',
+}
+
+function humanizeMetadataKey(key: string): string {
+  return (
+    METADATA_LABELS[key] ??
+    key
+      .split('_')
+      .filter(Boolean)
+      .map((word) => word[0].toUpperCase() + word.slice(1))
+      .join(' ')
+  )
+}
+
+function isEmptyMetadataValue(value: unknown): boolean {
+  if (value === null || value === undefined) return true
+  if (Array.isArray(value)) return value.length === 0
+  if (typeof value === 'object') return Object.keys(value as Record<string, unknown>).length === 0
+  if (typeof value === 'string') return value.trim().length === 0
+  return false
+}
+
+function orderedMetadataEntries(metadata: Record<string, unknown>): [string, unknown][] {
+  const seen = new Set<string>()
+  const ordered: [string, unknown][] = []
+  for (const key of METADATA_KEY_ORDER) {
+    if (key in metadata) {
+      ordered.push([key, metadata[key]])
+      seen.add(key)
+    }
+  }
+  for (const [key, value] of Object.entries(metadata)) {
+    if (!seen.has(key)) ordered.push([key, value])
+  }
+  return ordered.filter(([, value]) => !isEmptyMetadataValue(value))
+}
+
+function formatScalar(value: unknown): string {
+  if (value === null || value === undefined) return '—'
+  if (typeof value === 'number') {
+    return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(6)))
+  }
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No'
+  return String(value)
+}
+
+/** Render a single metadata value, adapting to its shape. */
+function MetadataValue({ value }: { value: unknown }) {
+  if (Array.isArray(value)) {
+    const items = value.map((v) =>
+      v !== null && typeof v === 'object' ? JSON.stringify(v) : formatScalar(v),
+    )
+    const stacked = items.length > 4 || items.some((s) => s.length > 22)
+    if (stacked) {
+      return (
+        <ul className="ap-metadata-list">
+          {items.map((item, i) => (
+            <li key={i} className="ap-metadata-chip">
+              {item}
+            </li>
+          ))}
+        </ul>
+      )
+    }
+    return <span className="ap-metadata-inline">{items.join(', ')}</span>
+  }
+
+  if (value !== null && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+    return (
+      <ul className="ap-metadata-list">
+        {entries.map(([key, entryValue]) => (
+          <li key={key} className="ap-metadata-kv">
+            <span className="ap-metadata-k">{key}</span>
+            <span className="ap-metadata-v">{formatScalar(entryValue)}</span>
+          </li>
+        ))}
+      </ul>
+    )
+  }
+
+  return <span className="ap-metadata-inline">{formatScalar(value)}</span>
+}
+
+function MetadataPanel({ metadata }: { metadata: Record<string, unknown> | null | undefined }) {
+  if (!metadata || typeof metadata !== 'object') {
+    return (
+      <div className="ap-metadata-empty">
+        No structured metadata yet. Complete a draft to generate states, inputs, parameters, and
+        assumptions.
+      </div>
+    )
+  }
+  const entries = orderedMetadataEntries(metadata)
+  if (entries.length === 0) {
+    return (
+      <div className="ap-metadata-empty">
+        Metadata is empty for this draft. Re-run the model step or wait for the metadata pass to
+        finish.
+      </div>
+    )
+  }
+  return (
+    <div className="ap-metadata">
+      {entries.map(([key, value]) => (
+        <div key={key} className="ap-metadata-card">
+          <div className="ap-metadata-card__label">{humanizeMetadataKey(key)}</div>
+          <MetadataValue value={value} />
+        </div>
+      ))}
+    </div>
+  )
+}
 
 /** Optimistic tool-trace rows shown immediately after send (before the API returns). */
 function buildPendingSteps(opts: {
@@ -327,11 +472,14 @@ type Props = {
   onUseModel?: (result: PlantModelResult, conversationId?: number | null) => void
 }
 
-export function AgentPlantChat({ model = "gpt-4o-mini", onUseModel }: Props) {
+export function AgentPlantChat({ model = AUTO_MODEL, onUseModel }: Props) {
   const [turns, setTurns] = useState<Turn[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [searchOn, setSearchOn] = useState(false)
+  const [modelSelection, setModelSelection] = useState(model || AUTO_MODEL)
+  const [availableModels, setAvailableModels] = useState<string[]>([])
+  const inputRef = useRef<HTMLTextAreaElement>(null)
   type PendingAttachment = {
     name: string
     size: number
@@ -361,6 +509,26 @@ export function AgentPlantChat({ model = "gpt-4o-mini", onUseModel }: Props) {
   const [t0, setT0] = useState(1)
   const [amp, setAmp] = useState(1)
   const fileRef = useRef<HTMLInputElement>(null)
+  const resolvedModel = resolveChatModel(modelSelection, availableModels)
+
+  useEffect(() => {
+    healthApi
+      .models()
+      .then((res) => {
+        const list = res.llm_models?.length ? res.llm_models : res.rag_models || []
+        setAvailableModels(list)
+      })
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    if (model) setModelSelection(model)
+  }, [model])
+
+  useEffect(() => {
+    if (inputRef.current) autoresizeTextarea(inputRef.current)
+  }, [input])
+
   const [now, setNow] = useState(() => Date.now())
   const [feedbackById, setFeedbackById] = useState<Record<string, Feedback>>({})
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null)
@@ -552,7 +720,7 @@ export function AgentPlantChat({ model = "gpt-4o-mini", onUseModel }: Props) {
         const res: PlantModelChatResponse = await plantModelApi.chat({
           messages: hist,
           user_message: trimmed,
-          model,
+          model: resolvedModel,
           session_state: session,
           conversation_id: conversationId,
           web_search_enabled: searchOn,
@@ -607,7 +775,7 @@ export function AgentPlantChat({ model = "gpt-4o-mini", onUseModel }: Props) {
         setLoading(false)
       }
     },
-    [editDraft, loading, turns, model, session, conversationId, searchOn, attachment],
+    [editDraft, loading, turns, resolvedModel, session, conversationId, searchOn, attachment],
   )
 
   const resendMessage = useCallback(
@@ -649,7 +817,7 @@ export function AgentPlantChat({ model = "gpt-4o-mini", onUseModel }: Props) {
         const res: PlantModelChatResponse = await plantModelApi.chat({
           messages: hist,
           user_message: trimmed,
-          model,
+          model: resolvedModel,
           session_state: session,
           conversation_id: conversationId,
           web_search_enabled: searchOn,
@@ -706,7 +874,7 @@ export function AgentPlantChat({ model = "gpt-4o-mini", onUseModel }: Props) {
         setLoading(false)
       }
     },
-    [loading, attachment, turns, model, session, conversationId, searchOn],
+    [loading, attachment, turns, resolvedModel, session, conversationId, searchOn],
   )
 
   const handleRegenUser = useCallback(
@@ -778,7 +946,7 @@ export function AgentPlantChat({ model = "gpt-4o-mini", onUseModel }: Props) {
       const res: PlantModelChatResponse = await plantModelApi.chat({
         messages,
         user_message: text,
-        model,
+        model: resolvedModel,
         session_state: session,
         conversation_id: conversationId,
         web_search_enabled: searchOn,
@@ -840,7 +1008,7 @@ export function AgentPlantChat({ model = "gpt-4o-mini", onUseModel }: Props) {
     } finally {
       setLoading(false)
     }
-  }, [input, loading, messages, model, session, conversationId, searchOn, attachment, onUseModel])
+  }, [input, loading, messages, resolvedModel, session, conversationId, searchOn, attachment, onUseModel])
 
   const forceComplete = useCallback(async () => {
     if (!draft || loading || isComplete) return
@@ -876,7 +1044,7 @@ export function AgentPlantChat({ model = "gpt-4o-mini", onUseModel }: Props) {
       const res: PlantModelChatResponse = await plantModelApi.chat({
         messages,
         user_message: 'Complete',
-        model,
+        model: resolvedModel,
         session_state: session,
         conversation_id: conversationId,
         force_complete: true,
@@ -939,7 +1107,7 @@ export function AgentPlantChat({ model = "gpt-4o-mini", onUseModel }: Props) {
     loading,
     isComplete,
     messages,
-    model,
+    resolvedModel,
     session,
     conversationId,
     onUseModel,
@@ -1030,6 +1198,7 @@ export function AgentPlantChat({ model = "gpt-4o-mini", onUseModel }: Props) {
     setPanel('sandbox')
     if (!sim && draft) void runSim()
   }
+  const openMetadata = () => setPanel('metadata')
 
   const plotData = useMemo(() => {
     if (!sim?.t || !sim?.x) return null
@@ -1274,6 +1443,23 @@ export function AgentPlantChat({ model = "gpt-4o-mini", onUseModel }: Props) {
                     <span className="ap-artifact__action">Open</span>
                   </button>
                 )}
+                {draft && (
+                  <button
+                    type="button"
+                    className="ap-artifact"
+                    aria-pressed={panel === 'metadata'}
+                    onClick={openMetadata}
+                  >
+                    <div className="ap-artifact__icon ap-artifact__icon--meta" aria-hidden>
+                      M
+                    </div>
+                    <div className="ap-artifact__body">
+                      <div className="ap-artifact__title">Metadata</div>
+                      <div className="ap-artifact__type">Structured</div>
+                    </div>
+                    <span className="ap-artifact__action">Open</span>
+                  </button>
+                )}
               </div>
             )}
 
@@ -1365,11 +1551,15 @@ export function AgentPlantChat({ model = "gpt-4o-mini", onUseModel }: Props) {
               </div>
             )}
             <textarea
+              ref={inputRef}
               rows={1}
               placeholder="Message LabCD"
               value={input}
               aria-label="Message"
-              onChange={(e) => setInput(e.target.value)}
+              onChange={(e) => {
+                setInput(e.target.value)
+                autoresizeTextarea(e.target)
+              }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault()
@@ -1378,6 +1568,7 @@ export function AgentPlantChat({ model = "gpt-4o-mini", onUseModel }: Props) {
               }}
             />
             <div className="ap-composer__toolbar">
+              <div className="ap-composer__left">
               <button
                 type="button"
                 className={`ap-search-btn${searchOn ? ' active' : ''}`}
@@ -1398,6 +1589,13 @@ export function AgentPlantChat({ model = "gpt-4o-mini", onUseModel }: Props) {
                 </svg>
                 Search
               </button>
+              <ComposerModelPicker
+                models={availableModels}
+                value={modelSelection}
+                onChange={setModelSelection}
+                disabled={loading}
+              />
+              </div>
 
               <div className="ap-composer__right">
                 <button
@@ -1465,7 +1663,9 @@ export function AgentPlantChat({ model = "gpt-4o-mini", onUseModel }: Props) {
           <div className="ap-panel__title">
             {panel === 'sandbox'
               ? 'Sandbox · Artifact'
-              : `${draft?.system_name || 'dynamics'} · PY`}
+              : panel === 'metadata'
+                ? `${draft?.system_name || 'dynamics'} · Metadata`
+                : `${draft?.system_name || 'dynamics'} · PY`}
           </div>
           <button
             type="button"
@@ -1474,7 +1674,9 @@ export function AgentPlantChat({ model = "gpt-4o-mini", onUseModel }: Props) {
               const text =
                 panel === 'sandbox'
                   ? JSON.stringify(sim, null, 2)
-                  : draft?.python_code || DEMO_CODE
+                  : panel === 'metadata'
+                    ? JSON.stringify(draft?.metadata ?? {}, null, 2)
+                    : draft?.python_code || DEMO_CODE
               void navigator.clipboard?.writeText(text || '')
             }}
           >
@@ -1495,6 +1697,10 @@ export function AgentPlantChat({ model = "gpt-4o-mini", onUseModel }: Props) {
               showLineNumbers
               className="ap-code-preview"
             />
+          )}
+
+          {panel === 'metadata' && (
+            <MetadataPanel metadata={draft?.metadata} />
           )}
 
           {panel === 'sandbox' && (
