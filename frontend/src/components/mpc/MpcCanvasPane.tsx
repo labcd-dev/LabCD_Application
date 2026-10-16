@@ -7,11 +7,9 @@ import {
   Cpu,
   Download,
   FileCode,
-  Maximize2,
-  Minimize2,
-  PanelRightClose,
   Play,
   Workflow,
+  X,
 } from 'lucide-react'
 import { MpcDashboard, type MpcDashboardTab } from './MpcDashboard'
 import { ControlBlockDiagram } from '../common/ControlBlockDiagram'
@@ -38,8 +36,8 @@ interface MpcCanvasPaneProps {
   onRetryFromDiagnosis: () => void
   onApplyDiagnosisSuggestion: (patch: DiagnosisApplyPatch) => void
   diagnosisApplyUsed: boolean
-  isExpanded: boolean
-  onToggleExpand: () => void
+  isExpanded?: boolean
+  onToggleExpand?: () => void
   onToggleCollapse?: () => void
 }
 
@@ -55,8 +53,6 @@ export function MpcCanvasPane({
   onRetryFromDiagnosis,
   onApplyDiagnosisSuggestion,
   diagnosisApplyUsed,
-  isExpanded,
-  onToggleExpand,
   onToggleCollapse,
 }: MpcCanvasPaneProps) {
   const [copiedCode, setCopiedCode] = useState(false)
@@ -188,28 +184,18 @@ if __name__ == '__main__':
           </span>
         </div>
 
-        {/* Action Controls: Expand & Collapse */}
-        <div className="flex items-center gap-1">
+        {/* Action Controls: Close */}
+        {onToggleCollapse && (
           <button
             type="button"
-            onClick={onToggleExpand}
+            onClick={onToggleCollapse}
             className="flex size-7 shrink-0 items-center justify-center rounded-lg border border-border bg-surface-muted text-muted-text hover:bg-surface-hover hover:text-foreground transition-colors"
-            title={isExpanded ? 'Restore side-by-side split' : 'Expand canvas full-width'}
+            title="Close panel"
+            aria-label="Close"
           >
-            {isExpanded ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
+            <X className="size-4" />
           </button>
-
-          {onToggleCollapse && (
-            <button
-              type="button"
-              onClick={onToggleCollapse}
-              className="flex size-7 shrink-0 items-center justify-center rounded-lg border border-border bg-surface-muted text-muted-text hover:bg-surface-hover hover:text-foreground transition-colors"
-              title="Close panel"
-            >
-              <PanelRightClose className="size-3.5" />
-            </button>
-          )}
-        </div>
+        )}
       </header>
 
       {/* Canvas Body */}

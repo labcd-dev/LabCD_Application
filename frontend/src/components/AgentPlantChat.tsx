@@ -609,6 +609,62 @@ export function AgentPlantChat({
     }
   }, [isDraggingSplitter])
 
+  // Chat auto-scroll and bottom pinning
+  const chatScrollRef = useRef<HTMLDivElement>(null)
+  const chatInnerRef = useRef<HTMLDivElement>(null)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const isAtBottomRef = useRef(true)
+
+  // Prevent browser's premature scroll restoration on page refresh
+  useEffect(() => {
+    if ('scrollRestoration' in window.history) {
+      window.history.scrollRestoration = 'manual'
+    }
+  }, [])
+
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior, block: 'end' })
+    } else if (chatScrollRef.current) {
+      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight
+    }
+  }, [])
+
+  const handleChatScroll = useCallback(() => {
+    if (!chatScrollRef.current) return
+    const { scrollTop, scrollHeight, clientHeight } = chatScrollRef.current
+    isAtBottomRef.current = scrollHeight - scrollTop - clientHeight < 150
+  }, [])
+
+  // Auto-scroll when turns update or MPC results change
+  useEffect(() => {
+    if (turns.length === 0) return
+    if (isAtBottomRef.current) {
+      scrollToBottom('auto')
+      const r1 = requestAnimationFrame(() => scrollToBottom('auto'))
+      const t1 = setTimeout(() => scrollToBottom('auto'), 80)
+      const t2 = setTimeout(() => scrollToBottom('auto'), 250)
+      return () => {
+        cancelAnimationFrame(r1)
+        clearTimeout(t1)
+        clearTimeout(t2)
+      }
+    }
+  }, [turns.length, mpcResults, mpcRunning, scrollToBottom])
+
+  // ResizeObserver to keep pinned to bottom when KaTeX math, charts, or thinking blocks expand
+  useEffect(() => {
+    const el = chatInnerRef.current
+    if (!el) return
+    const observer = new ResizeObserver(() => {
+      if (isAtBottomRef.current) {
+        scrollToBottom('auto')
+      }
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [scrollToBottom])
+
   // Sync draft states & inputs with MPC diagnostics
   useEffect(() => {
     if (!draft) return
@@ -790,6 +846,12 @@ export function AgentPlantChat({
       } else if (detail.final_result || detail.session_state?.latest_draft) {
         setPanel('code')
       }
+      isAtBottomRef.current = true
+      scrollToBottom('auto')
+      requestAnimationFrame(() => scrollToBottom('auto'))
+      setTimeout(() => scrollToBottom('auto'), 80)
+      setTimeout(() => scrollToBottom('auto'), 250)
+      setTimeout(() => scrollToBottom('auto'), 600)
       setInput('')
       setSim(null)
       setEditingId(null)
@@ -1778,8 +1840,8 @@ if __name__ == '__main__':
           flex: panel ? `0 0 ${splitPct}%` : '1 1 100%',
         }}
       >
-        <div className="ap-chat__scroll">
-          <div className="ap-chat__inner">
+        <div className="ap-chat__scroll" ref={chatScrollRef} onScroll={handleChatScroll}>
+          <div className="ap-chat__inner" ref={chatInnerRef}>
             {turns.length === 0 && (
               <div className="ap-empty">
                 {heroEnabled && heroImageUrl && (
@@ -2256,6 +2318,7 @@ if __name__ == '__main__':
                 {error}
               </div>
             )}
+            <div ref={messagesEndRef} className="h-px w-full shrink-0" aria-hidden="true" />
           </div>
         </div>
 
