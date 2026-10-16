@@ -1380,3 +1380,279 @@ html, body, #root {
   font-size: 12px;
   color: var(--ap-muted, #8b93a7);
 }
+
+/* Human-in-the-Loop (HITL) Control Module Selection in Chat */
+.ap-hitl {
+  margin-top: 14px;
+  max-width: 540px;
+  width: 100%;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--app-primary, #5b7fff) 35%, var(--ap-border-strong));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--app-primary, #5b7fff) 5%, var(--ap-elevated)) 0%, var(--ap-elevated) 100%);
+  padding: 16px 18px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.28);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  animation: ap-fade-in 0.25s ease-out;
+}
+
+@keyframes ap-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ap-hitl-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.ap-hitl-header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ap-hitl-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  padding: 3px 9px;
+  border-radius: 9999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #818cf8;
+  background: rgba(99, 102, 241, 0.12);
+  border: 1px solid rgba(99, 102, 241, 0.28);
+  margin-bottom: 2px;
+}
+
+.ap-hitl-pulse {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #6366f1;
+  box-shadow: 0 0 6px #6366f1;
+  animation: ap-pulse 1.8s infinite;
+}
+
+@keyframes ap-pulse {
+  0% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.85); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+.ap-hitl-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ap-text);
+  letter-spacing: -0.01em;
+}
+
+.ap-hitl-desc {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--ap-muted);
+}
+
+.ap-hitl-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ap-hitl-option {
+  appearance: none;
+  border: 1px solid var(--ap-border);
+  background: var(--ap-input);
+  border-radius: 12px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font-family: inherit;
+  transition: all 0.15s ease;
+  width: 100%;
+}
+
+.ap-hitl-option:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--app-primary, #5b7fff) 45%, var(--ap-border));
+  background: var(--ap-hover);
+}
+
+.ap-hitl-option--selected {
+  border-color: var(--app-primary, #5b7fff) !important;
+  background: color-mix(in srgb, var(--app-primary, #5b7fff) 12%, var(--ap-input)) !important;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--app-primary, #5b7fff) 45%, transparent);
+}
+
+.ap-hitl-radio {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1.5px solid var(--ap-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 2px;
+  flex-shrink: 0;
+  transition: border-color 0.15s ease;
+}
+
+.ap-hitl-option--selected .ap-hitl-radio {
+  border-color: var(--app-primary, #5b7fff);
+}
+
+.ap-hitl-radio-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--app-primary, #5b7fff);
+}
+
+.ap-hitl-option-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--ap-text-2);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.ap-hitl-option--selected .ap-hitl-option-icon {
+  background: color-mix(in srgb, var(--app-primary, #5b7fff) 25%, transparent);
+  color: #fff;
+}
+
+.ap-hitl-option-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ap-hitl-option-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ap-hitl-option-name {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ap-text);
+}
+
+.ap-hitl-option-tag {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 1px 6px;
+  border-radius: 4px;
+  color: var(--ap-muted);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.ap-hitl-option--selected .ap-hitl-option-tag {
+  color: #818cf8;
+  background: rgba(99, 102, 241, 0.18);
+}
+
+.ap-hitl-option-desc {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--ap-muted);
+}
+
+.ap-hitl-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 6px;
+  border-top: 1px solid var(--ap-border);
+  flex-wrap: wrap;
+}
+
+.ap-hitl-footer-primary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ap-hitl-launch-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 18px;
+}
+
+.ap-hitl-settings-btn {
+  appearance: none;
+  border: 1px solid var(--ap-border);
+  background: transparent;
+  color: var(--ap-text-2);
+  border-radius: 9px;
+  padding: 7px 12px;
+  font-size: 12.5px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.ap-hitl-settings-btn:hover:not(:disabled) {
+  background: var(--ap-hover);
+  color: var(--ap-text);
+  border-color: var(--ap-border-strong);
+}
+
+.ap-hitl-cancel-btn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--ap-muted);
+  font-size: 12.5px;
+  cursor: pointer;
+  padding: 6px 8px;
+  border-radius: 6px;
+  transition: color 0.15s ease;
+}
+
+.ap-hitl-cancel-btn:hover:not(:disabled) {
+  color: var(--ap-text);
+}
+
+.ap-hitl-no-perms {
+  font-size: 12.5px;
+  color: #f87171;
+  padding: 8px 12px;
+  background: rgba(248, 113, 113, 0.1);
+  border-radius: 8px;
+  border: 1px solid rgba(248, 113, 113, 0.2);
+}

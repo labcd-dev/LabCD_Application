@@ -18,6 +18,8 @@ import { AUTO_MODEL, resolveChatModel } from '../lib/modelPicker'
 import { MarkdownContent } from './MarkdownContent'
 import { CodePreview } from './CodePreview'
 import { ComposerModelPicker } from './ComposerModelPicker'
+import { HitlModuleSelector } from './HitlModuleSelector'
+import type { LaunchPipeline } from './LaunchModuleModal'
 import './agentplant-chat.css'
 
 type PanelView = 'code' | 'sandbox' | 'metadata' | null
@@ -470,9 +472,24 @@ def dynamics(t, x, u):
 type Props = {
   model?: string
   onUseModel?: (result: PlantModelResult, conversationId?: number | null) => void
+  onLaunchPipeline?: (
+    pipeline: LaunchPipeline,
+    result: PlantModelResult,
+    conversationId?: number | null,
+  ) => void | Promise<void>
+  onOpenSettings?: (
+    pipeline: LaunchPipeline,
+    result: PlantModelResult,
+    conversationId?: number | null,
+  ) => void
 }
 
-export function AgentPlantChat({ model = AUTO_MODEL, onUseModel }: Props) {
+export function AgentPlantChat({
+  model = AUTO_MODEL,
+  onUseModel,
+  onLaunchPipeline,
+  onOpenSettings,
+}: Props) {
   const [turns, setTurns] = useState<Turn[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -495,6 +512,8 @@ export function AgentPlantChat({ model = AUTO_MODEL, onUseModel }: Props) {
   const [conversationId, setConversationId] = useState<number | null>(null)
   const [draft, setDraft] = useState<PlantModelResult | null>(null)
   const [isComplete, setIsComplete] = useState(false)
+  const [showHitl, setShowHitl] = useState(false)
+  const [hitlLaunching, setHitlLaunching] = useState(false)
   const [panel, setPanel] = useState<PanelView>(null)
   const [traceOpen, setTraceOpen] = useState(false)
   const [labOpen, setLabOpen] = useState(false)
@@ -599,7 +618,9 @@ export function AgentPlantChat({ model = AUTO_MODEL, onUseModel }: Props) {
       setTurns(restored)
       setSession(detail.session_state)
       setDraft(detail.final_result ?? detail.session_state?.latest_draft ?? null)
-      setIsComplete(detail.status === 'complete' || !!detail.final_result)
+      const completeStatus = detail.status === 'complete' || !!detail.final_result
+      setIsComplete(completeStatus)
+      setShowHitl(completeStatus)
       if (detail.final_result || detail.session_state?.latest_draft) {
         setPanel('code')
       }
@@ -638,6 +659,7 @@ export function AgentPlantChat({ model = AUTO_MODEL, onUseModel }: Props) {
     setConversationId(null)
     setDraft(null)
     setIsComplete(false)
+    setShowHitl(false)
     setPanel(null)
     setSim(null)
     setInput('')
@@ -1114,11 +1136,24 @@ export function AgentPlantChat({ model = AUTO_MODEL, onUseModel }: Props) {
     syncConversationParam,
   ])
 
-  /** Hand off completed plant to DesignPage → PreLaunch → Case Studies. */
-  const handleLaunch = useCallback(() => {
-    if (!draft || !onUseModel) return
-    onUseModel(draft, conversationId)
-  }, [draft, conversationId, onUseModel])
+  const handleHitlLaunch = useCallback(
+    async (selectedPipeline: LaunchPipeline) => {
+      if (!draft) return
+      setHitlLaunching(true)
+      try {
+        if (onLaunchPipeline) {
+          await onLaunchPipeline(selectedPipeline, draft, conversationId)
+        } else if (onUseModel) {
+          onUseModel(draft, conversationId)
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to launch control module')
+      } finally {
+        setHitlLaunching(false)
+      }
+    },
+    [draft, conversationId, onLaunchPipeline, onUseModel],
+  )
 
   const formatBytes = (n: number) => {
     if (n < 1024) return `${n} B`
@@ -1465,32 +1500,48 @@ export function AgentPlantChat({ model = AUTO_MODEL, onUseModel }: Props) {
 
             {draft && (
               <div className="ap-complete-bar">
-                {isComplete ? (
-                  <>
-                    <button
-                      type="button"
-                      className="ap-complete-btn"
-                      disabled={!onUseModel}
-                      onClick={handleLaunch}
-                    >
-                      Save &amp; View in Case Studies →
-                    </button>
-                    <span className="ap-complete-hint">
-                      Model ready — open Case Studies to continue design
-                    </span>
-                  </>
+                {isComplete || showHitl ? (
+                  <HitlModuleSelector
+                    systemName={draft.system_name}
+                    plantResult={draft}
+                    conversationId={conversationId}
+                    launching={hitlLaunching}
+                    onLaunch={handleHitlLaunch}
+                    onOpenSettings={
+                      onOpenSettings
+                        ? (pipeline) => onOpenSettings(pipeline, draft, conversationId)
+                        : undefined
+                    }
+                    onCancel={() => setShowHitl(false)}
+                  />
                 ) : (
                   <>
                     <button
                       type="button"
                       className="ap-complete-btn"
                       disabled={loading}
+                      onClick={() => {
+                        setShowHitl(true)
+                        void forceComplete()
+                      }}
+                    >
+                      Confirm System &amp; Select Controller (HITL) →
+                    </button>
+                    <button
+                      type="button"
+                      className="ap-complete-btn"
+                      style={{
+                        background: 'transparent',
+                        border: '1px solid var(--ap-border-strong)',
+                        color: 'var(--ap-text-2)',
+                      }}
+                      disabled={loading}
                       onClick={() => void forceComplete()}
                     >
-                      Complete
+                      Complete Draft
                     </button>
                     <span className="ap-complete-hint">
-                      Finish with the current draft
+                      Accept this plant and select your control architecture
                     </span>
                   </>
                 )}

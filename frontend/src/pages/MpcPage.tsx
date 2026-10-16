@@ -35,10 +35,8 @@ export function MpcPage() {
   const [results, setResults] = useState<MPCJobResultsResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  // View mode: 'setup' (pre-launch configuration) or 'workspace' (chat & canvas)
-  const [viewMode, setViewMode] = useState<'setup' | 'workspace'>(() => {
-    return searchParams.get('job_id') || searchParams.get('job') ? 'workspace' : 'setup'
-  })
+  // View mode: 'setup' (full setup screen) or 'workspace' (chat with inline HITL card & canvas)
+  const [viewMode, setViewMode] = useState<'setup' | 'workspace'>('workspace')
 
   const [gradeModalOpen, setGradeModalOpen] = useState(false)
   const [showCompletedToast, setShowCompletedToast] = useState(false)
@@ -951,6 +949,7 @@ if __name__ == '__main__':
               onCancelJob={handleCancel}
               onResetSession={handleResetSession}
               onOpenSetup={() => setViewMode('setup')}
+              diagnostics={diagnostics}
               onSelectTab={(tab) => {
                 setCanvasTab(tab)
                 setIsCanvasCollapsed(false)

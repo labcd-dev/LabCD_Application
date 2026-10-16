@@ -12,11 +12,13 @@ import {
   Sparkles,
   StopCircle,
   User,
+  UserCheck,
 } from 'lucide-react'
 import { MarkdownContent } from '../MarkdownContent'
 import { MpcThinkingBlock } from './MpcThinkingBlock'
 import { MpcParameterDrawer, type MpcTuningParams } from './MpcParameterDrawer'
-import type { MPCJobResultsResponse, MPCJobStatusResponse } from '../../api/types'
+import { MpcHitlScenarioCard } from './MpcHitlScenarioCard'
+import type { MPCDiagnosticsResponse, MPCJobResultsResponse, MPCJobStatusResponse } from '../../api/types'
 import { btnBase, btnCompact, btnPrimary } from '../../lib/classes'
 
 export interface ChatMessage {
@@ -63,6 +65,7 @@ interface MpcChatPaneProps {
   onChangeParams: (updated: Partial<MpcTuningParams>) => void
   onResetParamsDefaults: () => void
   onOpenSetup?: () => void
+  diagnostics?: MPCDiagnosticsResponse | null
 }
 
 const PRESETS = [
@@ -107,9 +110,11 @@ export function MpcChatPane({
   onChangeParams,
   onResetParamsDefaults,
   onOpenSetup,
+  diagnostics,
 }: MpcChatPaneProps) {
   const [inputText, setInputText] = useState('')
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
+  const [showHitlScenario, setShowHitlScenario] = useState(true)
   const chatScrollRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -182,15 +187,28 @@ export function MpcChatPane({
         </div>
 
         <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setShowHitlScenario((prev) => !prev)}
+            className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors ${
+              showHitlScenario
+                ? 'border-purple-400 dark:border-purple-500/50 bg-purple-500/20 text-purple-700 dark:text-purple-300 font-bold'
+                : 'border-purple-200 dark:border-purple-500/30 bg-purple-100/60 dark:bg-purple-500/10 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-500/20'
+            }`}
+            title="Toggle Human-in-the-Loop Scenario Setup"
+          >
+            <UserCheck className="size-3.5 text-purple-600 dark:text-purple-400" />
+            <span className="hidden sm:inline">HITL Scenario</span>
+          </button>
+
           {onOpenSetup && (
             <button
               type="button"
               onClick={onOpenSetup}
-              className="flex items-center gap-1.5 rounded-lg border border-purple-200 dark:border-purple-500/30 bg-purple-100/60 dark:bg-purple-500/10 px-2.5 py-1 text-xs font-medium text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-500/20 transition-colors"
-              title="Return to setup and reference trajectory configuration"
+              className="flex items-center gap-1.5 rounded-lg border border-border bg-surface-muted px-2 py-1 text-xs text-muted-text hover:text-foreground transition-colors"
+              title="Return to full setup screen"
             >
-              <Sliders className="size-3.5 text-purple-600 dark:text-purple-400" />
-              <span className="hidden sm:inline">Setup Screen</span>
+              <span className="hidden md:inline">Full Setup</span>
             </button>
           )}
 
@@ -224,8 +242,29 @@ export function MpcChatPane({
         ref={chatScrollRef}
         className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-border"
       >
-        {/* Empty State Welcome Card */}
-        {messages.length === 0 && (
+        {/* Human-in-the-Loop MPC Scenario Configuration Card */}
+        {showHitlScenario && (
+          <div className="mb-4">
+            <MpcHitlScenarioCard
+              systemName={systemName}
+              params={currentParams}
+              onChangeParams={onChangeParams}
+              diagnostics={diagnostics}
+              isRunning={isRunning}
+              onStartTuning={(guidance) => {
+                onSendMessage(
+                  guidance || 'Tune MPC parameters for certified tracking performance',
+                  currentParams,
+                )
+              }}
+              onDismiss={messages.length > 0 ? () => setShowHitlScenario(false) : undefined}
+              defaultCollapsed={messages.length > 0}
+            />
+          </div>
+        )}
+
+        {/* Empty State Welcome Card (when HITL card is collapsed/dismissed and no messages) */}
+        {messages.length === 0 && !showHitlScenario && (
           <div className="mx-auto max-w-xl py-6 text-center space-y-4 animate-in fade-in-50 duration-300">
             <div className="mx-auto flex size-14 items-center justify-center rounded-2xl border border-purple-200 dark:border-purple-500/30 bg-gradient-to-tr from-purple-500/20 via-indigo-500/10 to-transparent shadow-lg shadow-purple-500/10 text-purple-600 dark:text-purple-400">
               <Brain className="size-7" />
