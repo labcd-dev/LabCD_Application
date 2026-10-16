@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import { MpcDashboard, type MpcDashboardTab } from './MpcDashboard'
 import { ControlBlockDiagram } from '../common/ControlBlockDiagram'
+import { CodePreview } from '../CodePreview'
 import type {
   DiagnosisApplyPatch,
   MPCDiagnosticsResponse,
@@ -149,13 +150,12 @@ if __name__ == '__main__':
           </div>
 
           <span
-            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-semibold border ${
-              isCompleted
+            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-semibold border ${isCompleted
                 ? 'border-emerald-500/30 bg-emerald-500/15 text-emerald-400'
                 : isRunning
-                ? 'border-purple-500/30 bg-purple-500/15 text-purple-300 animate-pulse'
-                : 'border-border bg-surface-muted text-muted-text'
-            }`}
+                  ? 'border-purple-500/30 bg-purple-500/15 text-purple-300 animate-pulse'
+                  : 'border-border bg-surface-muted text-muted-text'
+              }`}
           >
             {isCompleted ? (
               <>
@@ -177,11 +177,10 @@ if __name__ == '__main__':
             <button
               type="button"
               onClick={() => onTabChange('waveform')}
-              className={`rounded-md px-2.5 py-1 transition-all whitespace-nowrap ${
-                activeTab === 'waveform'
+              className={`rounded-md px-2.5 py-1 transition-all whitespace-nowrap ${activeTab === 'waveform'
                   ? 'bg-purple-600 text-white shadow-xs font-semibold'
                   : 'text-muted-text hover:text-foreground'
-              }`}
+                }`}
             >
               Waveforms
             </button>
@@ -189,11 +188,10 @@ if __name__ == '__main__':
             <button
               type="button"
               onClick={() => onTabChange('code')}
-              className={`rounded-md px-2 py-1 transition-all flex items-center gap-1 whitespace-nowrap ${
-                activeTab === 'code'
+              className={`rounded-md px-2 py-1 transition-all flex items-center gap-1 whitespace-nowrap ${activeTab === 'code'
                   ? 'bg-purple-600 text-white shadow-xs font-semibold'
                   : 'text-muted-text hover:text-foreground'
-              }`}
+                }`}
             >
               <FileCode className="size-3.5" /> Python (.py)
             </button>
@@ -201,11 +199,10 @@ if __name__ == '__main__':
             <button
               type="button"
               onClick={() => onTabChange('schematic')}
-              className={`rounded-md px-2 py-1 transition-all flex items-center gap-1 whitespace-nowrap ${
-                activeTab === 'schematic'
+              className={`rounded-md px-2 py-1 transition-all flex items-center gap-1 whitespace-nowrap ${activeTab === 'schematic'
                   ? 'bg-purple-600 text-white shadow-xs font-semibold'
                   : 'text-muted-text hover:text-foreground'
-              }`}
+                }`}
             >
               <Workflow className="size-3.5" /> Diagram
             </button>
@@ -213,11 +210,10 @@ if __name__ == '__main__':
             <button
               type="button"
               onClick={() => onTabChange('sandbox')}
-              className={`rounded-md px-2 py-1 transition-all flex items-center gap-1 whitespace-nowrap ${
-                activeTab === 'sandbox'
+              className={`rounded-md px-2 py-1 transition-all flex items-center gap-1 whitespace-nowrap ${activeTab === 'sandbox'
                   ? 'bg-purple-600 text-white shadow-xs font-semibold'
                   : 'text-muted-text hover:text-foreground'
-              }`}
+                }`}
             >
               <Play className="size-3.5" /> Sandbox
             </button>
@@ -252,43 +248,15 @@ if __name__ == '__main__':
         {/* Code Deliverable View */}
         {activeTab === 'code' && (
           <div className="space-y-3 animate-in fade-in-50 duration-200">
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-surface-elevated p-3">
-              <div className="flex items-center gap-2">
-                <FileCode className="size-4 text-purple-400" />
-                <div>
-                  <h3 className="text-xs font-bold text-foreground">
-                    Executable Python Controller Deliverable
-                  </h3>
-                  <p className="text-[11px] text-muted-text">
-                    Self-contained OSQP discrete receding-horizon implementation
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleCopyCode}
-                  className={`${btnBase} ${btnCompact} flex items-center gap-1.5 text-xs border border-border hover:bg-surface-hover`}
-                >
-                  {copiedCode ? <Check className="size-3.5 text-emerald-400" /> : <Copy className="size-3.5" />}
-                  {copiedCode ? 'Copied!' : 'Copy Code'}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleDownloadCode}
-                  className={`${btnBase} ${btnCompact} flex items-center gap-1.5 text-xs bg-purple-600 text-white hover:bg-purple-700`}
-                >
-                  <Download className="size-3.5" /> Download .py
-                </button>
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-border bg-zinc-950 p-4 font-mono text-xs text-zinc-200 overflow-x-auto shadow-inner">
-              <pre className="leading-relaxed">
-                <code>{pythonScript}</code>
-              </pre>
+            <div className="rounded-xl border border-border bg-surface overflow-hidden shadow-sm">
+              <CodePreview
+                value={pythonScript}
+                readOnly
+                height={580}
+                language="python"
+                showLineNumbers
+                className="ap-code-preview"
+              />
             </div>
           </div>
         )}

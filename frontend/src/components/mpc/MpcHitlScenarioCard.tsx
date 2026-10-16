@@ -81,7 +81,7 @@ export function MpcHitlScenarioCard({
     if (diagnostics?.input_names && diagnostics.input_names.length > 0) {
       return diagnostics.input_names
     }
-    return ['u']
+    return ['v_in', 'D']
   }, [diagnostics])
 
   const handleLaunch = () => {
@@ -524,9 +524,20 @@ export function MpcHitlScenarioCard({
 
       {/* Footer Actions */}
       <div className="pt-2 border-t border-border/80 flex flex-wrap items-center justify-between gap-3">
-        <span className="text-[11.5px] text-muted-text">
-          Ready to synthesize. Click start to launch autonomous multi-agent MPC tuning.
-        </span>
+        <div className="flex items-center gap-2">
+          {onDismiss && (
+            <button
+              type="button"
+              onClick={onDismiss}
+              className="text-xs font-medium text-muted-text hover:text-foreground px-3 py-1.5 rounded-lg border border-border hover:bg-surface-elevated transition-colors"
+            >
+              &larr; Change Architecture
+            </button>
+          )}
+          <span className="text-[11.5px] text-muted-text">
+            Ready to synthesize. Click start to launch autonomous multi-agent MPC tuning.
+          </span>
+        </div>
 
         <button
           type="button"

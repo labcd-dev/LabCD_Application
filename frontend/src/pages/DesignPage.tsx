@@ -94,7 +94,7 @@ export function DesignPage() {
     if (selected === 'adaptiveDesign') {
       navigate('/adaptive')
     } else if (selected === 'mpcDesign') {
-      navigate('/mpc')
+      // Stay in chat page (Human-in-the-Loop MPC Scenario runs inline in AgentPlantChat)
     } else if (selected === 'siloDesign') {
       navigate('/silo')
     } else if (selected === 'muloDesign') {
