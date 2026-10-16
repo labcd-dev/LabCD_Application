@@ -17,6 +17,8 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from labcd_agents import BaseAgent, PromptLibrary, extract_json_from_response
 
+from backend_core.AgentPlant.state_equations_latex import format_equations_for_response
+
 PROMPTS_DIR = Path(__file__).parent / "prompts"
 PROMPT_FILE_NAME = "plant_model_agent"
 
@@ -227,7 +229,7 @@ class PlantModelAgent(BaseAgent):
             parsed = self._sanitize_code_fields(parsed)
             self._draft_count += 1
             self._latest_draft = self._draft_payload(parsed)
-            display = self._format_draft_display(parsed)
+            display = self._format_draft_display(parsed, self._latest_draft.get("metadata") if self._latest_draft else None)
             if self._draft_count >= self.max_drafts:
                 return display, dict(self._latest_draft)
             return display, None
@@ -253,7 +255,7 @@ class PlantModelAgent(BaseAgent):
                 parsed = self._sanitize_code_fields(parsed)
                 self._draft_count += 1
                 self._latest_draft = self._draft_payload(parsed)
-                return self._format_draft_display(parsed), None
+                return self._format_draft_display(parsed, self._latest_draft.get("metadata") if self._latest_draft else None), None
             if parsed.get("status") == "continue":
                 reply = (parsed.get("reply") or "").strip()
                 return reply or response_text.strip(), None
@@ -333,7 +335,7 @@ class PlantModelAgent(BaseAgent):
             parsed["metadata"] = metadata
         self._draft_count += 1
         self._latest_draft = self._draft_payload(parsed)
-        display = self._format_draft_display(parsed)
+        display = self._format_draft_display(parsed, self._latest_draft.get("metadata") if self._latest_draft else None)
         return display, dict(self._latest_draft)
 
     @staticmethod
@@ -363,16 +365,23 @@ class PlantModelAgent(BaseAgent):
         return out
 
     @staticmethod
-    def _format_draft_display(parsed: Dict[str, Any]) -> str:
+    def _format_draft_display(
+        parsed: Dict[str, Any],
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> str:
         reply = (parsed.get("reply") or "").strip()
-        name = parsed.get("system_name", "draft")
-        code = parsed.get("python_code", "")
         parts = []
         if reply:
             parts.append(reply)
-        # parts.append(f"**Draft: {name}**")
-        # parts.append(f"```python\n{code}\n```")
-        parts.append("_Say what to change, or click **Confirm system** (or reply **finish**) to accept this draft._")
+        # Deterministic governing equations from metadata (not LLM prose).
+        if isinstance(metadata, dict) and metadata:
+            latex_block = format_equations_for_response(metadata)
+            if latex_block:
+                parts.append(latex_block.strip())
+        parts.append(
+            "_Say what to change, or click **Confirm system** "
+            "(or reply **finish**) to accept this draft._"
+        )
         return "\n\n".join(parts)
 
     @staticmethod

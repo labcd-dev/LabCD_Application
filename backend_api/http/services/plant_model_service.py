@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
+from backend_core.AgentPlant.state_equations_latex import format_equations_for_response
 from backend_api.PlantModelChat.agent import (
     PlantModelAgent,
     PlantModelSessionState as AgentSessionState,
@@ -587,6 +588,30 @@ def run_plant_model_chat(request: PlantModelChatRequest) -> PlantModelChatRespon
         output_tokens=usage_totals.output_tokens,
         estimated_cost=agent.total_cost,
     )
+
+    # Append deterministic state-equation LaTeX when metadata is available
+    # (reconciled path). Skip if the reply already contains a display-math block
+    # (agent may have inserted one when LLM-provided metadata was present).
+    meta_for_latex = None
+    if final_result is not None and isinstance(final_result.metadata, dict):
+        meta_for_latex = final_result.metadata
+    elif session_state is not None and session_state.latest_draft is not None:
+        meta_for_latex = getattr(session_state.latest_draft, "metadata", None)
+    if isinstance(meta_for_latex, dict) and meta_for_latex and "\\[" not in (reply or ""):
+        latex_block = format_equations_for_response(meta_for_latex)
+        if latex_block:
+            confirmation = (
+                "_Say what to change, or click **Confirm system** "
+                "(or reply **finish**) to accept this draft._"
+            )
+            if confirmation in (reply or ""):
+                reply = reply.replace(
+                    confirmation,
+                    f"{latex_block.strip()}\n\n{confirmation}",
+                    1,
+                )
+            else:
+                reply = (reply or "").rstrip() + latex_block
 
     return PlantModelChatResponse(
         reply=reply,

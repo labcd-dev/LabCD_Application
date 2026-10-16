@@ -11,13 +11,19 @@ type MarkdownContentProps = {
 }
 
 /**
- * Preprocess math string so that:
- * 1. Inline display math like ': $$formula$$' gets converted into block display math ':\n\n$$\nformula\n$$\n\n'
- * 2. Standalone single-line $$formula$$ gets inner newlines for proper KaTeX display rendering.
+ * Normalize display-math delimiters before passing content to remark-math:
+ * - Backend blocks use '\\[formula\\]', while remark-math uses '$$formula$$'.
+ * - Existing inline display math is expanded onto its own block.
+ * - Standalone single-line display math gets inner newlines for KaTeX.
  */
 function preprocessMath(text: string): string {
   if (!text) return ''
-  let normalized = text.replace(/([^\n])\s*\$\$([\s\S]+?)\$\$/g, '$1\n\n$$$$\n$2\n$$$$\n\n')
+
+  // The backend deliberately emits LaTeX with \[ ... \] delimiters. Unified's
+  // remark-math parser uses $$ ... $$ for display math, so normalize the
+  // backend form before passing the response to ReactMarkdown.
+  let normalized = text.replace(/\\\[([\s\S]*?)\\\]/g, '\n\n$$$$\n$1\n$$$$\n\n')
+  normalized = normalized.replace(/([^\n])\s*\$\$([\s\S]+?)\$\$/g, '$1\n\n$$$$\n$2\n$$$$\n\n')
   normalized = normalized.replace(/\n\$\$([^\n]+?)\$\$/g, '\n$$$$\n$1\n$$$$')
   return normalized
 }
