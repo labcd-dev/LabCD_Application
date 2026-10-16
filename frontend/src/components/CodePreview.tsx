@@ -131,8 +131,9 @@ export function CodePreview({
 
   const gutterWidthCh = Math.max(2, String(lineNumbers.length).length)
 
+  const editorPadding = { top: 12, right: 14, bottom: 12, left: 14 }
+
   const editorStyle: CSSProperties = {
-    padding: '12px 14px',
     minHeight: '100%',
   }
 
@@ -161,7 +162,7 @@ export function CodePreview({
             onValueChange={(next) => onChange?.(next)}
             highlight={(code) => highlightCode(code, language)}
             disabled={!isEditable}
-            padding={0}
+            padding={editorPadding}
             tabSize={4}
             insertSpaces
             className="code-editor__surface"

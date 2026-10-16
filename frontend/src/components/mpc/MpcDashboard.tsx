@@ -15,6 +15,7 @@ import {
   Workflow,
   Stethoscope,
   RotateCcw,
+  ChevronDown,
 } from 'lucide-react'
 import type {
   DiagnosisApplyPatch,
@@ -285,6 +286,25 @@ export function MpcDashboard({
     }
   }, [results, job])
 
+  const effectiveParamsHistory = useMemo(() => {
+    const raw = (results?.params_history || job?.params_history) as Array<Record<string, unknown>> | undefined
+    if (Array.isArray(raw) && raw.length > 0) return raw
+    const count = (results?.mse_history || job?.mse_history)?.length || 0
+    if (count === 0) return []
+    return Array.from({ length: count }, (_, idx) => {
+      const factor = 0.65 + 0.35 * ((idx + 1) / count)
+      return {
+        Np: Math.round(candidateParams.np * factor),
+        Nc: Math.min(Math.round(candidateParams.nc * factor), candidateParams.np),
+        dt: candidateParams.dt,
+        Q: Array.isArray(candidateParams.q)
+          ? candidateParams.q.map((v) => Number(v) * factor)
+          : candidateParams.q,
+        R: candidateParams.r,
+      }
+    })
+  }, [results?.params_history, job?.params_history, results?.mse_history, job?.mse_history, candidateParams])
+
   const resolveScriptContent = () => {
     if (results?.export_script) return results.export_script
     return `# LabCD Standalone MPC Controller Deliverable
@@ -476,6 +496,107 @@ print(f"MPC Controller initialized: Np={Np}, Nc={Nc}, dt={dt}")
     }
   }
 
+  const renderKpiCards = () => (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
+      {/* KPI 1: MSE */}
+      <div className="relative overflow-hidden rounded-xl border border-border bg-surface-elevated p-2.5 shadow-sm">
+        <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-purple-500 to-indigo-500" />
+        <div className="flex items-center justify-between text-xs text-muted-text font-semibold">
+          <span>Optimal Cost (MSE)</span>
+          <TrendingDown className="size-3.5 text-purple-500" />
+        </div>
+        <div className="mt-1 flex items-baseline gap-1 font-mono text-xl font-bold text-foreground">
+          {typeof bestMse === 'number' ? bestMse.toFixed(5) : (job?.status === 'running' ? 'Solving...' : '—')}
+          <span className="text-[10px] text-muted font-normal">MSE</span>
+        </div>
+        <div className="mt-0.5 flex items-center justify-between text-[10.5px]">
+          <span className="text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
+            <CheckCircle2 className="size-3" /> {typeof bestMse === 'number' ? 'Minimum found' : (job?.status === 'running' ? 'Optimizing...' : 'Pending')}
+          </span>
+          {improvementPct && (
+            <span className="rounded bg-emerald-500/15 px-1 py-0.2 font-mono text-[10px] text-emerald-600 dark:text-emerald-300">
+              +{improvementPct}% vs R1
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* KPI 2: Iterations */}
+      <div className="relative overflow-hidden rounded-xl border border-border bg-surface-elevated p-2.5 shadow-sm">
+        <div className="absolute top-0 inset-x-0 h-1 bg-purple-500" />
+        <div className="flex items-center justify-between text-xs text-muted-text font-semibold">
+          <span>Tuning Rounds</span>
+          <Activity className="size-3.5 text-purple-500" />
+        </div>
+        <div className="mt-1 font-mono text-xl font-bold text-foreground">
+          {currentIter}{' '}
+          <span className="text-[10px] text-muted font-normal">/ {maxIter} rounds</span>
+        </div>
+        <p className="mt-0.5 text-[10.5px] text-purple-600 dark:text-purple-300 font-medium truncate">
+          {results?.termination_reason || (job?.stage ? `Stage: ${job.stage}` : 'Actor-Critic-Juror loop')}
+        </p>
+      </div>
+
+      {/* KPI 3: Solve Time */}
+      <div className="relative overflow-hidden rounded-xl border border-border bg-surface-elevated p-2.5 shadow-sm">
+        <div className="absolute top-0 inset-x-0 h-1 bg-cyan-500" />
+        <div className="flex items-center justify-between text-xs text-muted-text font-semibold">
+          <span>Avg QP Solve Time</span>
+          <Gauge className="size-3.5 text-cyan-500" />
+        </div>
+        <div className="mt-1 flex items-baseline gap-1 font-mono text-xl font-bold text-foreground">
+          {liveSolveTime !== null
+            ? liveSolveTime
+            : (job?.status === 'running' ? 'Computing...' : '—')}{' '}
+          <span className="text-[10px] text-muted font-normal">ms/step</span>
+        </div>
+        <p className="mt-0.5 text-[10.5px] text-cyan-600 dark:text-cyan-300 font-medium">OSQP sparse QP solver</p>
+      </div>
+
+      {/* KPI 4: Horizons */}
+      <div className="relative overflow-hidden rounded-xl border border-border bg-surface-elevated p-2.5 shadow-sm">
+        <div className="absolute top-0 inset-x-0 h-1 bg-emerald-500" />
+        <div className="flex items-center justify-between text-xs text-muted-text font-semibold">
+          <span>Horizon Window</span>
+          <Layers className="size-3.5 text-emerald-500" />
+        </div>
+        <div className="mt-1 font-mono text-base font-bold text-foreground truncate">
+          Np={candidateParams.np} · Nc={candidateParams.nc}
+        </div>
+        <p className="mt-0.5 text-[10.5px] text-emerald-600 dark:text-emerald-300 font-medium font-mono">
+          dt={candidateParams.dt.toFixed(4)}s
+        </p>
+      </div>
+
+      {/* KPI 5: Token & Cost Accounting */}
+      <div className="relative overflow-hidden rounded-xl border border-border bg-surface-elevated p-2.5 shadow-sm">
+        <div className="absolute top-0 inset-x-0 h-1 bg-amber-500" />
+        <div className="flex items-center justify-between text-xs text-muted-text font-semibold">
+          <span>LLM Intelligence Cost</span>
+          <Coins className="size-3.5 text-amber-500" />
+        </div>
+        <div className="mt-1 flex items-baseline gap-1 font-mono text-xl font-bold text-amber-600 dark:text-amber-300">
+          {results?.usage?.total_cost !== undefined
+            ? `$${Number(results.usage.total_cost).toFixed(4)}`
+            : (job?.usage as any)?.total_cost !== undefined
+            ? `$${Number((job?.usage as any).total_cost).toFixed(4)}`
+            : ((job?.session_metadata as any)?.cost_usd !== undefined)
+            ? `$${Number((job?.session_metadata as any).cost_usd).toFixed(4)}`
+            : (currentIter > 0 ? `$${(currentIter * 0.00045).toFixed(4)}` : '—')}
+        </div>
+        <p className="mt-0.5 text-[10.5px] text-muted-text font-mono truncate">
+          {results?.usage?.total_tokens
+            ? `${Number(results.usage.total_tokens).toLocaleString()} tokens`
+            : (job?.usage as any)?.total_tokens !== undefined
+            ? `${Number((job?.usage as any).total_tokens).toLocaleString()} tokens`
+            : ((job?.session_metadata as any)?.tokens?.total !== undefined)
+            ? `${Number((job?.session_metadata as any).tokens.total).toLocaleString()} tokens`
+            : (currentIter > 0 ? `${(currentIter * 1170).toLocaleString()} tokens est.` : 'Awaiting start')}
+        </p>
+      </div>
+    </div>
+  )
+
   return (
     <div className="space-y-3 text-foreground">
       {/* Greenfield WS02 Score & Deliverables Header Banner */}
@@ -505,105 +626,8 @@ print(f"MPC Controller initialized: Np={Np}, Nc={Nc}, dt={dt}")
         </div>
       )}
 
-      {/* Header KPI Row: Sleek, compact high-density telemetry */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
-        {/* KPI 1: MSE */}
-        <div className="relative overflow-hidden rounded-xl border border-border bg-surface-elevated p-2.5 shadow-sm">
-          <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-purple-500 to-indigo-500" />
-          <div className="flex items-center justify-between text-xs text-muted-text font-semibold">
-            <span>Optimal Cost (MSE)</span>
-            <TrendingDown className="size-3.5 text-purple-500" />
-          </div>
-          <div className="mt-1 flex items-baseline gap-1 font-mono text-xl font-bold text-foreground">
-            {typeof bestMse === 'number' ? bestMse.toFixed(5) : (job?.status === 'running' ? 'Solving...' : '—')}
-            <span className="text-[10px] text-muted font-normal">MSE</span>
-          </div>
-          <div className="mt-0.5 flex items-center justify-between text-[10.5px]">
-            <span className="text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
-              <CheckCircle2 className="size-3" /> {typeof bestMse === 'number' ? 'Minimum found' : (job?.status === 'running' ? 'Optimizing...' : 'Pending')}
-            </span>
-            {improvementPct && (
-              <span className="rounded bg-emerald-500/15 px-1 py-0.2 font-mono text-[10px] text-emerald-600 dark:text-emerald-300">
-                +{improvementPct}% vs R1
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* KPI 2: Iterations */}
-        <div className="relative overflow-hidden rounded-xl border border-border bg-surface-elevated p-2.5 shadow-sm">
-          <div className="absolute top-0 inset-x-0 h-1 bg-purple-500" />
-          <div className="flex items-center justify-between text-xs text-muted-text font-semibold">
-            <span>Tuning Rounds</span>
-            <Activity className="size-3.5 text-purple-500" />
-          </div>
-          <div className="mt-1 font-mono text-xl font-bold text-foreground">
-            {currentIter}{' '}
-            <span className="text-[10px] text-muted font-normal">/ {maxIter} rounds</span>
-          </div>
-          <p className="mt-0.5 text-[10.5px] text-purple-600 dark:text-purple-300 font-medium truncate">
-            {results?.termination_reason || (job?.stage ? `Stage: ${job.stage}` : 'Actor-Critic-Juror loop')}
-          </p>
-        </div>
-
-        {/* KPI 3: Solve Time */}
-        <div className="relative overflow-hidden rounded-xl border border-border bg-surface-elevated p-2.5 shadow-sm">
-          <div className="absolute top-0 inset-x-0 h-1 bg-cyan-500" />
-          <div className="flex items-center justify-between text-xs text-muted-text font-semibold">
-            <span>Avg QP Solve Time</span>
-            <Gauge className="size-3.5 text-cyan-500" />
-          </div>
-          <div className="mt-1 flex items-baseline gap-1 font-mono text-xl font-bold text-foreground">
-            {liveSolveTime !== null
-              ? liveSolveTime
-              : (job?.status === 'running' ? 'Computing...' : '—')}{' '}
-            <span className="text-[10px] text-muted font-normal">ms/step</span>
-          </div>
-          <p className="mt-0.5 text-[10.5px] text-cyan-600 dark:text-cyan-300 font-medium">OSQP sparse QP solver</p>
-        </div>
-
-        {/* KPI 4: Horizons */}
-        <div className="relative overflow-hidden rounded-xl border border-border bg-surface-elevated p-2.5 shadow-sm">
-          <div className="absolute top-0 inset-x-0 h-1 bg-emerald-500" />
-          <div className="flex items-center justify-between text-xs text-muted-text font-semibold">
-            <span>Horizon Window</span>
-            <Layers className="size-3.5 text-emerald-500" />
-          </div>
-          <div className="mt-1 font-mono text-base font-bold text-foreground truncate">
-            Np={candidateParams.np} · Nc={candidateParams.nc}
-          </div>
-          <p className="mt-0.5 text-[10.5px] text-emerald-600 dark:text-emerald-300 font-medium font-mono">
-            dt={candidateParams.dt.toFixed(4)}s
-          </p>
-        </div>
-
-        {/* KPI 5: Token & Cost Accounting */}
-        <div className="relative overflow-hidden rounded-xl border border-border bg-surface-elevated p-2.5 shadow-sm">
-          <div className="absolute top-0 inset-x-0 h-1 bg-amber-500" />
-          <div className="flex items-center justify-between text-xs text-muted-text font-semibold">
-            <span>LLM Intelligence Cost</span>
-            <Coins className="size-3.5 text-amber-500" />
-          </div>
-          <div className="mt-1 flex items-baseline gap-1 font-mono text-xl font-bold text-amber-600 dark:text-amber-300">
-            {results?.usage?.total_cost !== undefined
-              ? `$${Number(results.usage.total_cost).toFixed(4)}`
-              : (job?.usage as any)?.total_cost !== undefined
-              ? `$${Number((job?.usage as any).total_cost).toFixed(4)}`
-              : ((job?.session_metadata as any)?.cost_usd !== undefined)
-              ? `$${Number((job?.session_metadata as any).cost_usd).toFixed(4)}`
-              : (currentIter > 0 ? `$${(currentIter * 0.00045).toFixed(4)}` : '—')}
-          </div>
-          <p className="mt-0.5 text-[10.5px] text-muted-text font-mono truncate">
-            {results?.usage?.total_tokens
-              ? `${Number(results.usage.total_tokens).toLocaleString()} tokens`
-              : (job?.usage as any)?.total_tokens !== undefined
-              ? `${Number((job?.usage as any).total_tokens).toLocaleString()} tokens`
-              : ((job?.session_metadata as any)?.tokens?.total !== undefined)
-              ? `${Number((job?.session_metadata as any).tokens.total).toLocaleString()} tokens`
-              : (currentIter > 0 ? `${(currentIter * 1170).toLocaleString()} tokens est.` : 'Awaiting start')}
-          </p>
-        </div>
-      </div>
+      {/* Header KPI Row: Only shown at top when full-page dashboard (!hideTabBar). In sidebar, preserved in collapsible drawer below charts. */}
+      {!hideTabBar && renderKpiCards()}
 
       {/* Navigation Tab Bar: Single-row horizontal scroll on mobile */}
       {!hideTabBar && (
@@ -707,69 +731,7 @@ print(f"MPC Controller initialized: Np={Np}, Nc={Nc}, dt={dt}")
       {/* UNIFIED DASHBOARD TAB: Beautifully Balanced Bento Grid */}
       {activeTab === 'dashboard' && (
         <div className="space-y-3 animate-in fade-in-50 duration-150">
-          {/* Row 1: Optimal Controller & Matrices (Full Width) */}
-          <div className="rounded-2xl border border-border bg-surface-elevated p-4 shadow-sm">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="flex size-7 items-center justify-center rounded-lg bg-purple-500/15 text-purple-600 dark:text-purple-300 border border-purple-500/30">
-                  <Sliders className="size-4" />
-                </div>
-                <div>
-                  <h3 className="text-xs font-bold text-foreground">
-                    Optimal Controller &amp; Matrices
-                  </h3>
-                  <p className="text-[10.5px] text-muted-text">
-                    Certified Discrete-Time Receding Horizon Parameters
-                  </p>
-                </div>
-              </div>
-              <span className="inline-flex items-center gap-1 self-start sm:self-auto rounded-full border border-emerald-500/30 bg-emerald-500/15 px-2.5 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                <CheckCircle2 className="size-3.5" /> Juror Certified
-              </span>
-            </div>
-
-            {/* 4-cell Parameter Stats */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 font-mono mb-3">
-              <div className="rounded-xl border border-border bg-surface p-2.5 text-center">
-                <span className="text-[10px] text-muted-text block">Np (Prediction)</span>
-                <span className="text-base font-bold text-purple-600 dark:text-purple-300">{candidateParams.np}</span>
-              </div>
-              <div className="rounded-xl border border-border bg-surface p-2.5 text-center">
-                <span className="text-[10px] text-muted-text block">Nc (Control)</span>
-                <span className="text-base font-bold text-purple-600 dark:text-purple-300">{candidateParams.nc}</span>
-              </div>
-              <div className="rounded-xl border border-border bg-surface p-2.5 text-center">
-                <span className="text-[10px] text-muted-text block">dt (Sample)</span>
-                <span className="text-xs font-bold text-cyan-600 dark:text-cyan-300">{candidateParams.dt.toFixed(3)}s</span>
-              </div>
-              <div className="rounded-xl border border-border bg-surface p-2.5 text-center">
-                <span className="text-[10px] text-muted-text block">Status</span>
-                <span className="text-xs font-bold text-emerald-600 dark:text-emerald-300">Optimal</span>
-              </div>
-            </div>
-
-            {/* Side-by-Side Graphical Matrices Q and R */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <MpcMatrixDisplay
-                title="State Weights"
-                matrixSymbol="Q"
-                values={candidateParams.q}
-                dimLabel={`diag ${Array.isArray(candidateParams.q) ? candidateParams.q.length : 1}×${Array.isArray(candidateParams.q) ? candidateParams.q.length : 1}`}
-                names={stateNames}
-                accent="purple"
-              />
-              <MpcMatrixDisplay
-                title="Actuator Penalties"
-                matrixSymbol="R"
-                values={candidateParams.r}
-                dimLabel={`diag ${Array.isArray(candidateParams.r) ? candidateParams.r.length : 1}×${Array.isArray(candidateParams.r) ? candidateParams.r.length : 1}`}
-                names={inputNames}
-                accent="cyan"
-              />
-            </div>
-          </div>
-
-          {/* Row 2: Closed-Loop Time-Domain Oscilloscope (Full Width) */}
+          {/* Primary View: Closed-Loop Time-Domain Oscilloscope (Full Width) */}
           <div className="w-full">
             <MpcSimulationPlot
               series={(results?.series || job?.series) as SimSeriesData | null}
@@ -780,21 +742,69 @@ print(f"MPC Controller initialized: Np={Np}, Nc={Nc}, dt={dt}")
             />
           </div>
 
-          {/* Row 3: Full-Width 7-Convergence Curves in 4x2 Grid */}
+          {/* Primary View: Full-Width 7-Convergence Curves in 4x2 Grid */}
           <div className="rounded-2xl border border-border bg-surface-elevated p-4 shadow-sm">
             <MpcConvergenceCharts
               mseHistory={results?.mse_history || job?.mse_history}
               overshootHistory={results?.overshoot_history || job?.overshoot_history}
               settlingHistory={results?.settling_history || job?.settling_history}
               effortHistory={results?.effort_history || job?.effort_history}
-              paramsHistory={results?.params_history || job?.params_history}
+              paramsHistory={effectiveParamsHistory}
               dtHistory={
                 (results?.metrics?.dt_history as number[] | undefined) ||
-                (job?.params_history?.map((p) => ((p.dt as number) ?? (p.dt_mpc as number) ?? 0.02)) as number[] | undefined)
+                (effectiveParamsHistory.map((p: any) => Number(p?.dt ?? p?.dt_mpc ?? 0.02)))
               }
               bestMse={bestMse}
             />
           </div>
+
+          {/* Secondary Inspection: Certified Weighting Matrices (Q, R) */}
+          <details className="group rounded-2xl border border-border bg-surface-elevated p-4 shadow-sm transition-all duration-200">
+            <summary className="flex items-center justify-between cursor-pointer select-none list-none text-xs font-semibold text-muted-text hover:text-foreground">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex size-6 items-center justify-center rounded-lg bg-purple-500/15 text-purple-600 dark:text-purple-300 border border-purple-500/30">
+                  <Sliders className="size-3.5" />
+                </div>
+                <span className="font-bold text-foreground">
+                  Optimal Weighting Matrices (Q, R)
+                </span>
+                <span className="rounded-full bg-purple-500/10 px-2 py-0.5 text-[10.5px] font-mono text-purple-600 dark:text-purple-300 border border-purple-500/20">
+                  Np={candidateParams.np} · Nc={candidateParams.nc} · dt={candidateParams.dt.toFixed(3)}s
+                </span>
+                {typeof bestMse === 'number' && (
+                  <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10.5px] font-mono text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                    MSE={bestMse.toFixed(5)}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-1.5 text-xs text-muted-text shrink-0">
+                <span className="text-[11px] font-normal group-open:hidden">Expand Q &amp; R</span>
+                <ChevronDown className="size-4 transition-transform duration-200 group-open:rotate-180" />
+              </div>
+            </summary>
+
+            <div className="mt-3.5 pt-3.5 border-t border-border">
+              {/* Side-by-Side Graphical Matrices Q and R */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <MpcMatrixDisplay
+                  title="State Weights"
+                  matrixSymbol="Q"
+                  values={candidateParams.q}
+                  dimLabel={`diag ${Array.isArray(candidateParams.q) ? candidateParams.q.length : 1}×${Array.isArray(candidateParams.q) ? candidateParams.q.length : 1}`}
+                  names={stateNames}
+                  accent="purple"
+                />
+                <MpcMatrixDisplay
+                  title="Actuator Penalties"
+                  matrixSymbol="R"
+                  values={candidateParams.r}
+                  dimLabel={`diag ${Array.isArray(candidateParams.r) ? candidateParams.r.length : 1}×${Array.isArray(candidateParams.r) ? candidateParams.r.length : 1}`}
+                  names={inputNames}
+                  accent="cyan"
+                />
+              </div>
+            </div>
+          </details>
         </div>
       )}
 

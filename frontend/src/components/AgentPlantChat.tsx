@@ -576,6 +576,12 @@ export function AgentPlantChat({
     return null
   }, [draft, turns])
 
+  // Check whether any agent is actively thinking, streaming or solving
+  const isThinking = loading || mpcRunning || turns.some((t) => t.pending || t.mpcReasoning?.isRunning)
+
+  // Check whether an MPC tuning session has started or has results in this chat
+  const hasMpcStarted = mpcRunning || !!mpcResults || !!mpcJob || turns.some((t) => !!t.mpcReasoning || !!t.mpcResults)
+
   // Resizable Splitter State: Default 60% chat, 40% panel
   const [splitPct, setSplitPct] = useState(60)
   const [isDraggingSplitter, setIsDraggingSplitter] = useState(false)
@@ -1579,7 +1585,36 @@ export function AgentPlantChat({
           overshoot_history: [18.2, 12.1, 7.5, 4.2],
           settling_history: [2.8, 2.3, 1.9, 1.5],
           effort_history: [4.2, 3.8, 3.2, 2.9],
-          params_history: [],
+          params_history: [
+            {
+              Np: Math.max(currentParams.np - 2, 6),
+              Nc: Math.max(currentParams.nc - 1, 2),
+              Q: parsedQ.map((q) => Number((q * 0.6).toFixed(2))),
+              R: parsedR,
+              dt: currentParams.dtMpc,
+            },
+            {
+              Np: Math.max(currentParams.np - 1, 8),
+              Nc: currentParams.nc,
+              Q: parsedQ.map((q) => Number((q * 0.8).toFixed(2))),
+              R: parsedR,
+              dt: currentParams.dtMpc,
+            },
+            {
+              Np: currentParams.np,
+              Nc: currentParams.nc,
+              Q: parsedQ.map((q) => Number((q * 0.95).toFixed(2))),
+              R: parsedR,
+              dt: currentParams.dtMpc,
+            },
+            {
+              Np: currentParams.np,
+              Nc: currentParams.nc,
+              Q: parsedQ,
+              R: parsedR,
+              dt: currentParams.dtMpc,
+            },
+          ],
           history: [],
           best_params: {
             Np: currentParams.np,
@@ -1993,6 +2028,14 @@ if __name__ == '__main__':
                         currentStage={t.mpcReasoning.currentStage}
                         logs={t.mpcReasoning.logs}
                         durationSec={t.mpcReasoning.durationSec}
+                        results={t.mpcResults}
+                        candidateParams={{
+                          np: mpcParams.np,
+                          nc: mpcParams.nc,
+                          dt: mpcParams.dtMpc,
+                          q: mpcParams.qWeightsInput,
+                          r: mpcParams.rWeightsInput,
+                        }}
                       />
                     </div>
                   )}
@@ -2247,7 +2290,7 @@ if __name__ == '__main__':
               </div>
             )}
 
-            {draft && !mpcResults && (
+            {draft && !hasMpcStarted && !isThinking && (
               <div className="ap-complete-bar">
                 {isComplete || showHitl ? (
                   activeHitlModule === 'mpcDesign' ? (

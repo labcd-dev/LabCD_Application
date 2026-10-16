@@ -308,23 +308,33 @@
 .code-editor__surface,
 .code-editor__textarea,
 .code-editor__pre {
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
-  font-size: 0.85rem;
-  line-height: 1.55;
-  tab-size: 4;
-  box-sizing: border-box;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace) !important;
+  font-size: 0.85rem !important;
+  line-height: 1.55 !important;
+  tab-size: 4 !important;
+  box-sizing: border-box !important;
   color: inherit;
+  direction: ltr !important;
+  text-align: left !important;
 }
 
 .code-editor__surface {
   min-height: 100%;
   outline: none;
   background: transparent;
+  padding: 0 !important;
 }
 
 .code-editor__textarea,
 .code-editor__pre {
+  margin: 0 !important;
+  border: 0 !important;
+  outline: none !important;
   white-space: pre !important;
+  word-break: normal !important;
+  overflow-wrap: normal !important;
+  letter-spacing: normal !important;
+  word-spacing: normal !important;
 }
 
 .code-editor__textarea {
