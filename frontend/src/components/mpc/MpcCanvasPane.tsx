@@ -143,19 +143,36 @@ if __name__ == '__main__':
     <div className="flex h-full flex-col min-h-0 bg-surface overflow-hidden">
       {/* Canvas Top Bar */}
       <header className="flex h-13 shrink-0 items-center justify-between border-b border-border bg-surface-elevated/75 px-4 backdrop-blur-md">
-        <div className="flex items-center gap-2 min-w-0">
-          <div className="flex items-center gap-1.5 text-xs font-bold text-foreground">
-            <Activity className="size-4 text-purple-400" />
-            <span className="hidden sm:inline">Controller Artifacts</span>
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="flex items-center gap-2 text-xs font-bold text-foreground">
+            {activeTab === 'code' ? (
+              <FileCode className="size-4 text-amber-500" />
+            ) : activeTab === 'schematic' ? (
+              <Workflow className="size-4 text-sky-400" />
+            ) : activeTab === 'sandbox' ? (
+              <Play className="size-4 text-emerald-400" />
+            ) : (
+              <Activity className="size-4 text-purple-400" />
+            )}
+            <span className="font-semibold text-sm truncate">
+              {activeTab === 'code'
+                ? 'Python Controller Deliverable'
+                : activeTab === 'schematic'
+                  ? 'Control Block Diagram'
+                  : activeTab === 'sandbox'
+                    ? 'MPC Simulation Sandbox'
+                    : 'Closed-Loop Waveforms & Metrics'}
+            </span>
           </div>
 
           <span
-            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-semibold border ${isCompleted
+            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-semibold border ${
+              isCompleted
                 ? 'border-emerald-500/30 bg-emerald-500/15 text-emerald-400'
                 : isRunning
                   ? 'border-purple-500/30 bg-purple-500/15 text-purple-300 animate-pulse'
                   : 'border-border bg-surface-muted text-muted-text'
-              }`}
+            }`}
           >
             {isCompleted ? (
               <>
@@ -171,75 +188,27 @@ if __name__ == '__main__':
           </span>
         </div>
 
-        {/* Tab switchers + Expand & Collapse action */}
-        <div className="flex items-center gap-2">
-          <div className="flex items-center rounded-lg border border-border bg-surface-muted p-0.5 text-xs font-medium overflow-x-auto scrollbar-none">
-            <button
-              type="button"
-              onClick={() => onTabChange('waveform')}
-              className={`rounded-md px-2.5 py-1 transition-all whitespace-nowrap ${activeTab === 'waveform'
-                  ? 'bg-purple-600 text-white shadow-xs font-semibold'
-                  : 'text-muted-text hover:text-foreground'
-                }`}
-            >
-              Waveforms
-            </button>
+        {/* Action Controls: Expand & Collapse */}
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={onToggleExpand}
+            className="flex size-7 shrink-0 items-center justify-center rounded-lg border border-border bg-surface-muted text-muted-text hover:bg-surface-hover hover:text-foreground transition-colors"
+            title={isExpanded ? 'Restore side-by-side split' : 'Expand canvas full-width'}
+          >
+            {isExpanded ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
+          </button>
 
+          {onToggleCollapse && (
             <button
               type="button"
-              onClick={() => onTabChange('code')}
-              className={`rounded-md px-2 py-1 transition-all flex items-center gap-1 whitespace-nowrap ${activeTab === 'code'
-                  ? 'bg-purple-600 text-white shadow-xs font-semibold'
-                  : 'text-muted-text hover:text-foreground'
-                }`}
-            >
-              <FileCode className="size-3.5" /> Python (.py)
-            </button>
-
-            <button
-              type="button"
-              onClick={() => onTabChange('schematic')}
-              className={`rounded-md px-2 py-1 transition-all flex items-center gap-1 whitespace-nowrap ${activeTab === 'schematic'
-                  ? 'bg-purple-600 text-white shadow-xs font-semibold'
-                  : 'text-muted-text hover:text-foreground'
-                }`}
-            >
-              <Workflow className="size-3.5" /> Diagram
-            </button>
-
-            <button
-              type="button"
-              onClick={() => onTabChange('sandbox')}
-              className={`rounded-md px-2 py-1 transition-all flex items-center gap-1 whitespace-nowrap ${activeTab === 'sandbox'
-                  ? 'bg-purple-600 text-white shadow-xs font-semibold'
-                  : 'text-muted-text hover:text-foreground'
-                }`}
-            >
-              <Play className="size-3.5" /> Sandbox
-            </button>
-          </div>
-
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={onToggleExpand}
+              onClick={onToggleCollapse}
               className="flex size-7 shrink-0 items-center justify-center rounded-lg border border-border bg-surface-muted text-muted-text hover:bg-surface-hover hover:text-foreground transition-colors"
-              title={isExpanded ? 'Restore side-by-side split' : 'Expand canvas full-width'}
+              title="Close panel"
             >
-              {isExpanded ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
+              <PanelRightClose className="size-3.5" />
             </button>
-
-            {onToggleCollapse && (
-              <button
-                type="button"
-                onClick={onToggleCollapse}
-                className="flex size-7 shrink-0 items-center justify-center rounded-lg border border-border bg-surface-muted text-muted-text hover:bg-surface-hover hover:text-foreground transition-colors"
-                title="Slide collapse artifact panel"
-              >
-                <PanelRightClose className="size-3.5" />
-              </button>
-            )}
-          </div>
+          )}
         </div>
       </header>
 
@@ -248,6 +217,29 @@ if __name__ == '__main__':
         {/* Code Deliverable View */}
         {activeTab === 'code' && (
           <div className="space-y-3 animate-in fade-in-50 duration-200">
+            <div className="flex items-center justify-between pb-1">
+              <span className="text-xs font-semibold text-muted-text">
+                OSQP Standalone Python Controller Deliverable
+              </span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={handleCopyCode}
+                  className={`${btnBase} ${btnCompact} border border-border bg-surface-muted hover:bg-surface-hover text-foreground`}
+                >
+                  {copiedCode ? <Check className="size-3.5 text-emerald-500" /> : <Copy className="size-3.5" />}
+                  <span>{copiedCode ? 'Copied' : 'Copy'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDownloadCode}
+                  className={`${btnBase} ${btnCompact} border border-border bg-surface-muted hover:bg-surface-hover text-foreground`}
+                >
+                  <Download className="size-3.5" />
+                  <span>Download .py</span>
+                </button>
+              </div>
+            </div>
             <div className="rounded-xl border border-border bg-surface overflow-hidden shadow-sm">
               <CodePreview
                 value={pythonScript}

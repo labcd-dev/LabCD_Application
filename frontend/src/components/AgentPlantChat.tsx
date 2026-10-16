@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useSearchParams } from 'react-router-dom'
 import Plot from 'react-plotly.js'
-import { Activity } from 'lucide-react'
+import { Activity, FileCode, Play, Workflow } from 'lucide-react'
 import { healthApi, mpcApi, plantModelApi, siteApi } from '../api/endpoints'
 import type {
   MPCDiagnosticsResponse,
@@ -563,6 +563,18 @@ export function AgentPlantChat({
   const [mpcResults, setMpcResults] = useState<MPCJobResultsResponse | null>(null)
   const [mpcCanvasTab, setMpcCanvasTab] = useState<CanvasTab>('waveform')
   const [mpcCanvasExpanded, setMpcCanvasExpanded] = useState(false)
+
+  // Identify the assistant turn where the Plant Model was drafted/completed (before MPC was triggered)
+  const plantModelTurnId = useMemo(() => {
+    if (!draft) return null
+    for (let i = turns.length - 1; i >= 0; i--) {
+      const t = turns[i]
+      if (t.role === 'assistant' && !t.mpcResults && !t.mpcReasoning) {
+        return t.id
+      }
+    }
+    return null
+  }, [draft, turns])
 
   // Resizable Splitter State: Default 60% chat, 40% panel
   const [splitPct, setSplitPct] = useState(60)
@@ -1929,19 +1941,169 @@ if __name__ == '__main__':
                       <span className={`ap-pill ap-pill--${t.status}`}>{t.status}</span>
                     )}
                     <MarkdownContent content={t.content} className="ap-md" />
-                    {t.mpcResults && (
-                      <div className="mt-3 pt-2.5 border-t border-purple-500/20 flex items-center gap-2">
-                        <button
-                          type="button"
-                          className="inline-flex items-center gap-2 rounded-xl border border-purple-500/40 bg-purple-500/15 px-3 py-1.5 text-xs font-semibold text-purple-600 dark:text-purple-300 hover:bg-purple-500/25 transition-colors shadow-sm"
-                          onClick={() => setPanel('mpc')}
-                        >
-                          <Activity className="size-3.5" />
-                          <span>Open MPC Simulation &amp; Controller &rarr;</span>
-                        </button>
-                      </div>
-                    )}
                   </div>
+                  )}
+
+                  {/* Plant Model Artifacts: Attached to the plant model assistant turn prior to MPC */}
+                  {!t.pending && t.id === plantModelTurnId && draft && (
+                    <div className="ap-artifacts mt-2.5">
+                      <button
+                        type="button"
+                        className="ap-artifact"
+                        aria-pressed={panel === 'code'}
+                        onClick={openCode}
+                      >
+                        <div className="ap-artifact__icon ap-artifact__icon--code" aria-hidden>
+                          {'</>'}
+                        </div>
+                        <div className="ap-artifact__body">
+                          <div className="ap-artifact__title">{draft.system_name || 'dynamics'}</div>
+                          <div className="ap-artifact__type">PY</div>
+                        </div>
+                        <span className="ap-artifact__action">Open</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        className="ap-artifact"
+                        aria-pressed={panel === 'sandbox'}
+                        onClick={openLab}
+                      >
+                        <div className="ap-artifact__icon ap-artifact__icon--lab" aria-hidden>
+                          ⌬
+                        </div>
+                        <div className="ap-artifact__body">
+                          <div className="ap-artifact__title">Sandbox</div>
+                          <div className="ap-artifact__type">Artifact</div>
+                        </div>
+                        <span className="ap-artifact__action">Open</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        className="ap-artifact"
+                        aria-pressed={panel === 'metadata'}
+                        onClick={openMetadata}
+                      >
+                        <div className="ap-artifact__icon ap-artifact__icon--meta" aria-hidden>
+                          M
+                        </div>
+                        <div className="ap-artifact__body">
+                          <div className="ap-artifact__title">Metadata</div>
+                          <div className="ap-artifact__type">Structured</div>
+                        </div>
+                        <span className="ap-artifact__action">Open</span>
+                      </button>
+                    </div>
+                  )}
+
+                  {/* MPC Controller Artifacts: 4 sections to open each sidebar view directly */}
+                  {!t.pending && t.mpcResults && (
+                    <div className="ap-artifacts mt-2.5">
+                      <button
+                        type="button"
+                        className="ap-artifact"
+                        aria-pressed={panel === 'mpc' && mpcCanvasTab === 'waveform'}
+                        onClick={() => {
+                          setPanel('mpc')
+                          setMpcCanvasTab('waveform')
+                        }}
+                      >
+                        <div
+                          className="ap-artifact__icon"
+                          style={{
+                            background: 'linear-gradient(145deg, #8b5cf6, #6366f1)',
+                            color: '#fff',
+                          }}
+                          aria-hidden
+                        >
+                          <Activity className="size-4" />
+                        </div>
+                        <div className="ap-artifact__body">
+                          <div className="ap-artifact__title">Closed-Loop Waveforms</div>
+                          <div className="ap-artifact__type">Waveform · OSQP Certified</div>
+                        </div>
+                        <span className="ap-artifact__action">Open</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        className="ap-artifact"
+                        aria-pressed={panel === 'mpc' && mpcCanvasTab === 'code'}
+                        onClick={() => {
+                          setPanel('mpc')
+                          setMpcCanvasTab('code')
+                        }}
+                      >
+                        <div
+                          className="ap-artifact__icon"
+                          style={{
+                            background: 'linear-gradient(145deg, #c47a3a, #a35f28)',
+                            color: '#fff',
+                          }}
+                          aria-hidden
+                        >
+                          <FileCode className="size-4" />
+                        </div>
+                        <div className="ap-artifact__body">
+                          <div className="ap-artifact__title">{draft?.system_name || 'MPC'} Controller (.py)</div>
+                          <div className="ap-artifact__type">PY · Standalone Package</div>
+                        </div>
+                        <span className="ap-artifact__action">Open</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        className="ap-artifact"
+                        aria-pressed={panel === 'mpc' && mpcCanvasTab === 'schematic'}
+                        onClick={() => {
+                          setPanel('mpc')
+                          setMpcCanvasTab('schematic')
+                        }}
+                      >
+                        <div
+                          className="ap-artifact__icon"
+                          style={{
+                            background: 'linear-gradient(145deg, #0284c7, #0369a1)',
+                            color: '#fff',
+                          }}
+                          aria-hidden
+                        >
+                          <Workflow className="size-4" />
+                        </div>
+                        <div className="ap-artifact__body">
+                          <div className="ap-artifact__title">Control Block Diagram</div>
+                          <div className="ap-artifact__type">Diagram · State Feedback</div>
+                        </div>
+                        <span className="ap-artifact__action">Open</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        className="ap-artifact"
+                        aria-pressed={panel === 'mpc' && mpcCanvasTab === 'sandbox'}
+                        onClick={() => {
+                          setPanel('mpc')
+                          setMpcCanvasTab('sandbox')
+                        }}
+                      >
+                        <div
+                          className="ap-artifact__icon"
+                          style={{
+                            background: 'linear-gradient(145deg, #059669, #047857)',
+                            color: '#fff',
+                          }}
+                          aria-hidden
+                        >
+                          <Play className="size-4" />
+                        </div>
+                        <div className="ap-artifact__body">
+                          <div className="ap-artifact__title">MPC Simulation Sandbox</div>
+                          <div className="ap-artifact__type">Sandbox · Live Horizon</div>
+                        </div>
+                        <span className="ap-artifact__action">Open</span>
+                      </button>
+                    </div>
                   )}
 
                   {!t.pending && (
@@ -1972,89 +2134,54 @@ if __name__ == '__main__':
               ),
             )}
 
-            {(draft || loading) && (
+            {/* Fallback plant artifacts if no assistant turn exists yet in the conversation */}
+            {!plantModelTurnId && draft && !mpcResults && (
               <div className="ap-artifacts">
-                {draft && (
-                  <button
-                    type="button"
-                    className="ap-artifact"
-                    aria-pressed={panel === 'code'}
-                    onClick={openCode}
-                  >
-                    <div className="ap-artifact__icon ap-artifact__icon--code" aria-hidden>
-                      {'</>'}
-                    </div>
-                    <div className="ap-artifact__body">
-                      <div className="ap-artifact__title">{draft.system_name || 'dynamics'}</div>
-                      <div className="ap-artifact__type">PY</div>
-                    </div>
-                    <span className="ap-artifact__action">Open</span>
-                  </button>
-                )}
-                {draft && (
-                  <button
-                    type="button"
-                    className="ap-artifact"
-                    aria-pressed={panel === 'sandbox'}
-                    onClick={openLab}
-                  >
-                    <div className="ap-artifact__icon ap-artifact__icon--lab" aria-hidden>
-                      ⌬
-                    </div>
-                    <div className="ap-artifact__body">
-                      <div className="ap-artifact__title">Sandbox</div>
-                      <div className="ap-artifact__type">Artifact</div>
-                    </div>
-                    <span className="ap-artifact__action">Open</span>
-                  </button>
-                )}
-                {draft && (
-                  <button
-                    type="button"
-                    className="ap-artifact"
-                    aria-pressed={panel === 'metadata'}
-                    onClick={openMetadata}
-                  >
-                    <div className="ap-artifact__icon ap-artifact__icon--meta" aria-hidden>
-                      M
-                    </div>
-                    <div className="ap-artifact__body">
-                      <div className="ap-artifact__title">Metadata</div>
-                      <div className="ap-artifact__type">Structured</div>
-                    </div>
-                    <span className="ap-artifact__action">Open</span>
-                  </button>
-                )}
-                {(mpcResults || mpcJob) && (
-                  <button
-                    type="button"
-                    className="ap-artifact"
-                    style={{ borderColor: 'rgba(168, 85, 247, 0.4)' }}
-                    aria-pressed={panel === 'mpc'}
-                    onClick={() => setPanel('mpc')}
-                  >
-                    <div
-                      className="ap-artifact__icon"
-                      style={{
-                        background: 'linear-gradient(135deg, rgba(168, 85, 247, 0.25), rgba(99, 102, 241, 0.25))',
-                        color: '#c084fc',
-                        border: '1px solid rgba(168, 85, 247, 0.35)',
-                      }}
-                      aria-hidden
-                    >
-                      <Activity className="size-4" />
-                    </div>
-                    <div className="ap-artifact__body">
-                      <div className="ap-artifact__title">
-                        {mpcResults?.best_mse != null ? 'MPC Optimal' : 'MPC Controller'}
-                      </div>
-                      <div className="ap-artifact__type">
-                        {mpcResults ? 'Certified' : 'Optimizing…'}
-                      </div>
-                    </div>
-                    <span className="ap-artifact__action">Open</span>
-                  </button>
-                )}
+                <button
+                  type="button"
+                  className="ap-artifact"
+                  aria-pressed={panel === 'code'}
+                  onClick={openCode}
+                >
+                  <div className="ap-artifact__icon ap-artifact__icon--code" aria-hidden>
+                    {'</>'}
+                  </div>
+                  <div className="ap-artifact__body">
+                    <div className="ap-artifact__title">{draft.system_name || 'dynamics'}</div>
+                    <div className="ap-artifact__type">PY</div>
+                  </div>
+                  <span className="ap-artifact__action">Open</span>
+                </button>
+                <button
+                  type="button"
+                  className="ap-artifact"
+                  aria-pressed={panel === 'sandbox'}
+                  onClick={openLab}
+                >
+                  <div className="ap-artifact__icon ap-artifact__icon--lab" aria-hidden>
+                    ⌬
+                  </div>
+                  <div className="ap-artifact__body">
+                    <div className="ap-artifact__title">Sandbox</div>
+                    <div className="ap-artifact__type">Artifact</div>
+                  </div>
+                  <span className="ap-artifact__action">Open</span>
+                </button>
+                <button
+                  type="button"
+                  className="ap-artifact"
+                  aria-pressed={panel === 'metadata'}
+                  onClick={openMetadata}
+                >
+                  <div className="ap-artifact__icon ap-artifact__icon--meta" aria-hidden>
+                    M
+                  </div>
+                  <div className="ap-artifact__body">
+                    <div className="ap-artifact__title">Metadata</div>
+                    <div className="ap-artifact__type">Structured</div>
+                  </div>
+                  <span className="ap-artifact__action">Open</span>
+                </button>
               </div>
             )}
 
@@ -2311,37 +2438,35 @@ if __name__ == '__main__':
           flex: panel ? `1 1 ${100 - splitPct}%` : '0 0 0%',
         }}
       >
-        <header className="ap-panel__header">
-          <div className="ap-panel__title">
-            {panel === 'sandbox'
-              ? 'Sandbox · Artifact'
-              : panel === 'metadata'
-                ? `${draft?.system_name || 'dynamics'} · Metadata`
-                : panel === 'mpc'
-                  ? `${draft?.system_name || 'dynamics'} · MPC Optimal Controller`
+        {panel !== 'mpc' && (
+          <header className="ap-panel__header">
+            <div className="ap-panel__title">
+              {panel === 'sandbox'
+                ? 'Sandbox · Artifact'
+                : panel === 'metadata'
+                  ? `${draft?.system_name || 'dynamics'} · Metadata`
                   : `${draft?.system_name || 'dynamics'} · PY`}
-          </div>
-          <button
-            type="button"
-            className="ap-panel__btn"
-            onClick={() => {
-              const text =
-                panel === 'sandbox'
-                  ? JSON.stringify(sim, null, 2)
-                  : panel === 'metadata'
-                    ? JSON.stringify(draft?.metadata ?? {}, null, 2)
-                    : panel === 'mpc'
-                      ? mpcResults?.export_script || ''
+            </div>
+            <button
+              type="button"
+              className="ap-panel__btn"
+              onClick={() => {
+                const text =
+                  panel === 'sandbox'
+                    ? JSON.stringify(sim, null, 2)
+                    : panel === 'metadata'
+                      ? JSON.stringify(draft?.metadata ?? {}, null, 2)
                       : draft?.python_code || DEMO_CODE
-              void navigator.clipboard?.writeText(text || '')
-            }}
-          >
-            Copy
-          </button>
-          <button type="button" className="ap-panel__btn" onClick={() => setPanel(null)} aria-label="Close">
-            ×
-          </button>
-        </header>
+                void navigator.clipboard?.writeText(text || '')
+              }}
+            >
+              Copy
+            </button>
+            <button type="button" className="ap-panel__btn" onClick={() => setPanel(null)} aria-label="Close">
+              ×
+            </button>
+          </header>
+        )}
 
         <div className="ap-panel__body">
           {panel === 'code' && (
