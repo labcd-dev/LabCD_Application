@@ -55,6 +55,8 @@ export interface StandardizeResponse {
 export interface PlantModelChatMessage {
   role: 'user' | 'assistant'
   content: string
+  /** Display kind from storage. Absent or null = plain chat turn. */
+  kind?: 'stage_note' | 'hitl_selection' | null
 }
 
 export interface PlantModelResult {
@@ -66,6 +68,59 @@ export interface PlantModelResult {
 export interface PlantModelSessionState {
   draft_count: number
   latest_draft: PlantModelResult | null
+  /** AgentPlant pipeline position: 1 = Stage 1 only, 3-6 = a HITL gate, 7 = routed. */
+  pipeline_stage?: number
+  pipeline_context?: Record<string, unknown>
+}
+
+export type PipelineStatus = 'running' | 'awaiting_hitl' | 'done'
+
+export interface TrimProposal {
+  x0: number[]
+  u_ff: number[]
+  source: string
+}
+
+export interface ConstraintsProposal {
+  bounded: boolean
+  state_bounds: (number | null)[][] | null
+  input_bounds: (number | null)[][] | null
+  notes: string
+}
+
+export interface ControlObjectiveProposal {
+  control_objective: string
+}
+
+export interface UncertaintyProposal {
+  ready: boolean
+  question: string | null
+  uncertainty: { state: string; expr: string }[]
+  disturbance: { state: string; expr: string }[]
+  summary: string | null
+}
+
+export interface PipelineRouting {
+  mpc_applicable: boolean
+  adaptive_applicable: boolean
+  /** Per-module verdict. false hides the module, true or null (not evaluated) keeps it. */
+  applicable: Record<string, boolean | null>
+  rationale: string
+}
+
+export interface PipelinePayload {
+  stage: number
+  kind: 'trim' | 'constraints' | 'control_objective' | 'uncertainty' | 'routing' | string
+  proposal?: unknown
+  routing?: PipelineRouting
+}
+
+export interface PipelineState {
+  stage: number
+  status: PipelineStatus
+  payload: PipelinePayload | null
+  /** Set once the user has read the Stage 7 summary and moved on to module selection. */
+  routingAcknowledged: boolean
 }
 
 export interface PlantModelTokenUsage {
@@ -108,6 +163,9 @@ export interface PlantModelChatResponse {
   rag_chunks?: PlantModelRagChunk[]
   web_search?: PlantModelWebSearch | null
   draft?: PlantModelResult | null
+  pipeline_stage?: number | null
+  pipeline_status?: PipelineStatus | null
+  pipeline_payload?: PipelinePayload | null
 }
 
 export interface SimulateRequest {

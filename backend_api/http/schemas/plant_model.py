@@ -5,15 +5,20 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
-from backend_api.PlantModelChat.agent import (
+from backend_core.AgentPlant.agent import (
     DEFAULT_MAX_DRAFTS,
     DEFAULT_MIN_USER_TURNS_BEFORE_COMPLETION,
 )
 
 
+# Display kinds stored on a message row. NULL (absent) means a plain chat turn.
+MESSAGE_KINDS = ("stage_note", "hitl_selection")
+
+
 class ChatMessage(BaseModel):
     role: Literal["user", "assistant"]
     content: str
+    kind: Literal["stage_note", "hitl_selection"] | None = None
 
 
 class PlantModelResult(BaseModel):
@@ -25,6 +30,9 @@ class PlantModelResult(BaseModel):
 class PlantModelSessionState(BaseModel):
     draft_count: int = 0
     latest_draft: PlantModelResult | None = None
+    # Stages 2-7 (AgentPlant pipeline). 1 = Stage 1 chat, no pipeline running.
+    pipeline_stage: int = 1
+    pipeline_context: dict[str, Any] = Field(default_factory=dict)
 
 
 class PlantModelChatRequest(BaseModel):
@@ -44,6 +52,11 @@ class PlantModelChatRequest(BaseModel):
     use_attachments: bool = False
     # When true, promote session_state.latest_draft to status=complete without an LLM call.
     force_complete: bool = False
+    # Pipeline HITL gate (Stages 3-7). "confirm" accepts the current proposal
+    # (optionally with pipeline_edit applied first); "edit" applies pipeline_edit
+    # and keeps the gate open.
+    pipeline_action: Literal["confirm", "edit"] | None = None
+    pipeline_edit: dict[str, Any] | None = None
 
 
 class TokenUsageOut(BaseModel):
@@ -85,6 +98,10 @@ class PlantModelChatResponse(BaseModel):
     steps: list[PlantModelStep] = Field(default_factory=list)
     rag_chunks: list[PlantModelRagChunk] = Field(default_factory=list)
     web_search: PlantModelWebSearch | None = None
+    # Pipeline (Stages 2-7). All None for plain Stage-1 turns.
+    pipeline_stage: int | None = None
+    pipeline_status: Literal["running", "awaiting_hitl", "done"] | None = None
+    pipeline_payload: dict[str, Any] | None = None
 
 
 class PlantModelConversationSummary(BaseModel):

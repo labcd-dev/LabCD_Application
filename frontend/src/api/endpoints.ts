@@ -860,6 +860,9 @@ export const plantModelApi = {
     use_attachments?: boolean
     /** Promote latest draft to complete without an LLM round-trip. */
     force_complete?: boolean
+    /** Pipeline HITL gate: accept the proposal, or apply pipeline_edit and keep the gate open. */
+    pipeline_action?: 'confirm' | 'edit'
+    pipeline_edit?: Record<string, unknown> | null
   }) =>
     apiFetch<PlantModelChatResponse>('/plant-model/chat', {
       method: 'POST',

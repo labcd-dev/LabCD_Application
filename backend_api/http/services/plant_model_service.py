@@ -5,11 +5,17 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from backend_core.AgentPlant.state_equations_latex import format_equations_for_response
-from backend_api.PlantModelChat.agent import (
+from backend_core.AgentPlant.agent import (
     PlantModelAgent,
     PlantModelSessionState as AgentSessionState,
     apply_session_state,
     export_session_state,
+)
+from backend_core.AgentPlant.stages.pipeline_types import PlantPipelineState
+from backend_api.http.services.plant_pipeline_service import (
+    can_start_pipeline,
+    run_pipeline_turn,
+    start_pipeline,
 )
 from backend_api.http.schemas.plant_model import (
     PlantModelChatRequest,
@@ -124,6 +130,24 @@ def _infer_status(
 
 
 def run_plant_model_chat(request: PlantModelChatRequest) -> PlantModelChatResponse:
+    """Route one chat turn: Stages 2-7 while the pipeline is running, else Stage 1.
+
+    Stage 1 (plant dynamics) is unchanged. When it completes, the seven-stage
+    pipeline starts and the response holds the first HITL gate (Stage 3).
+    """
+    pipeline = PlantPipelineState.from_session(
+        request.session_state.pipeline_stage if request.session_state else None,
+        request.session_state.pipeline_context if request.session_state else None,
+    )
+    if pipeline.in_progress:
+        return run_pipeline_turn(request, pipeline)
+    response = _run_stage1_chat(request)
+    if can_start_pipeline(response):
+        return start_pipeline(request, response)
+    return response
+
+
+def _run_stage1_chat(request: PlantModelChatRequest) -> PlantModelChatResponse:
     from backend_api.http.schemas.plant_model import (
         PlantModelRagChunk,
         PlantModelStep,
@@ -180,9 +204,6 @@ def run_plant_model_chat(request: PlantModelChatRequest) -> PlantModelChatRespon
                         system_name=str(draft.get("system_name") or "draft"),
                         python_code=str(draft["python_code"]),
                         sandbox_error=smoke.message,
-                        metadata=draft.get("metadata")
-                        if isinstance(draft.get("metadata"), dict)
-                        else None,
                     )
                 except Exception as repair_exc:  # noqa: BLE001
                     repaired = None
@@ -482,9 +503,6 @@ def run_plant_model_chat(request: PlantModelChatRequest) -> PlantModelChatRespon
                         system_name=str(smoke_payload.get("system_name") or "draft"),
                         python_code=str(code_for_smoke),
                         sandbox_error=smoke.message,
-                        metadata=smoke_payload.get("metadata")
-                        if isinstance(smoke_payload.get("metadata"), dict)
-                        else None,
                     )
                 except Exception as repair_exc:  # noqa: BLE001
                     repaired = None

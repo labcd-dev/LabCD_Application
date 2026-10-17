@@ -23,6 +23,16 @@ import { MarkdownContent } from './MarkdownContent'
 import { CodePreview } from './CodePreview'
 import { ComposerModelPicker } from './ComposerModelPicker'
 import { HitlModuleSelector } from './HitlModuleSelector'
+import { PipelineGate } from './pipeline/PipelineGate'
+import { RoutingSummaryCard } from './pipeline/RoutingSummaryCard'
+import { HitlTraceRow } from './pipeline/HitlTraceRow'
+import {
+  pipelineFromResponse,
+  pipelineFromSession,
+  restoredTraceLabel,
+  routingFromPipeline,
+} from './pipeline/pipelineState'
+import type { PipelineState } from '../api/types'
 import type { LaunchPipeline } from './LaunchModuleModal'
 import { MpcHitlScenarioCard } from './mpc/MpcHitlScenarioCard'
 import { MpcCanvasPane, type CanvasTab } from './mpc/MpcCanvasPane'
@@ -64,7 +74,36 @@ type Turn = {
     durationSec?: number
   }
   mpcResults?: MPCJobResultsResponse | null
+  /**
+   * How the turn is displayed (see docs/agentplant-seven-stage-pipeline.md):
+   * - chat: a normal bubble with the action footer.
+   * - stage_note: a pipeline line between gates. Plain text, no action footer.
+   * - hitl_selection: a gate choice. A muted ↳ line, never a bubble.
+   */
+  kind?: TurnKind
 }
+
+type TurnKind = 'chat' | 'stage_note' | 'hitl_selection'
+
+/** Selections are assistant-side so resend/edit logic never picks them up as user turns. */
+const isSelectionTurn = (t: Turn) => t.kind === 'hitl_selection'
+
+let traceSeq = 0
+const traceTurn = (content: string): Turn => ({
+  id: `t-${Date.now()}-${++traceSeq}`,
+  role: 'assistant',
+  content,
+  kind: 'hitl_selection',
+  at: Date.now(),
+})
+
+/** Kind for an assistant reply: anything produced while the pipeline is active is a stage line. */
+const assistantKindFor = (res: PlantModelChatResponse): TurnKind =>
+  res.pipeline_stage != null ? 'stage_note' : 'chat'
+
+/** Conversation history for the server. Selections are display-only and are excluded. */
+const historyOf = (list: Turn[]) =>
+  list.filter((t) => !isSelectionTurn(t)).map((t) => ({ role: t.role, content: t.content }))
 
 
 
@@ -531,6 +570,8 @@ export function AgentPlantChat({
   const [draft, setDraft] = useState<PlantModelResult | null>(null)
   const [isComplete, setIsComplete] = useState(false)
   const [showHitl, setShowHitl] = useState(false)
+  /** AgentPlant Stages 2-7. null until Stage 1 completes. */
+  const [pipeline, setPipeline] = useState<PipelineState | null>(null)
   const [hitlLaunching, setHitlLaunching] = useState(false)
   const [panel, setPanel] = useState<PanelView>(null)
   const [traceOpen, setTraceOpen] = useState(false)
@@ -569,7 +610,7 @@ export function AgentPlantChat({
     if (!draft) return null
     for (let i = turns.length - 1; i >= 0; i--) {
       const t = turns[i]
-      if (t.role === 'assistant' && !t.mpcResults && !t.mpcReasoning) {
+      if (t.role === 'assistant' && !isSelectionTurn(t) && !t.mpcResults && !t.mpcReasoning) {
         return t.id
       }
     }
@@ -814,12 +855,20 @@ export function AgentPlantChat({
       setConversationId(detail.id)
       const baseAt = Date.now()
       // Restore turns from stored history (steps not persisted server-side).
-      const restored: Turn[] = (detail.messages || []).map((m, i) => ({
-        id: `restored-${detail.id}-${i}`,
-        role: m.role,
-        content: m.content,
-        at: baseAt - (detail.messages.length - i) * 60_000,
-      }))
+      const restored: Turn[] = (detail.messages || []).map((m, i) => {
+        const at = baseAt - (detail.messages.length - i) * 60_000
+        const id = `restored-${detail.id}-${i}`
+        if (m.role === 'user' && m.kind === 'hitl_selection') {
+          return { id, role: 'assistant', content: m.content, kind: 'hitl_selection', at }
+        }
+        // Rows stored before kinds existed: recognise the old pipeline clicks by their text.
+        const legacyLabel = m.role === 'user' && m.kind == null ? restoredTraceLabel(m.content) : null
+        if (legacyLabel) {
+          return { id, role: 'assistant', content: legacyLabel, kind: 'hitl_selection', at }
+        }
+        const kind: TurnKind = m.role === 'assistant' && m.kind === 'stage_note' ? 'stage_note' : 'chat'
+        return { id, role: m.role, content: m.content, kind, at }
+      })
       // Restore MPC session if previously completed for this conversation
       const storageKey = `labcd_mpc_session_${detail.id}`
       const rawMpc = localStorage.getItem(storageKey) || localStorage.getItem('labcd_mpc_session_latest')
@@ -843,6 +892,7 @@ export function AgentPlantChat({
 
       setTurns(restored)
       setSession(detail.session_state)
+      setPipeline(pipelineFromSession(detail.session_state))
       setDraft(detail.final_result ?? detail.session_state?.latest_draft ?? null)
       const completeStatus = detail.status === 'complete' || !!detail.final_result
       setIsComplete(completeStatus)
@@ -894,6 +944,7 @@ export function AgentPlantChat({
     setDraft(null)
     setIsComplete(false)
     setShowHitl(false)
+    setPipeline(null)
     setMpcResults(null)
     setMpcJob(null)
     try {
@@ -912,7 +963,7 @@ export function AgentPlantChat({
   }, [newChatRequest])
 
   const messages: PlantModelChatMessage[] = useMemo(
-    () => turns.map((t) => ({ role: t.role, content: t.content })),
+    () => historyOf(turns),
     [turns],
   )
 
@@ -943,9 +994,7 @@ export function AgentPlantChat({
       const idx = turns.findIndex((t) => t.id === turnId)
       if (idx < 0) return
 
-      const hist = turns
-        .slice(0, idx)
-        .map((t) => ({ role: t.role, content: t.content }) as PlantModelChatMessage)
+      const hist = historyOf(turns.slice(0, idx)) as PlantModelChatMessage[]
       const prev = turns[idx]
       const updatedUser: Turn = {
         ...prev,
@@ -1008,6 +1057,7 @@ export function AgentPlantChat({
               role: 'assistant',
               content: res.reply,
               status: res.status,
+              kind: assistantKindFor(res),
               steps: nextSteps,
               at: Date.now(),
               durationMs: Date.now() - nowTs,
@@ -1074,7 +1124,7 @@ export function AgentPlantChat({
       try {
         const hist =
           historyOverride ??
-          turns.map((t) => ({ role: t.role, content: t.content }) as PlantModelChatMessage)
+          historyOf(turns) as PlantModelChatMessage[]
         const res: PlantModelChatResponse = await plantModelApi.chat({
           messages: hist,
           user_message: trimmed,
@@ -1107,6 +1157,7 @@ export function AgentPlantChat({
               role: 'assistant',
               content: res.reply,
               status: res.status,
+              kind: assistantKindFor(res),
               steps: nextSteps,
               at: Date.now(),
               durationMs: Date.now() - nowTs,
@@ -1141,7 +1192,7 @@ export function AgentPlantChat({
   const handleRegenUser = useCallback(
     (turn: Turn) => {
       const idx = turns.findIndex((t) => t.id === turn.id)
-      const hist = turns.slice(0, idx).map((t) => ({ role: t.role, content: t.content }))
+      const hist = historyOf(turns.slice(0, idx))
       setTurns((prev) => prev.slice(0, idx))
       setDraft(null)
       void resendMessage(turn.content, hist)
@@ -1163,7 +1214,7 @@ export function AgentPlantChat({
       }
       if (userIdx < 0) return
       const userTurn = turns[userIdx]
-      const hist = turns.slice(0, userIdx).map((t) => ({ role: t.role, content: t.content }))
+      const hist = historyOf(turns.slice(0, userIdx))
       setTurns((prev) => prev.slice(0, userIdx))
       setDraft(null)
       void resendMessage(userTurn.content, hist)
@@ -1178,13 +1229,19 @@ export function AgentPlantChat({
     setError(null)
     setInput('')
     const nowTs = Date.now()
-    const userTurn: Turn = {
-      id: `u-${nowTs}`,
-      role: 'user',
-      content: text,
-      fileName: attachment?.status === 'ready' ? attachment.name : undefined,
-      at: nowTs,
-    }
+    const answersOpenGate =
+      pipeline !== null &&
+      pipeline.status !== 'done' &&
+      (pipeline.stage === 4 || pipeline.stage === 5 || pipeline.stage === 6)
+    const userTurn: Turn = answersOpenGate
+      ? traceTurn(text)
+      : {
+          id: `u-${nowTs}`,
+          role: 'user',
+          content: text,
+          fileName: attachment?.status === 'ready' ? attachment.name : undefined,
+          at: nowTs,
+        }
     const pendingId = `a-pending-${nowTs}`
     const pendingTurn: Turn = {
       id: pendingId,
@@ -1214,6 +1271,7 @@ export function AgentPlantChat({
           use_attachments: attachment?.status === 'ready',
       })
       setSession(res.session_state)
+      setPipeline(pipelineFromResponse(res))
       if (res.conversation_id != null) {
           setConversationId(res.conversation_id)
           syncConversationParam(res.conversation_id)
@@ -1236,6 +1294,7 @@ export function AgentPlantChat({
             role: 'assistant',
             content: res.reply,
             status: res.status,
+            kind: assistantKindFor(res),
             steps: nextSteps,
             at: Date.now(),
             durationMs: Date.now() - nowTs,
@@ -1269,19 +1328,55 @@ export function AgentPlantChat({
     } finally {
       setLoading(false)
     }
-  }, [input, loading, messages, resolvedModel, session, conversationId, searchOn, attachment, onUseModel])
+  }, [input, loading, messages, resolvedModel, session, conversationId, searchOn, attachment, onUseModel, pipeline])
+
+  /** Accept or edit the current pipeline gate (Stages 3-6). Plain chat turns go through sendMessage. */
+  const runPipelineAction = useCallback(
+    async (action: 'confirm' | 'edit', edit: Record<string, unknown> | undefined, label: string) => {
+      if (loading) return
+      setError(null)
+      setLoading(true)
+      setTurns((prev) => [...prev, traceTurn(label)])
+      try {
+        const res: PlantModelChatResponse = await plantModelApi.chat({
+          messages,
+          user_message: label,
+          model: resolvedModel,
+          session_state: session,
+          conversation_id: conversationId,
+          pipeline_action: action,
+          pipeline_edit: edit ?? null,
+        })
+        setSession(res.session_state)
+        if (res.conversation_id != null) {
+          setConversationId(res.conversation_id)
+          syncConversationParam(res.conversation_id)
+        }
+        const nextDraft = res.final_result ?? res.session_state?.latest_draft ?? null
+        if (nextDraft) setDraft(nextDraft)
+        setPipeline(pipelineFromResponse(res))
+        if (res.reply) {
+          setTurns((prev) => [
+            ...prev,
+            { id: `a-${Date.now()}`, role: 'assistant', content: res.reply, status: res.status, kind: assistantKindFor(res), at: Date.now() },
+          ])
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Pipeline step failed')
+      } finally {
+        setLoading(false)
+      }
+    },
+    [loading, messages, resolvedModel, session, conversationId, syncConversationParam],
+  )
 
   const forceComplete = useCallback(async () => {
     if (!draft || loading || isComplete) return
     setError(null)
     setLoading(true)
     const nowTs = Date.now()
-    const userTurn: Turn = {
-      id: `u-${nowTs}`,
-      role: 'user',
-      content: 'Complete',
-      at: nowTs,
-    }
+    const label = `Confirmed system — ${draft.system_name || 'model'}`
+    const userTurn: Turn = traceTurn(label)
     const pendingId = `p-${nowTs}`
     const pendingTurn: Turn = {
       id: pendingId,
@@ -1304,13 +1399,14 @@ export function AgentPlantChat({
     try {
       const res: PlantModelChatResponse = await plantModelApi.chat({
         messages,
-        user_message: 'Complete',
+        user_message: label,
         model: resolvedModel,
         session_state: session,
         conversation_id: conversationId,
         force_complete: true,
       })
       setSession(res.session_state)
+      setPipeline(pipelineFromResponse(res))
       if (res.conversation_id != null) {
         setConversationId(res.conversation_id)
         syncConversationParam(res.conversation_id)
@@ -1331,6 +1427,7 @@ export function AgentPlantChat({
             role: 'assistant',
             content: res.reply,
             status: res.status,
+            kind: assistantKindFor(res),
             steps: nextSteps,
             at: Date.now(),
             durationMs: Date.now() - nowTs,
@@ -1901,7 +1998,9 @@ if __name__ == '__main__':
             )}
 
             {turns.map((t) =>
-              t.role === 'user' ? (
+              isSelectionTurn(t) ? (
+                <HitlTraceRow key={t.id} text={t.content} />
+              ) : t.role === 'user' ? (
                 <div className="ap-user" key={t.id}>
                   {t.fileName && <div className="ap-user__file">PDF/MD · {t.fileName}</div>}
                   {editingId === t.id ? (
@@ -2042,7 +2141,7 @@ if __name__ == '__main__':
 
                   {!t.pending && (
                   <div className="ap-assistant__bubble">
-                    {t.status && (
+                    {t.status && t.status !== 'complete' && (
                       <span className={`ap-pill ap-pill--${t.status}`}>{t.status}</span>
                     )}
                     <MarkdownContent content={t.content} className="ap-md" />
@@ -2211,7 +2310,7 @@ if __name__ == '__main__':
                     </div>
                   )}
 
-                  {!t.pending && (
+                  {!t.pending && t.kind !== 'stage_note' && (
                   <TurnMeta
                     turn={t}
                     now={now}
@@ -2292,7 +2391,20 @@ if __name__ == '__main__':
 
             {draft && !hasMpcStarted && !isThinking && (
               <div className="ap-complete-bar">
-                {isComplete || showHitl ? (
+                {pipeline && pipeline.status !== 'done' ? (
+                  <PipelineGate
+                    pipeline={pipeline}
+                    metadata={draft.metadata ?? null}
+                    loading={loading}
+                    onAction={runPipelineAction}
+                  />
+                ) : pipeline?.status === 'done' && !pipeline.routingAcknowledged && pipeline.payload?.routing ? (
+                  <RoutingSummaryCard
+                    routing={pipeline.payload.routing}
+                    disabled={loading}
+                    onContinue={() => setPipeline((p) => (p ? { ...p, routingAcknowledged: true } : p))}
+                  />
+                ) : isComplete || showHitl ? (
                   activeHitlModule === 'mpcDesign' ? (
                     <MpcHitlScenarioCard
                       systemName={draft.system_name}
@@ -2310,6 +2422,7 @@ if __name__ == '__main__':
                       plantResult={draft}
                       conversationId={conversationId}
                       launching={hitlLaunching}
+                      routing={routingFromPipeline(pipeline)}
                       onLaunch={handleHitlLaunch}
                       onOpenSettings={
                         onOpenSettings
@@ -2328,10 +2441,7 @@ if __name__ == '__main__':
                       type="button"
                       className="ap-complete-btn"
                       disabled={loading}
-                      onClick={() => {
-                        setShowHitl(true)
-                        void forceComplete()
-                      }}
+                      onClick={() => void forceComplete()}
                     >
                       Confirm System &amp; Select Controller (HITL) →
                     </button>
