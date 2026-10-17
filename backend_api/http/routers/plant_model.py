@@ -21,6 +21,7 @@ from backend_api.http.schemas.plant_model import (
     ValidationResponse,
 )
 from backend_api.http.services.analytics_service import record_llm_use, record_module_use
+from backend_api.http.services.plant_pipeline_service import message_kinds
 from backend_api.http.services.plant_model_chat_service import (
     ConversationAccessDenied,
     assert_conversation_access,
@@ -134,6 +135,9 @@ def plant_model_chat(
         user_message = request.user_message.strip()
         if getattr(request, "force_complete", False) and not user_message:
             user_message = "Complete"
+        if request.pipeline_action and not user_message:
+            user_message = "Confirmed" if request.pipeline_action == "confirm" else "Edited"
+        user_kind, assistant_kind = message_kinds(request, response)
         with SessionLocal() as db:
             conversation = persist_turn(
                 db,
@@ -144,6 +148,8 @@ def plant_model_chat(
                 llm_model=request.model,
                 session_state=response.session_state,
                 final_result=response.final_result,
+                user_kind=user_kind,
+                assistant_kind=assistant_kind,
             )
             response.conversation_id = conversation.id
         return response

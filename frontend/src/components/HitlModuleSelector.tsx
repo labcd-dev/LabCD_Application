@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { ArrowRight, Cpu, Network, Settings2, Sliders, Sparkles, UserCheck } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import type { LaunchPipeline } from './LaunchModuleModal'
-import type { PlantModelResult } from '../api/types'
+import type { PipelineRouting, PlantModelResult } from '../api/types'
+import { moduleAllowedByRouting } from './pipeline/pipelineState'
 
 export interface ModuleOption {
   id: LaunchPipeline
@@ -56,6 +57,8 @@ export interface HitlModuleSelectorProps {
   onOpenSettings?: (pipeline: LaunchPipeline) => void
   onCancel?: () => void
   launching?: boolean
+  /** Stage 7 routing. Modules it marks false are hidden; missing or null modules stay. */
+  routing?: PipelineRouting | null
 }
 
 export function HitlModuleSelector({
@@ -65,9 +68,10 @@ export function HitlModuleSelector({
   onOpenSettings,
   onCancel,
   launching = false,
+  routing = null,
 }: HitlModuleSelectorProps) {
   const { hasAction } = useAuth()
-  const available = MODULES.filter((option) => hasAction(option.action))
+  const available = MODULES.filter((option) => hasAction(option.action) && moduleAllowedByRouting(option.id, routing))
   const [selected, setSelected] = useState<LaunchPipeline>(available[0]?.id ?? 'siloDesign')
 
   const title = systemName || plantResult.system_name || 'Plant Dynamics'

@@ -1,4 +1,12 @@
-"""PlantModelAgent: LabCD's plant-model chatbot.
+"""SUPERSEDED — do not add features here.
+
+The live plant-model chat now uses ``backend_core.AgentPlant.agent.PlantModelAgent``
+(two-call, metadata-verified architecture). This single-call copy is kept only
+because ``plant_tools`` (sandbox / rag / websearch) still lives under this package.
+Remove once nothing imports ``backend_api.PlantModelChat.agent``.
+
+Original description:
+PlantModelAgent: LabCD's plant-model chatbot.
 
 Driven by ``prompts/plant_model_agent.yaml``. The model always returns one of
 three JSON shapes:

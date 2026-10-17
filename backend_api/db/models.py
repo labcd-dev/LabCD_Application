@@ -479,6 +479,8 @@ class PlantModelMessage(Base):
     )
     role: Mapped[str] = mapped_column(String(20), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    # Display kind: NULL = plain chat, 'stage_note' = pipeline line, 'hitl_selection' = gate choice.
+    kind: Mapped[str | None] = mapped_column(String(20), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
