@@ -391,8 +391,9 @@ def test_stage7_mock_routing_shape_is_extensible():
     routing = stage7_routing.route_plant({}, {})
     assert set(routing["applicable"]) == {"mpc", "adaptive", "silo", "mulo", "pid_tuner", "lqr"}
     assert routing["applicable"]["pid_tuner"] is None  # not evaluated, not a guessed boolean
-    assert routing["mpc_applicable"] is True and routing["adaptive_applicable"] is True
-    assert "[MOCK]" in routing["rationale"]
+    assert routing["applicable"]["adaptive"] is None  # empty plant, not evaluated
+    assert routing["mpc_applicable"] is True and routing["adaptive_applicable"] is False
+    assert "[MOCK]" in routing["rationale"]  # the others are still mock
 
 
 def test_full_pipeline_merges_metadata_without_touching_stage1_keys():
