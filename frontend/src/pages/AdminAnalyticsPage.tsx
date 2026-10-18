@@ -50,7 +50,7 @@ function formatCount(value: number | undefined, loading: boolean): string {
 const EMPTY_TELEGRAM: TelegramAnalyticsSettings = {
   enabled: false,
   chat_id: '',
-  send_hour_utc: 8,
+  send_hour_utc: 0,
   bot_token_configured: false,
   bot_token_masked: '',
   last_sent_date: null,
@@ -373,10 +373,11 @@ export function AdminAnalyticsPage() {
           Telegram daily report
         </h2>
         <p className="m-0 mb-4 text-sm text-muted-text leading-relaxed">
-          Send a once-per-day digest (DAU, MAU, retention, module runs, LLM usage) to a
-          Telegram channel. Bot token is stored in the API <code className="text-xs">.env</code>{' '}
-          (same pattern as provider API keys). Leave the token empty to log digests to the
-          console.
+          Send a once-per-day digest for the previous UTC day (full 24h: DAU, MAU,
+          retention, module runs, LLM usage) to a Telegram channel at the configured UTC
+          hour (default 00:00). Bot token is stored in the API{' '}
+          <code className="text-xs">.env</code> (same pattern as provider API keys). Leave
+          the token empty to log digests to the console.
         </p>
         <label className={fieldCheckbox}>
           <input
@@ -419,7 +420,7 @@ export function AdminAnalyticsPage() {
             />
           </label>
           <label className={fieldLabel}>
-            <span>Send hour (UTC, 0–23)</span>
+            <span>Send hour (UTC, 0–23; 0 = midnight)</span>
             <input
               className={fieldInput}
               type="number"

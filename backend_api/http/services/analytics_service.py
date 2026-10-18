@@ -249,18 +249,47 @@ def get_llm_usage(
     return _llm_counts_fallback(db, start=start, end=end)
 
 
-def get_digest_extras(db: Session) -> dict:
-    """Cheap UTC-day aggregates for the Telegram daily digest."""
-    today_start = _utc_day_start()
-    tomorrow = today_start + timedelta(days=1)
-    day_filters = lambda column: (column >= today_start, column < tomorrow)
+def previous_utc_day_window(
+    moment: datetime | None = None,
+) -> tuple[datetime, datetime, date]:
+    """Return [start, end) for the last completed UTC calendar day.
+
+    At/after midnight UTC this is the full prior 24h day that just closed.
+    """
+    today_start = _utc_day_start(moment)
+    day_start = today_start - timedelta(days=1)
+    return day_start, today_start, day_start.date()
+
+
+def get_digest_extras(
+    db: Session,
+    *,
+    day_start: datetime | None = None,
+    day_end: datetime | None = None,
+) -> dict:
+    """Aggregates for one closed UTC day window (Telegram daily digest).
+
+    Defaults to the previous completed UTC day so a midnight send reports a
+    full 24h of data rather than an empty “today so far”.
+    """
+    if day_start is None and day_end is None:
+        day_start, day_end, report_day = previous_utc_day_window()
+    elif day_start is None or day_end is None:
+        raise ValueError("day_start and day_end must both be set or both omitted")
+    else:
+        day_start = as_utc(day_start)
+        day_end = as_utc(day_end)
+        report_day = day_start.date()
+
+    day_filters = lambda column: (column >= day_start, column < day_end)
+    mau_window_start = day_end - timedelta(days=30)
 
     credits_raw = (
         db.query(func.sum(-CreditLedgerEntry.amount))
         .filter(
             CreditLedgerEntry.entry_type == ENTRY_USAGE_DEBIT,
-            CreditLedgerEntry.created_at >= today_start,
-            CreditLedgerEntry.created_at < tomorrow,
+            CreditLedgerEntry.created_at >= day_start,
+            CreditLedgerEntry.created_at < day_end,
         )
         .scalar()
     )
@@ -268,12 +297,34 @@ def get_digest_extras(db: Session) -> dict:
     if credits_spent < 0:
         credits_spent = 0.0
 
-    llms_today = get_llm_usage(db, start=today_start, end=tomorrow)
+    llms_day = get_llm_usage(db, start=day_start, end=day_end)
     llms_all_time = get_llm_usage(db)
 
+    module_rows = (
+        db.query(AnalyticsEvent.module, func.count(AnalyticsEvent.id))
+        .filter(
+            AnalyticsEvent.event_type == EVENT_MODULE,
+            AnalyticsEvent.created_at >= day_start,
+            AnalyticsEvent.created_at < day_end,
+            AnalyticsEvent.module.isnot(None),
+        )
+        .group_by(AnalyticsEvent.module)
+        .all()
+    )
+    modules = [
+        {"module": module or "", "count": int(count)}
+        for module, count in module_rows
+        if module
+    ]
+
     return {
+        "report_date": report_day.isoformat(),
+        "day_start": day_start.isoformat(),
+        "day_end": day_end.isoformat(),
         "users_total": _count(db, User),
         "users_new_today": _count(db, User, *day_filters(User.created_at)),
+        "dau": _distinct_active_count(db, day_start, day_end),
+        "mau": _distinct_active_count(db, mau_window_start, day_end),
         "logins_today": _count(
             db,
             LoginHistory,
@@ -282,14 +333,15 @@ def get_digest_extras(db: Session) -> dict:
         ),
         "projects_total": _count(db, Project),
         "projects_new_today": _count(db, Project, *day_filters(Project.created_at)),
+        "modules": modules,
         "errors_today": _count(db, ErrorEvent, *day_filters(ErrorEvent.created_at)),
         "bugs_today": _count(db, BugReport, *day_filters(BugReport.created_at)),
         "feedback_today": _count(
             db, FeedbackSurveyResponse, *day_filters(FeedbackSurveyResponse.created_at)
         ),
         "credits_spent_today": credits_spent,
-        "llms_today": llms_today,
-        "most_used_llm_today": llms_today[0]["model"] if llms_today else None,
+        "llms_today": llms_day,
+        "most_used_llm_today": llms_day[0]["model"] if llms_day else None,
         "llms_all_time": llms_all_time,
         "most_used_llm_all_time": llms_all_time[0]["model"] if llms_all_time else None,
     }

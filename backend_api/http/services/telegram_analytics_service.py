@@ -27,7 +27,8 @@ SETTING_CHAT_ID = "analytics.telegram.chat_id"
 SETTING_SEND_HOUR = "analytics.telegram.send_hour_utc"
 SETTING_LAST_SENT = "analytics.telegram.last_sent_date"
 
-DEFAULT_SEND_HOUR_UTC = 8
+# Midnight UTC: report the previous completed UTC day (full 24h).
+DEFAULT_SEND_HOUR_UTC = 0
 _SCHEDULER_POLL_SECONDS = 60
 
 _stop_event = threading.Event()
@@ -128,45 +129,90 @@ def _format_credits(value: float | int) -> str:
     return f"{amount:,.2f}"
 
 
-def format_daily_message(db: Session) -> str:
-    """Build an HTML daily digest from analytics aggregates."""
-    data = analytics_service.get_analytics(db, days=1)
-    extras = analytics_service.get_digest_extras(db)
-    today = _today_iso()
-    counts = {row["module"]: int(row["count"]) for row in (data.get("modules") or [])}
+def _module_counts(extras: dict) -> tuple[int, list[str]]:
+    counts = {row["module"]: int(row["count"]) for row in (extras.get("modules") or [])}
     total_runs = 0
     module_lines: list[str] = []
     for key, label in MODULE_DISPLAY:
         count = counts.get(key, 0)
         total_runs += count
         module_lines.append(f"• {label}: {count}")
+    return total_runs, module_lines
+
+
+def _log_24h_digest(extras: dict, *, total_runs: int) -> None:
+    """Log the closed 24h window aggregates used for the daily digest."""
+    module_summary = {
+        str(row["module"]): int(row["count"]) for row in (extras.get("modules") or [])
+    }
+    logger.info(
+        "Telegram 24h digest data report_date=%s window=[%s, %s) "
+        "users_total=%s users_new=%s dau=%s mau=%s logins=%s "
+        "projects_total=%s projects_new=%s module_runs=%s modules=%s "
+        "credits_spent=%s errors=%s bugs=%s feedback=%s "
+        "top_llm=%s llms_day=%s",
+        extras.get("report_date"),
+        extras.get("day_start"),
+        extras.get("day_end"),
+        extras.get("users_total"),
+        extras.get("users_new_today"),
+        extras.get("dau"),
+        extras.get("mau"),
+        extras.get("logins_today"),
+        extras.get("projects_total"),
+        extras.get("projects_new_today"),
+        total_runs,
+        module_summary,
+        extras.get("credits_spent_today"),
+        extras.get("errors_today"),
+        extras.get("bugs_today"),
+        extras.get("feedback_today"),
+        extras.get("most_used_llm_today"),
+        extras.get("llms_today") or [],
+    )
+
+
+def format_daily_message(db: Session) -> tuple[str, dict]:
+    """Build an HTML digest for the previous completed UTC day (full 24h).
+
+    Returns (message_html, digest_extras).
+    """
+    extras = analytics_service.get_digest_extras(db)
+    # Retention is cohort-based (not window-bound); reuse the admin aggregate.
+    retention = analytics_service.get_analytics(db, days=1)
+    retention_d7 = retention.get("retention_d7")
+    retention_d30 = retention.get("retention_d30")
+
+    report_date = str(extras.get("report_date") or _today_iso())
+    total_runs, module_lines = _module_counts(extras)
+    _log_24h_digest(extras, total_runs=total_runs)
 
     lines = [
         "📊 <b>LabCD Daily Analytics</b>",
-        f"📅 <i>{html.escape(today)} UTC</i>",
+        f"📅 <i>{html.escape(report_date)} UTC (last 24h)</i>",
         "",
         "👥 <b>Users</b>",
         f"• Total: <b>{extras['users_total']}</b>",
-        f"• New today: <b>{extras['users_new_today']}</b>",
-        f"• DAU: <b>{data['dau_today']}</b>",
-        f"• MAU (30d): <b>{data['mau']}</b>",
-        f"• Logins today: <b>{extras['logins_today']}</b>",
-        f"• D7 retention: {_format_percent(data.get('retention_d7'))}",
-        f"• D30 retention: {_format_percent(data.get('retention_d30'))}",
+        f"• New (24h): <b>{extras['users_new_today']}</b>",
+        f"• DAU (24h): <b>{extras['dau']}</b>",
+        f"• MAU (30d): <b>{extras['mau']}</b>",
+        f"• Logins (24h): <b>{extras['logins_today']}</b>",
+        f"• D7 retention: {_format_percent(retention_d7)}",
+        f"• D30 retention: {_format_percent(retention_d30)}",
         "",
         "📁 <b>Projects</b>",
         f"• Total: <b>{extras['projects_total']}</b>",
-        f"• Created today: <b>{extras['projects_new_today']}</b>",
+        f"• Created (24h): <b>{extras['projects_new_today']}</b>",
         "",
-        "🧩 <b>Module runs</b>",
+        "🧩 <b>Module runs (24h)</b>",
         *module_lines,
         f"• Total: <b>{total_runs}</b>",
         "",
         "🧠 <b>LLM usage</b>",
-        "<i>Today</i>",
+        "<i>Last 24h</i>",
     ]
-    llms_today = extras.get("llms_today") or data.get("llms") or []
-    most_used_today = extras.get("most_used_llm_today") or data.get("most_used_llm")
+    llms_today = extras.get("llms_today") or []
+    most_used_today = extras.get("most_used_llm_today")
     if most_used_today:
         lines.append(f"• Top: <code>{html.escape(str(most_used_today))}</code>")
     if not llms_today:
@@ -192,15 +238,15 @@ def format_daily_message(db: Session) -> str:
         [
             "",
             "💳 <b>Credits</b>",
-            f"• Spent today: <b>{_format_credits(extras['credits_spent_today'])}</b>",
+            f"• Spent (24h): <b>{_format_credits(extras['credits_spent_today'])}</b>",
             "",
-            "⚠️ <b>Health</b>",
-            f"• Errors today: <b>{extras['errors_today']}</b>",
-            f"• Bug reports today: <b>{extras['bugs_today']}</b>",
-            f"• Feedback surveys today: <b>{extras['feedback_today']}</b>",
+            "⚠️ <b>Health (24h)</b>",
+            f"• Errors: <b>{extras['errors_today']}</b>",
+            f"• Bug reports: <b>{extras['bugs_today']}</b>",
+            f"• Feedback surveys: <b>{extras['feedback_today']}</b>",
         ]
     )
-    return "\n".join(lines)
+    return "\n".join(lines), extras
 
 
 def send_message(chat_id: str, text: str) -> None:
@@ -249,7 +295,7 @@ def send_daily_report(db: Session, *, force: bool = False) -> TelegramAnalyticsT
             detail=f"Daily report already sent for {today}.",
         )
 
-    text = format_daily_message(db)
+    text, extras = format_daily_message(db)
     try:
         send_message(chat_id, text)
     except Exception as exc:
@@ -257,10 +303,12 @@ def send_daily_report(db: Session, *, force: bool = False) -> TelegramAnalyticsT
         return TelegramAnalyticsTestResult(ok=False, detail=str(exc))
 
     plan_service.set_setting(db, SETTING_LAST_SENT, today)
+    report_date = extras.get("report_date") or today
     detail = (
-        "Daily report logged to console (TELEGRAM_BOT_TOKEN unset)."
+        f"Daily 24h report for {report_date} UTC logged to console "
+        "(TELEGRAM_BOT_TOKEN unset)."
         if not _bot_token()
-        else "Daily report sent to Telegram."
+        else f"Daily 24h report for {report_date} UTC sent to Telegram."
     )
     return TelegramAnalyticsTestResult(ok=True, detail=detail)
 

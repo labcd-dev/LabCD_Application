@@ -4,20 +4,22 @@ LabCD can post a once-per-day product analytics summary to a Telegram channel. B
 
 ## What is sent
 
-HTML-formatted Telegram message (`parse_mode: HTML`) with section icons, including:
+HTML-formatted Telegram message (`parse_mode: HTML`) with section icons for the **previous completed UTC day** (a closed 24h window `[00:00, 24:00)` that just ended), including:
 
-- UTC date
-- Users: total accounts, new registrations today, DAU, MAU (30d), successful logins today, D7/D30 retention
-- Projects: total and created today
-- Module run counts for today (always lists every known module, including zeros, plus a total):
+- Report date (UTC day covered)
+- Users: total accounts, new registrations in that 24h, DAU for that day, MAU (30d ending at day end), successful logins in that 24h, D7/D30 retention
+- Projects: total and created in that 24h
+- Module run counts for that 24h (always lists every known module, including zeros, plus a total):
   Regularizer, Plant Model, SILO, Recommender, Trimmer, MULO, MPC, Adaptive
-- LLM usage for today and all-time (top model plus per-model counts; falls back to project/plant-chat model choices when no `llm` analytics events exist yet)
-- Credits spent today (usage debits)
-- Health: errors, bug reports, and feedback surveys recorded today
+- LLM usage for that 24h and all-time (top model plus per-model counts; falls back to project/plant-chat model choices when no `llm` analytics events exist yet)
+- Credits spent in that 24h (usage debits)
+- Health: errors, bug reports, and feedback surveys in that 24h
+
+The API also **logs** the same 24h aggregates when a digest is built (`Telegram 24h digest data …` in API logs).
 
 MPC and Adaptive counts come from job-start events (`record_module_use` when a job begins). Plant Model is recorded when a chat run starts. Classic pipeline modules are recorded as before.
 
-Timezone for the schedule and “today” is **UTC**.
+Timezone for the schedule and the 24h window is **UTC**.
 
 ## Setup
 
@@ -36,10 +38,10 @@ Timezone for the schedule and “today” is **UTC**.
 2. Under **Telegram daily report**:
    - Paste the **Bot token** (stored as `TELEGRAM_BOT_TOKEN` in `.env`)
    - Set **Channel / chat ID**
-   - Set **Send hour (UTC)** (0–23; default `8`)
+   - Set **Send hour (UTC)** to `0` for midnight (0–23; default `0`)
    - Enable the digest
 3. Click **Save settings**.
-4. Click **Send test now** to verify delivery (saves unsaved drafts first).
+4. Click **Send test now** to verify delivery (saves unsaved drafts first). The test message uses the same previous-UTC-day 24h window as the midnight send.
 
 Leave the bot token unset (or clear it) to **log** digests to the API console instead of calling Telegram (dev fallback).
 
@@ -48,7 +50,8 @@ You may also seed `TELEGRAM_BOT_TOKEN` in `.env` before first boot; the Analytic
 ## How scheduling works
 
 - A background thread in the API process wakes about every 60 seconds.
-- After the configured UTC hour, if the digest is enabled and has not already been sent for today’s UTC date, it sends once and stores `last_sent_date`.
+- At/after the configured UTC hour (default **00:00 UTC**), if the digest is enabled and has not already been sent for today’s UTC date, it sends once and stores `last_sent_date`.
+- The message covers the **previous** completed UTC day (full 24h), not “today so far”.
 - **Send test now** bypasses the enable flag and the once-per-day dedupe, then updates `last_sent_date`.
 
 Production compose runs a **single API replica**. If you ever run multiple API processes, the `last_sent_date` setting reduces duplicate sends but is not a distributed lock.
@@ -85,6 +88,7 @@ Secret:
 | Failed to write `.env` | Root `.env` missing or not writable by the API process |
 | Telegram API error / 403 | Bot not admin on the channel, or wrong chat ID |
 | No automatic send | Feature disabled, send hour not reached yet (UTC), or already sent today |
+| Empty / near-zero “24h” stats at midnight (old bug) | Fixed: digest uses the previous completed UTC day. Set send hour to `0` if still on an older saved hour |
 | Duplicate sends after scaling API | Prefer a single API replica; see scheduling note above |
 
 Also see [DEPLOY.md](./DEPLOY.md) for production `.env` setup.
