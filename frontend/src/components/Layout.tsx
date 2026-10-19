@@ -40,7 +40,7 @@ export function Layout() {
 
   if (isImmersiveAuth) {
     return (
-      <div className="min-h-screen bg-[#eef0f5]">
+      <div className="min-h-screen bg-[#eef0f5] transition-colors duration-200 dark:bg-[#0a0d12]">
         <Outlet />
       </div>
     )

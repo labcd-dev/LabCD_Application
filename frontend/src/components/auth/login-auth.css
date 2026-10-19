@@ -5,6 +5,12 @@
   --login-text: #0f172a;
   --login-muted: #6b7280;
   --login-border: #d1d5db;
+  --login-surface: #ffffff;
+  --login-surface-hover: #f9fafb;
+  --login-input-bg: #ffffff;
+  --login-placeholder: #9ca3af;
+  --login-shadow: 0 12px 40px rgba(15, 23, 42, 0.12);
+  --login-focus-ring: rgba(94, 67, 255, 0.15);
   --login-radius: 10px;
   --login-card-radius: 16px;
   --brand-primary: #5e43ff;
@@ -17,6 +23,25 @@
   padding: 1.25rem;
   box-sizing: border-box;
   font-family: Inter, system-ui, sans-serif;
+  color: var(--login-text);
+  transition: color 0.2s ease;
+}
+
+.dark .login-auth {
+  --login-primary: #7c5cff;
+  --login-primary-hover: #8f74ff;
+  --login-navy: #0a0d1a;
+  --login-text: #eef2f8;
+  --login-muted: #8d9bb0;
+  --login-border: rgba(255, 255, 255, 0.1);
+  --login-surface: #11161d;
+  --login-surface-hover: #1a222d;
+  --login-input-bg: #0a0d12;
+  --login-placeholder: #556074;
+  --login-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  --login-focus-ring: rgba(124, 92, 255, 0.28);
+  --brand-primary: #7c5cff;
+  --brand-secondary: #a78bfa;
 }
 
 .login-auth__card {
@@ -24,10 +49,16 @@
   grid-template-columns: 1fr;
   width: 100%;
   max-width: 420px;
-  background: #fff;
+  background: var(--login-surface);
+  border: 1px solid transparent;
   border-radius: var(--login-card-radius);
-  box-shadow: 0 12px 40px rgba(15, 23, 42, 0.12);
+  box-shadow: var(--login-shadow);
   overflow: hidden;
+  transition: background 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.dark .login-auth__card {
+  border-color: var(--login-border);
 }
 
 .login-auth__form-pane {
@@ -35,7 +66,8 @@
   display: flex;
   flex-direction: column;
   justify-content: center;
-  background: #fff;
+  background: var(--login-surface);
+  transition: background 0.2s ease;
 }
 
 .login-auth__art-pane {
@@ -108,20 +140,20 @@
   font-size: 0.925rem;
   font-weight: 400;
   color: var(--login-text);
-  background: #fff;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  background: var(--login-input-bg);
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.2s ease, color 0.2s ease;
 }
 
 .login-auth__input::placeholder,
 .login-auth__password-wrap input::placeholder {
-  color: #9ca3af;
+  color: var(--login-placeholder);
 }
 
 .login-auth__input:focus,
 .login-auth__password-wrap input:focus {
   outline: none;
   border-color: var(--login-primary);
-  box-shadow: 0 0 0 3px rgba(94, 67, 255, 0.15);
+  box-shadow: 0 0 0 3px var(--login-focus-ring);
 }
 
 .login-auth__password-wrap {
@@ -145,7 +177,7 @@
   padding: 0.25rem;
   border: 0;
   background: transparent;
-  color: #9ca3af;
+  color: var(--login-placeholder);
   cursor: pointer;
   border-radius: 6px;
 }
@@ -248,9 +280,10 @@
   position: relative;
   z-index: 1;
   padding: 0 0.75rem;
-  background: #fff;
+  background: var(--login-surface);
   font-size: 0.8rem;
   color: var(--login-muted);
+  transition: background 0.2s ease;
 }
 
 .login-auth__sso {
@@ -268,18 +301,26 @@
   padding: 0.7rem 1rem;
   border: 1px solid var(--login-border);
   border-radius: var(--login-radius);
-  background: #fff;
+  background: var(--login-input-bg);
   color: var(--login-text);
   font: inherit;
   font-size: 0.9rem;
   font-weight: 500;
   cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
+  transition: border-color 0.15s, background 0.15s, color 0.2s ease;
 }
 
 .login-auth__sso-btn:hover {
-  background: #f9fafb;
-  border-color: #9ca3af;
+  background: var(--login-surface-hover);
+  border-color: var(--login-placeholder);
+}
+
+.login-auth__sso-btn .login-auth__github-mark {
+  fill: #24292f;
+}
+
+.dark .login-auth__sso-btn .login-auth__github-mark {
+  fill: #e6edf3;
 }
 
 .login-auth__footer {
