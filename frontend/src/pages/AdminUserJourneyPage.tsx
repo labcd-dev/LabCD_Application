@@ -143,10 +143,7 @@ export function AdminUserJourneyPage() {
             <JourneyHero user={journey.user} dossier={journey.dossier} />
           ) : selectedUser ? (
             <div className={`${cardPanel} text-sm`}>
-              <p className="font-medium text-foreground">
-                {('display_name' in selectedUser && selectedUser.display_name) ||
-                  selectedUser.email}
-              </p>
+              <p className="font-medium text-foreground">{selectedUser.email}</p>
               <p className="mt-0.5 font-mono text-xs text-muted-text">
                 {selectedUser.email} · usr_{selectedUser.id}
               </p>
