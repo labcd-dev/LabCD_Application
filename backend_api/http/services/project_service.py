@@ -19,6 +19,7 @@ from backend_api.http.services.dynamics_file_service import (
 
 VALID_PIPELINE_TYPES = frozenset({"siloDesign", "muloDesign", "adaptiveDesign", "mpcDesign"})
 VALID_STATUSES = frozenset({"draft", "running", "completed", "failed", "cancelled"})
+VALID_CREATED_VIA = frozenset({"ui", "api"})
 
 
 class ProjectAccessDenied(PermissionError):
@@ -67,6 +68,7 @@ def project_to_summary(project: Project, *, include_owner: bool = False) -> dict
         "llm_model": project.llm_model or "gpt-4o",
         "has_results": bool(project.results),
         "job_id": project.job_id,
+        "created_via": getattr(project, "created_via", None) or "ui",
         "created_at": project.created_at,
         "updated_at": project.updated_at,
         "score": score,
@@ -157,11 +159,15 @@ def create_project(
     status: str = "draft",
     job_id: str | None = None,
     results: dict[str, Any] | None = None,
+    created_via: str = "ui",
 ) -> Project:
     if pipeline_type not in VALID_PIPELINE_TYPES:
         raise ValueError(f"Invalid pipeline_type: {pipeline_type}")
     if status not in VALID_STATUSES:
         raise ValueError(f"Invalid status: {status}")
+    via = (created_via or "ui").strip().lower()
+    if via not in VALID_CREATED_VIA:
+        via = "ui"
 
     locked_model = (llm_model or "").strip() or "gpt-4o"
     project = Project(
@@ -176,6 +182,7 @@ def create_project(
         control_objective=control_objective,
         job_id=job_id,
         results=make_serializable(results) if results is not None else None,
+        created_via=via,
         created_at=_now(),
         updated_at=_now(),
     )
@@ -605,6 +612,7 @@ def link_or_create_for_job(
     file_content: str = "",
     control_objective: str | None = None,
     title: str | None = None,
+    created_via: str = "ui",
 ) -> Optional[int]:
     """Attach a running job to an existing project or create one. Returns project id."""
     if user_id is None:
@@ -635,6 +643,7 @@ def link_or_create_for_job(
                 control_objective=control_objective,
                 status="running",
                 job_id=job_id,
+                created_via=created_via,
             )
         else:
             update_project(

@@ -20,7 +20,12 @@ import {
   fieldInput,
   fieldLabel,
 } from '../lib/classes'
-import { pipelineLabel, statusBadgeClass } from '../lib/projectLabels'
+import {
+  createdViaBadgeClass,
+  createdViaLabel,
+  pipelineLabel,
+  statusBadgeClass,
+} from '../lib/projectLabels'
 import { formatDateTime } from '../lib/formatDateTime'
 
 export function AdminProjectsPage() {
@@ -379,6 +384,7 @@ export function AdminProjectsPage() {
                     onSort={toggleSort}
                     className="px-4 py-3"
                   />
+                  <th className="px-4 py-3 font-semibold">Source</th>
                   <AdminSortHeader
                     label="Score"
                     sortKey="score"
@@ -417,6 +423,11 @@ export function AdminProjectsPage() {
                     <td className="px-4 py-3">{pipelineLabel(project.pipeline_type)}</td>
                     <td className="px-4 py-3">
                       <span className={statusBadgeClass(project.status)}>{project.status}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={createdViaBadgeClass(project.created_via)}>
+                        {createdViaLabel(project.created_via)}
+                      </span>
                     </td>
                     <td className="px-4 py-3">
                       {project.score !== undefined && project.score !== null ? (

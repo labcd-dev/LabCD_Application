@@ -150,6 +150,7 @@ def _migrate_schema() -> None:
     _migrate_bug_reports()
     _migrate_project_llm_model()
     _migrate_project_file_url()
+    _migrate_project_created_via()
     _migrate_feedback_survey_pipeline()
     _migrate_password_hash_nullable()
     _migrate_analytics_module_width()
@@ -190,6 +191,27 @@ def _migrate_project_file_url() -> None:
 
     with engine.begin() as conn:
         conn.execute(text("ALTER TABLE projects ADD COLUMN file_url VARCHAR(512)"))
+
+
+def _migrate_project_created_via() -> None:
+    """Add projects.created_via (ui | api) for developer-platform provenance."""
+    from sqlalchemy import inspect
+
+    inspector = inspect(engine)
+    if "projects" not in inspector.get_table_names():
+        return
+
+    columns = {col["name"] for col in inspector.get_columns("projects")}
+    if "created_via" in columns:
+        return
+
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "ALTER TABLE projects ADD COLUMN created_via VARCHAR(16) "
+                "NOT NULL DEFAULT 'ui'"
+            )
+        )
 
 
 def _migrate_bug_reports() -> None:

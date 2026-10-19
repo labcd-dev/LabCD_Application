@@ -1,13 +1,20 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Shield, Trash2, UserX } from 'lucide-react'
+import { ArrowLeft, Copy, KeyRound, Shield, Trash2, UserX } from 'lucide-react'
 import { adminApi } from '../api/endpoints'
-import type { AdminUserCredits, AdminUserDetail } from '../api/types'
+import type { AdminUserCredits, AdminUserDetail, DeveloperApiKeyMeta } from '../api/types'
 import { AdminPagination } from '../components/admin/AdminPagination'
 import { StatusMessage } from '../components/StatusMessage'
 import { useAuth } from '../context/AuthContext'
 import { useClientPagination } from '../hooks/useClientPagination'
-import { btnBase, btnCompact, btnPrimary, cardPanel, fieldInput, fieldLabel } from '../lib/classes'
+import {
+  btnBase,
+  btnCompact,
+  btnPrimary,
+  cardPanel,
+  fieldInput,
+  fieldLabel,
+} from '../lib/classes'
 import { pipelineLabel, statusBadgeClass } from '../lib/projectLabels'
 import { formatDateTime } from '../lib/formatDateTime'
 
@@ -48,13 +55,23 @@ export function AdminUserDetailPage() {
   const [busy, setBusy] = useState(false)
   const [adjustAmount, setAdjustAmount] = useState('10')
   const [adjustNote, setAdjustNote] = useState('')
+  const [devKey, setDevKey] = useState<DeveloperApiKeyMeta | null>(null)
+  const [freshApiKey, setFreshApiKey] = useState<string | null>(null)
   const canCredits = hasAction('admin:credits')
+  const canManageUsers = hasAction('admin:users')
 
   const loadDetail = async (opts?: { quiet?: boolean }) => {
     if (!opts?.quiet) setLoading(true)
     setError(null)
     try {
       setDetail(await adminApi.getUser(id))
+      if (canManageUsers) {
+        try {
+          setDevKey(await adminApi.getUserDeveloperKey(id))
+        } catch {
+          setDevKey(null)
+        }
+      }
       if (canCredits) {
         try {
           setCredits(await adminApi.getUserCredits(id))
@@ -77,7 +94,7 @@ export function AdminUserDetailPage() {
       return
     }
     void loadDetail()
-  }, [id, canCredits])
+  }, [id, canCredits, canManageUsers])
 
   const projects = detail?.projects ?? []
   const errors = detail?.errors ?? []
@@ -221,6 +238,66 @@ export function AdminUserDetailPage() {
       setError(err instanceof Error ? err.message : 'Credit adjust failed')
     } finally {
       setBusy(false)
+    }
+  }
+
+  const handleGenerateDevKey = async () => {
+    if (!detail || !canManageUsers) return
+    const regenerating = Boolean(devKey?.is_active)
+    if (
+      regenerating &&
+      !window.confirm(
+        'Regenerate this developer API key? The previous key will stop working immediately.',
+      )
+    ) {
+      return
+    }
+    setBusy(true)
+    setError(null)
+    setMessage(null)
+    try {
+      const created = await adminApi.createUserDeveloperKey(detail.user.id)
+      setDevKey(created)
+      setFreshApiKey(created.api_key)
+      setMessage(
+        regenerating
+          ? 'Developer API key regenerated — copy it now; it will not be shown again.'
+          : 'Developer API key created — copy it now; it will not be shown again.',
+      )
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create developer key')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleRevokeDevKey = async () => {
+    if (!detail || !canManageUsers || !devKey?.is_active) return
+    if (!window.confirm('Revoke this developer API key? API calls with it will fail.')) {
+      return
+    }
+    setBusy(true)
+    setError(null)
+    setMessage(null)
+    try {
+      await adminApi.revokeUserDeveloperKey(detail.user.id)
+      setDevKey(null)
+      setFreshApiKey(null)
+      setMessage('Developer API key revoked')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to revoke developer key')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleCopyApiKey = async () => {
+    if (!freshApiKey) return
+    try {
+      await navigator.clipboard.writeText(freshApiKey)
+      setMessage('API key copied to clipboard')
+    } catch {
+      setError('Could not copy to clipboard')
     }
   }
 
@@ -386,6 +463,82 @@ export function AdminUserDetailPage() {
           />
         </dl>
       </div>
+
+      {canManageUsers && (
+        <div className={cardPanel}>
+          <h2 className="m-0 mb-4 flex items-center gap-2 text-lg font-semibold text-foreground">
+            <KeyRound className="size-4 text-primary" aria-hidden />
+            Developer API key
+          </h2>
+          <p className="m-0 mb-4 text-sm leading-relaxed text-muted-text">
+            Generate a key so this user can call the public developer API for Single Loop, Multi
+            Loop, Adaptive, and MPC. The full secret is shown only once after create or regenerate.
+          </p>
+          {freshApiKey && (
+            <div className="mb-4 rounded-lg border border-border bg-surface-muted px-3 py-3">
+              <p className="m-0 mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
+                Full key (copy now)
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <code className="min-w-0 flex-1 break-all font-mono text-sm text-foreground">
+                  {freshApiKey}
+                </code>
+                <button
+                  type="button"
+                  className={`${btnBase} ${btnCompact}`}
+                  onClick={() => void handleCopyApiKey()}
+                >
+                  <Copy className="size-3.5" aria-hidden />
+                  Copy
+                </button>
+              </div>
+            </div>
+          )}
+          <dl className="mb-4 space-y-3">
+            <DetailRow
+              label="Status"
+              value={
+                devKey?.is_active ? (
+                  <span className="rounded-md bg-[var(--app-status-success-bg)] px-2 py-0.5 text-xs font-medium text-[var(--app-status-success-text)]">
+                    Active · {devKey.masked_key}
+                  </span>
+                ) : (
+                  <span className="text-muted-text">No active key</span>
+                )
+              }
+            />
+            {devKey?.is_active && (
+              <>
+                <DetailRow label="Created" value={formatDateTime(devKey.created_at)} />
+                <DetailRow
+                  label="Last used"
+                  value={devKey.last_used_at ? formatDateTime(devKey.last_used_at) : 'Never'}
+                />
+              </>
+            )}
+          </dl>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className={`${btnBase} ${btnCompact} ${btnPrimary}`}
+              disabled={busy}
+              onClick={() => void handleGenerateDevKey()}
+            >
+              {devKey?.is_active ? 'Regenerate key' : 'Generate key'}
+            </button>
+            {devKey?.is_active && (
+              <button
+                type="button"
+                className={`${btnBase} ${btnCompact}`}
+                disabled={busy}
+                onClick={() => void handleRevokeDevKey()}
+              >
+                Revoke
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className={cardPanel}>
         <h2 className="m-0 mb-4 text-lg font-semibold text-foreground">Billing</h2>

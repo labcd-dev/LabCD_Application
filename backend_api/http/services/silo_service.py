@@ -181,6 +181,7 @@ def start_silo_job(
     control_objective: str = "",
     user_id: int | None = None,
     project_id: int | None = None,
+    created_via: str = "ui",
 ) -> str:
     runtime_config = build_design_config(
         config,
@@ -222,6 +223,7 @@ def start_silo_job(
         file_content=str(config.get("file_content") or ""),
         control_objective=control_objective or None,
         title=control_objective or None,
+        created_via=created_via,
     )
     if linked_project_id is not None:
         job.metadata["project_id"] = linked_project_id

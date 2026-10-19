@@ -379,6 +379,23 @@ export interface AdminUserDetail {
   sessions?: AuthSessionInfo[]
 }
 
+export interface DeveloperApiKeyMeta {
+  id: number
+  user_id: number
+  key_prefix: string
+  key_last4: string
+  masked_key: string
+  name: string
+  created_at: string
+  revoked_at: string | null
+  last_used_at: string | null
+  is_active: boolean
+}
+
+export interface DeveloperApiKeyCreate extends DeveloperApiKeyMeta {
+  api_key: string
+}
+
 export type JourneyStepStatus = 'ok' | 'fail' | 'info'
 export type JourneyHealth = 'good' | 'at_risk' | 'new'
 export type JourneyActionPriority = 'high' | 'med' | 'low'
@@ -781,6 +798,8 @@ export interface DesignGradePayload {
   comment?: string | null
 }
 
+export type ProjectCreatedVia = 'ui' | 'api'
+
 export interface ProjectSummary {
   id: number
   user_id: number
@@ -794,6 +813,7 @@ export interface ProjectSummary {
   llm_model: string
   has_results: boolean
   job_id?: string | null
+  created_via?: ProjectCreatedVia | string
   score?: number | null
   success?: boolean | null
   rating?: number | null

@@ -35,6 +35,11 @@ from backend_api.http.services.admin_csv_service import (
     export_users_csv,
 )
 from backend_api.http.schemas.api_keys import ApiKeysOut, ApiKeysUpdate, ApiKeyStatusOut
+from backend_api.http.schemas.developer import (
+    DeveloperApiKeyCreateOut,
+    DeveloperApiKeyCreateRequest,
+    DeveloperApiKeyMetaOut,
+)
 from backend_api.http.schemas.sso import (
     SsoProviderAdminOut,
     SsoProviderCreate,
@@ -71,6 +76,7 @@ from backend_api.http.services import (
     analytics_service,
     api_key_service,
     audit_service,
+    developer_api_key_service,
     error_tracking_service,
     monitoring_service,
     plan_service,
@@ -870,6 +876,82 @@ def get_user_detail(
     if detail is None:
         raise HTTPException(status_code=404, detail="User not found")
     return AdminUserDetailOut(**detail)
+
+
+@router.get("/users/{user_id}/developer-key", response_model=DeveloperApiKeyMetaOut | None)
+def get_user_developer_key(
+    user_id: int,
+    _: User = Depends(require_action("admin:users")),
+    db: Session = Depends(get_db),
+) -> DeveloperApiKeyMetaOut | None:
+    if get_user_by_id(db, user_id) is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    meta = developer_api_key_service.get_key_metadata(db, user_id)
+    if meta is None:
+        return None
+    return DeveloperApiKeyMetaOut(**meta)
+
+
+@router.post(
+    "/users/{user_id}/developer-key",
+    response_model=DeveloperApiKeyCreateOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_user_developer_key(
+    user_id: int,
+    request: DeveloperApiKeyCreateRequest,
+    http_request: Request,
+    admin: User = Depends(require_action("admin:users")),
+    db: Session = Depends(get_db),
+) -> DeveloperApiKeyCreateOut:
+    user = get_user_by_id(db, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    meta, raw_key = developer_api_key_service.create_or_regenerate_key(
+        db,
+        user=user,
+        admin=admin,
+        name=request.name,
+    )
+    audit_service.record_from_request(
+        db,
+        http_request,
+        action="admin.developer_key.create",
+        category="admin",
+        actor=admin,
+        resource_type="user",
+        resource_id=user_id,
+        details={"key_id": meta["id"], "masked_key": meta["masked_key"]},
+    )
+    return DeveloperApiKeyCreateOut(**meta, api_key=raw_key)
+
+
+@router.delete(
+    "/users/{user_id}/developer-key",
+    response_model=DeveloperApiKeyMetaOut | None,
+)
+def revoke_user_developer_key(
+    user_id: int,
+    http_request: Request,
+    admin: User = Depends(require_action("admin:users")),
+    db: Session = Depends(get_db),
+) -> DeveloperApiKeyMetaOut | None:
+    if get_user_by_id(db, user_id) is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    meta = developer_api_key_service.revoke_key(db, user_id)
+    if meta is None:
+        return None
+    audit_service.record_from_request(
+        db,
+        http_request,
+        action="admin.developer_key.revoke",
+        category="admin",
+        actor=admin,
+        resource_type="user",
+        resource_id=user_id,
+        details={"key_id": meta["id"], "masked_key": meta["masked_key"]},
+    )
+    return DeveloperApiKeyMetaOut(**meta)
 
 
 @router.get("/users/{user_id}/journey", response_model=UserJourneyOut)

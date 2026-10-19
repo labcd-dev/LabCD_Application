@@ -723,6 +723,7 @@ def submit_job(
     request: AdaptiveJobCreateRequest,
     *,
     store: InMemoryAdaptiveJobStore | None = None,
+    created_via: str = "ui",
 ) -> AdaptiveJobCreateResponse:
     job_store = _store(store)
     options = _options_dict(request.options)
@@ -781,6 +782,7 @@ def submit_job(
             file_name=f"{sys_name}.py",
             file_content=source_code,
             title=f"Adaptive: {sys_name}",
+            created_via=created_via,
         )
         if linked_project_id is not None:
             job_store.update(job_id, project_id=_coerce_project_id(linked_project_id))

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from fastapi import Depends, HTTPException, Query, status
+from fastapi import Depends, Header, HTTPException, Query, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
@@ -13,6 +13,10 @@ from collections.abc import Generator
 from backend_api.db.models import AuthSession, User
 from backend_api.db.session import SessionLocal, get_db
 from backend_api.http.services.auth_service import decode_access_token, get_user_by_id
+from backend_api.http.services.developer_api_key_service import (
+    KEY_PREFIX,
+    authenticate_api_key,
+)
 from backend_api.http.services.job_store import Job
 from backend_api.http.services import session_service
 
@@ -181,8 +185,53 @@ def require_admin(user: User = Depends(get_current_user)) -> User:
     return user
 
 
+def get_user_from_api_key(
+    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    db: Session = Depends(get_db),
+) -> User:
+    """Authenticate a developer via X-API-Key or Bearer labcd_… token."""
+    raw: str | None = None
+    if x_api_key and x_api_key.strip():
+        raw = x_api_key.strip()
+    elif credentials is not None and credentials.scheme.lower() == "bearer":
+        token = credentials.credentials.strip()
+        if token.startswith(KEY_PREFIX):
+            raw = token
+
+    if not raw:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="API key required",
+            headers={"WWW-Authenticate": "ApiKey"},
+        )
+
+    user = authenticate_api_key(db, raw)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or revoked API key",
+            headers={"WWW-Authenticate": "ApiKey"},
+        )
+    return user
+
+
 def require_action(action_code: str):
     def _dependency(user: User = Depends(get_current_user)) -> User:
+        if not user.has_action(action_code):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Missing required action: {action_code}",
+            )
+        return user
+
+    return _dependency
+
+
+def require_api_key_action(action_code: str):
+    """Like require_action, but for developer API-key auth."""
+
+    def _dependency(user: User = Depends(get_user_from_api_key)) -> User:
         if not user.has_action(action_code):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

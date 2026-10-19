@@ -39,3 +39,16 @@ export function statusBadgeClass(status: ProjectStatus | string): string {
       return `${base} bg-surface-muted text-muted-text`
   }
 }
+
+export function createdViaLabel(createdVia: string | null | undefined): string {
+  if (createdVia === 'api') return 'API'
+  return 'UI'
+}
+
+export function createdViaBadgeClass(createdVia: string | null | undefined): string {
+  const base = 'rounded-md px-2 py-0.5 text-xs font-semibold'
+  if (createdVia === 'api') {
+    return `${base} bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30`
+  }
+  return `${base} bg-surface-muted text-muted-text border border-border`
+}

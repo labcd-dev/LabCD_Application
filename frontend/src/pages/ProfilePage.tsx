@@ -3,6 +3,7 @@ import {
   Camera,
   Coins,
   CreditCard,
+  Code2,
   KeyRound,
   Monitor,
   Palette,
@@ -11,13 +12,15 @@ import {
   UserCircle,
 } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { authApi, billingApi, creditsApi } from '../api/endpoints'
+import { authApi, billingApi, creditsApi, developerApi } from '../api/endpoints'
 import type {
   AuthSessionInfo,
   CreditDashboard,
   CreditLedgerEntry,
   CreditUsageSession,
+  DeveloperApiKeyMeta,
 } from '../api/types'
+import { DeveloperHowTo } from '../components/DeveloperHowTo'
 import { PasswordStrengthMeter } from '../components/PasswordStrengthMeter'
 import { StatusMessage } from '../components/StatusMessage'
 import { useAuth } from '../context/AuthContext'
@@ -36,6 +39,7 @@ type ProfileSection =
   | 'devices'
   | 'credits'
   | 'billing'
+  | 'developer'
   | 'about'
 
 const SECTIONS: {
@@ -51,6 +55,12 @@ const SECTIONS: {
   { id: 'devices', label: 'Devices', description: 'Active sessions', icon: Monitor },
   { id: 'credits', label: 'Credits', description: 'Balance and usage', icon: Coins },
   { id: 'billing', label: 'Billing', description: 'Plan and subscription', icon: CreditCard },
+  {
+    id: 'developer',
+    label: 'Developer',
+    description: 'API key, endpoints, and code examples',
+    icon: Code2,
+  },
   { id: 'about', label: 'About', description: 'Account details', icon: UserCircle },
 ]
 
@@ -130,6 +140,10 @@ export function ProfilePage() {
   const [billingError, setBillingError] = useState<string | null>(null)
   const [portalBusy, setPortalBusy] = useState(false)
 
+  const [devKey, setDevKey] = useState<DeveloperApiKeyMeta | null>(null)
+  const [devKeyError, setDevKeyError] = useState<string | null>(null)
+  const [devKeyLoading, setDevKeyLoading] = useState(false)
+
   const loadSessions = async () => {
     setSessionsError(null)
     try {
@@ -200,9 +214,24 @@ export function ProfilePage() {
     }
   }
 
+  const loadDeveloperKey = async () => {
+    setDevKeyLoading(true)
+    setDevKeyError(null)
+    try {
+      setDevKey(await developerApi.getMe())
+    } catch (err) {
+      setDevKeyError(err instanceof Error ? err.message : 'Failed to load developer key')
+    } finally {
+      setDevKeyLoading(false)
+    }
+  }
+
   useEffect(() => {
     if (section === 'credits') {
       void loadCredits()
+    }
+    if (section === 'developer') {
+      void loadDeveloperKey()
     }
   }, [section])
 
@@ -384,19 +413,19 @@ export function ProfilePage() {
           </nav>
 
           <div className="min-w-0 flex-1 overflow-y-auto px-5 py-6 sm:px-8">
-            <header className="mb-6 max-w-xl">
+            <header className={`mb-6 ${section === 'developer' ? 'max-w-3xl' : 'max-w-xl'}`}>
               <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.05em] text-muted">
                 Settings
               </p>
               <h1 className="m-0 text-[clamp(22px,3vw,28px)] font-bold tracking-[-0.03em] text-foreground">
                 {activeSection.label}
               </h1>
-              <p className="mt-1.5 mb-0 max-w-md text-[14px] leading-relaxed text-muted-text">
+              <p className="mt-1.5 mb-0 max-w-xl text-[14px] leading-relaxed text-muted-text">
                 {activeSection.description}
               </p>
             </header>
 
-            <div className="max-w-xl">
+            <div className={section === 'developer' ? 'max-w-3xl' : 'max-w-xl'}>
               {section === 'account' && (
                 <div className="space-y-4">
                   {profileMessage && (
@@ -876,6 +905,85 @@ export function ProfilePage() {
                     “Manage billing” opens Stripe’s secure customer portal, where you can update
                     your payment method, view invoices, change plans, or cancel your subscription.
                   </p>
+                </div>
+              )}
+
+              {section === 'developer' && (
+                <div className="space-y-8">
+                  <section className="space-y-3">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h3 className="mt-0 mb-2 text-base font-semibold text-foreground">API key</h3>
+                        <p className="mt-1.5 mb-0 text-sm leading-relaxed text-muted-text">
+                          Keys are issued by an administrator. The full secret is shown only once at
+                          create time; this page shows the masked key and whether it is active.
+                        </p>
+                      </div>
+                      {devKey?.is_active && (
+                        <span className="rounded-md bg-[var(--app-status-success-bg)] px-2 py-0.5 text-xs font-medium text-[var(--app-status-success-text)]">
+                          Active
+                        </span>
+                      )}
+                    </div>
+                    {devKeyError && <StatusMessage type="error" message={devKeyError} />}
+                    {devKeyLoading && !devKey ? (
+                      <p className="m-0 text-sm text-muted-text">Loading API key…</p>
+                    ) : devKey?.is_active ? (
+                      <dl className="m-0 grid gap-3 sm:grid-cols-3">
+                        <div className="rounded-xl border border-border-subtle bg-surface-muted px-4 py-3 sm:col-span-3">
+                          <dt className="text-[11px] font-semibold uppercase tracking-[0.05em] text-muted">
+                            Masked key
+                          </dt>
+                          <dd className="mt-1 mb-0 break-all font-mono text-sm font-medium text-foreground">
+                            {devKey.masked_key}
+                          </dd>
+                          {devKey.name ? (
+                            <dd className="mt-1.5 mb-0 text-xs text-muted">Label: {devKey.name}</dd>
+                          ) : null}
+                        </div>
+                        <div className="rounded-xl border border-border-subtle bg-surface-muted px-4 py-3">
+                          <dt className="text-[11px] font-semibold uppercase tracking-[0.05em] text-muted">
+                            Created
+                          </dt>
+                          <dd className="mt-1 mb-0 text-sm font-medium text-foreground">
+                            {formatDateTime(devKey.created_at)}
+                          </dd>
+                        </div>
+                        <div className="rounded-xl border border-border-subtle bg-surface-muted px-4 py-3">
+                          <dt className="text-[11px] font-semibold uppercase tracking-[0.05em] text-muted">
+                            Last used
+                          </dt>
+                          <dd className="mt-1 mb-0 text-sm font-medium text-foreground">
+                            {devKey.last_used_at
+                              ? formatDateTime(devKey.last_used_at)
+                              : 'Never'}
+                          </dd>
+                        </div>
+                        <div className="rounded-xl border border-border-subtle bg-surface-muted px-4 py-3">
+                          <dt className="text-[11px] font-semibold uppercase tracking-[0.05em] text-muted">
+                            Auth header
+                          </dt>
+                          <dd className="mt-1 mb-0 font-mono text-[12px] font-medium text-foreground">
+                            X-API-Key
+                          </dd>
+                        </div>
+                      </dl>
+                    ) : (
+                      <StatusMessage
+                        type="warning"
+                        message="No active API key. Ask an admin to generate one from your user page in the admin panel."
+                      />
+                    )}
+                  </section>
+
+                  <section className="space-y-3 border-t border-border-subtle pt-6">
+                    <h3 className="mt-0 mb-2 text-base font-semibold text-foreground">How to use the API</h3>
+                    <p className="m-0 text-sm leading-relaxed text-muted-text">
+                      Call Single Loop, Multi Loop, Adaptive, and MPC design jobs with your key, then
+                      poll for status and download results.
+                    </p>
+                    <DeveloperHowTo maskedKey={devKey?.is_active ? devKey.masked_key : null} />
+                  </section>
                 </div>
               )}
 

@@ -1880,6 +1880,7 @@ def submit_job(
     request: MPCJobCreateRequest,
     *,
     store: InMemoryJobStore | None = None,
+    created_via: str = "ui",
 ) -> MPCJobCreateResponse:
     """Create a job and start the tuning graph in a background thread."""
     job_store = _store(store)
@@ -1950,6 +1951,7 @@ def submit_job(
             file_name=f"{system_name}.py",
             file_content=source_code,
             title=f"MPC: {system_name}",
+            created_via=created_via,
         )
         if linked_project_id is not None:
             job_store.update(job_id, project_id=str(linked_project_id))

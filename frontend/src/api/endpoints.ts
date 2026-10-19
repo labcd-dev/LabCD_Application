@@ -4,6 +4,8 @@ import type {
   ArtifactResponse,
   AdminUserCredits,
   AdminUserDetail,
+  DeveloperApiKeyCreate,
+  DeveloperApiKeyMeta,
   ApiKeysResponse,
   ApiKeysUpdate,
   AuthUser,
@@ -366,6 +368,17 @@ export const adminApi = {
       })}`,
     ),
   getUser: (userId: number) => apiFetch<AdminUserDetail>(`/admin/users/${userId}`),
+  getUserDeveloperKey: (userId: number) =>
+    apiFetch<DeveloperApiKeyMeta | null>(`/admin/users/${userId}/developer-key`),
+  createUserDeveloperKey: (userId: number, body?: { name?: string }) =>
+    apiFetch<DeveloperApiKeyCreate>(`/admin/users/${userId}/developer-key`, {
+      method: 'POST',
+      body: JSON.stringify(body ?? {}),
+    }),
+  revokeUserDeveloperKey: (userId: number) =>
+    apiFetch<DeveloperApiKeyMeta | null>(`/admin/users/${userId}/developer-key`, {
+      method: 'DELETE',
+    }),
   getUserJourney: (userId: number) =>
     apiFetch<UserJourney>(`/admin/users/${userId}/journey`),
   getUserCredits: (userId: number) =>
@@ -1501,6 +1514,10 @@ export const billingApi = {
     }),
   createPortalSession: () =>
     apiFetch<{ url: string }>('/billing/portal-session', { method: 'POST' }),
+}
+
+export const developerApi = {
+  getMe: () => apiFetch<DeveloperApiKeyMeta | null>('/developer/me'),
 }
 
 

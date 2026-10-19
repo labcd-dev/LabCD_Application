@@ -241,6 +241,7 @@ def init_mulo_designer(
     project_id: int | None = None,
     file_name: str = "",
     file_type: str = "python",
+    created_via: str = "ui",
 ) -> str:
     """Initialize the Mulo designer (LLM constraint estimation) without running GA."""
     normalized_run_config = normalize_run_config(run_config)
@@ -280,6 +281,7 @@ def init_mulo_designer(
         file_type=file_type or "python",
         file_content=equation,
         title=case_name,
+        created_via=created_via,
     )
     if linked_project_id is not None:
         job.metadata["project_id"] = linked_project_id
@@ -369,6 +371,7 @@ def start_mulo_job(
     project_id: int | None = None,
     file_name: str = "",
     file_type: str = "python",
+    created_via: str = "ui",
 ) -> str:
     """Legacy one-shot start: initialize designer and immediately run GA."""
     job_id = init_mulo_designer(
@@ -381,6 +384,7 @@ def start_mulo_job(
         project_id=project_id,
         file_name=file_name,
         file_type=file_type,
+        created_via=created_via,
     )
     run_mulo_optimization(job_id)
     return job_id

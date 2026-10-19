@@ -342,54 +342,54 @@
 }
 
 /* Light-mode syntax (GitHub-light inspired) */
-.code-editor .token.comment,
-.code-editor .token.prolog,
-.code-editor .token.doctype,
-.code-editor .token.cdata {
+:is(.code-editor, .syntax-highlight) .token.comment,
+:is(.code-editor, .syntax-highlight) .token.prolog,
+:is(.code-editor, .syntax-highlight) .token.doctype,
+:is(.code-editor, .syntax-highlight) .token.cdata {
   color: #6a737d;
 }
 
-.code-editor .token.punctuation {
+:is(.code-editor, .syntax-highlight) .token.punctuation {
   color: #24292f;
 }
 
-.code-editor .token.property,
-.code-editor .token.tag,
-.code-editor .token.boolean,
-.code-editor .token.number,
-.code-editor .token.constant,
-.code-editor .token.symbol {
+:is(.code-editor, .syntax-highlight) .token.property,
+:is(.code-editor, .syntax-highlight) .token.tag,
+:is(.code-editor, .syntax-highlight) .token.boolean,
+:is(.code-editor, .syntax-highlight) .token.number,
+:is(.code-editor, .syntax-highlight) .token.constant,
+:is(.code-editor, .syntax-highlight) .token.symbol {
   color: #0550ae;
 }
 
-.code-editor .token.selector,
-.code-editor .token.attr-name,
-.code-editor .token.string,
-.code-editor .token.char,
-.code-editor .token.builtin {
+:is(.code-editor, .syntax-highlight) .token.selector,
+:is(.code-editor, .syntax-highlight) .token.attr-name,
+:is(.code-editor, .syntax-highlight) .token.string,
+:is(.code-editor, .syntax-highlight) .token.char,
+:is(.code-editor, .syntax-highlight) .token.builtin {
   color: #0a3069;
 }
 
-.code-editor .token.operator,
-.code-editor .token.entity,
-.code-editor .token.url,
-.code-editor .token.variable {
+:is(.code-editor, .syntax-highlight) .token.operator,
+:is(.code-editor, .syntax-highlight) .token.entity,
+:is(.code-editor, .syntax-highlight) .token.url,
+:is(.code-editor, .syntax-highlight) .token.variable {
   color: #953800;
 }
 
-.code-editor .token.atrule,
-.code-editor .token.attr-value,
-.code-editor .token.function,
-.code-editor .token.class-name {
+:is(.code-editor, .syntax-highlight) .token.atrule,
+:is(.code-editor, .syntax-highlight) .token.attr-value,
+:is(.code-editor, .syntax-highlight) .token.function,
+:is(.code-editor, .syntax-highlight) .token.class-name {
   color: #8250df;
 }
 
-.code-editor .token.keyword {
+:is(.code-editor, .syntax-highlight) .token.keyword {
   color: #cf222e;
 }
 
-.code-editor .token.regex,
-.code-editor .token.important {
+:is(.code-editor, .syntax-highlight) .token.regex,
+:is(.code-editor, .syntax-highlight) .token.important {
   color: #953800;
 }
 
@@ -404,54 +404,54 @@
   caret-color: #e6edf3;
 }
 
-.dark .code-editor .token.comment,
-.dark .code-editor .token.prolog,
-.dark .code-editor .token.doctype,
-.dark .code-editor .token.cdata {
+.dark :is(.code-editor, .syntax-highlight) .token.comment,
+.dark :is(.code-editor, .syntax-highlight) .token.prolog,
+.dark :is(.code-editor, .syntax-highlight) .token.doctype,
+.dark :is(.code-editor, .syntax-highlight) .token.cdata {
   color: #6a9955;
 }
 
-.dark .code-editor .token.punctuation {
+.dark :is(.code-editor, .syntax-highlight) .token.punctuation {
   color: #94a3b8;
 }
 
-.dark .code-editor .token.property,
-.dark .code-editor .token.tag,
-.dark .code-editor .token.boolean,
-.dark .code-editor .token.number,
-.dark .code-editor .token.constant,
-.dark .code-editor .token.symbol {
+.dark :is(.code-editor, .syntax-highlight) .token.property,
+.dark :is(.code-editor, .syntax-highlight) .token.tag,
+.dark :is(.code-editor, .syntax-highlight) .token.boolean,
+.dark :is(.code-editor, .syntax-highlight) .token.number,
+.dark :is(.code-editor, .syntax-highlight) .token.constant,
+.dark :is(.code-editor, .syntax-highlight) .token.symbol {
   color: #79c0ff;
 }
 
-.dark .code-editor .token.selector,
-.dark .code-editor .token.attr-name,
-.dark .code-editor .token.string,
-.dark .code-editor .token.char,
-.dark .code-editor .token.builtin {
+.dark :is(.code-editor, .syntax-highlight) .token.selector,
+.dark :is(.code-editor, .syntax-highlight) .token.attr-name,
+.dark :is(.code-editor, .syntax-highlight) .token.string,
+.dark :is(.code-editor, .syntax-highlight) .token.char,
+.dark :is(.code-editor, .syntax-highlight) .token.builtin {
   color: #a5d6ff;
 }
 
-.dark .code-editor .token.operator,
-.dark .code-editor .token.entity,
-.dark .code-editor .token.url,
-.dark .code-editor .token.variable {
+.dark :is(.code-editor, .syntax-highlight) .token.operator,
+.dark :is(.code-editor, .syntax-highlight) .token.entity,
+.dark :is(.code-editor, .syntax-highlight) .token.url,
+.dark :is(.code-editor, .syntax-highlight) .token.variable {
   color: #d2a8ff;
 }
 
-.dark .code-editor .token.atrule,
-.dark .code-editor .token.attr-value,
-.dark .code-editor .token.function,
-.dark .code-editor .token.class-name {
+.dark :is(.code-editor, .syntax-highlight) .token.atrule,
+.dark :is(.code-editor, .syntax-highlight) .token.attr-value,
+.dark :is(.code-editor, .syntax-highlight) .token.function,
+.dark :is(.code-editor, .syntax-highlight) .token.class-name {
   color: #d2a8ff;
 }
 
-.dark .code-editor .token.keyword {
+.dark :is(.code-editor, .syntax-highlight) .token.keyword {
   color: #ff7b72;
 }
 
-.dark .code-editor .token.regex,
-.dark .code-editor .token.important {
+.dark :is(.code-editor, .syntax-highlight) .token.regex,
+.dark :is(.code-editor, .syntax-highlight) .token.important {
   color: #ffa657;
 }
 

@@ -54,6 +54,7 @@ class ProjectSummary(BaseModel):
     llm_model: str
     has_results: bool
     job_id: Optional[str] = None
+    created_via: str = "ui"
     created_at: datetime
     updated_at: datetime
     score: Optional[float] = None

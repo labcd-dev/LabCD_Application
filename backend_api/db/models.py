@@ -412,6 +412,13 @@ class Project(Base):
     control_objective: Mapped[str | None] = mapped_column(Text, nullable=True)
     job_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     results: Mapped[dict[str, Any] | None] = mapped_column(JsonDict, nullable=True)
+    # How the project was started: "ui" (interactive app) or "api" (developer API key).
+    created_via: Mapped[str] = mapped_column(
+        String(16),
+        default="ui",
+        nullable=False,
+        index=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
@@ -1081,6 +1088,44 @@ class CreditLedgerEntry(Base):
     usage_session: Mapped[CreditUsageSession | None] = relationship(
         "CreditUsageSession",
         back_populates="ledger_entries",
+        lazy="noload",
+    )
+
+
+class DeveloperApiKey(Base):
+    """Per-user developer API key (admin-generated). Secret stored as SHA-256 hash only."""
+
+    __tablename__ = "developer_api_keys"
+    __table_args__ = (
+        Index("ix_developer_api_keys_user_active", "user_id", "revoked_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    created_by_admin_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    key_prefix: Mapped[str] = mapped_column(String(16), nullable=False)
+    key_last4: Mapped[str] = mapped_column(String(4), nullable=False)
+    key_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(100), default="", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    user: Mapped[User] = relationship("User", foreign_keys=[user_id], lazy="selectin")
+    created_by_admin: Mapped[User | None] = relationship(
+        "User",
+        foreign_keys=[created_by_admin_id],
         lazy="noload",
     )
 

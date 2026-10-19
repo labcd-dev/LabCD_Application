@@ -31,7 +31,13 @@ import {
   pageIntro,
   pageSection,
 } from '../lib/classes'
-import { pipelineBadgeClass, pipelineLabel, statusBadgeClass } from '../lib/projectLabels'
+import {
+  createdViaBadgeClass,
+  createdViaLabel,
+  pipelineBadgeClass,
+  pipelineLabel,
+  statusBadgeClass,
+} from '../lib/projectLabels'
 import { canRetryProject, retryProject } from '../lib/retryProject'
 import { formatDateTime, parseApiDate } from '../lib/formatDateTime'
 
@@ -848,6 +854,9 @@ export function ProjectsPage({
                     <span className={statusBadgeClass(project.status)}>{project.status}</span>
                     <span className={pipelineBadgeClass(project.pipeline_type)}>
                       {pipelineLabel(project.pipeline_type)}
+                    </span>
+                    <span className={createdViaBadgeClass(project.created_via)}>
+                      {createdViaLabel(project.created_via)}
                     </span>
                   </div>
                   <p className="m-0 text-xs text-muted-text">

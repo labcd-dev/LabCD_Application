@@ -39,6 +39,7 @@ from backend_api.http.routers import (
     bug_reports,
     case_studies,
     credits,
+    developer,
     errors,
     health,
     jobs,
@@ -149,6 +150,7 @@ def create_app() -> FastAPI:
     app.include_router(mulo.router, prefix=API_PREFIX)
     app.include_router(adaptive.router, prefix=API_PREFIX)
     app.include_router(mpc.router, prefix=API_PREFIX)
+    app.include_router(developer.router, prefix=API_PREFIX)
     app.include_router(jobs.router, prefix=API_PREFIX)
     app.include_router(case_studies.router, prefix=API_PREFIX)
     app.mount(f"{API_PREFIX}/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
