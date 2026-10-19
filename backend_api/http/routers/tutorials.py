@@ -31,7 +31,10 @@ def list_videos(
     _: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> list[TutorialVideoOut]:
-    return [TutorialVideoOut.model_validate(v) for v in tutorials_service.list_videos(db)]
+    return [
+        TutorialVideoOut.model_validate(v)
+        for v in tutorials_service.list_videos(db, page_size=None).items
+    ]
 
 
 @router.get("/tutorials/documents", response_model=list[TutorialDocumentSummaryOut])

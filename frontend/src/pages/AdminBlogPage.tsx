@@ -1,12 +1,12 @@
 import { Link, Navigate } from 'react-router-dom'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { adminBlogApi } from '../api/endpoints'
 import type { BlogPostListItem } from '../api/types'
 import { StatusMessage } from '../components/StatusMessage'
 import { AdminPagination } from '../components/admin/AdminPagination'
 import { useAuth } from '../context/AuthContext'
-import { useClientPagination } from '../hooks/useClientPagination'
+import { useServerPagination } from '../hooks/useServerPagination'
 import { btnBase, btnPrimary, pageIntro, pageSection, pageTitle } from '../lib/classes'
 import { formatDateTime } from '../lib/formatDateTime'
 
@@ -17,25 +17,36 @@ export function AdminBlogPage() {
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [total, setTotal] = useState(0)
+
+  const pagination = useServerPagination({ total })
+
+  const listParams = useMemo(
+    () => ({
+      page: pagination.page,
+      page_size: pagination.pageSize,
+    }),
+    [pagination.page, pagination.pageSize],
+  )
 
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      setPosts(await adminBlogApi.list())
+      const page = await adminBlogApi.list(listParams)
+      setPosts(page.items)
+      setTotal(page.total)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load blog posts')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [listParams])
 
   useEffect(() => {
     if (!canManage) return
     void load()
   }, [canManage, load])
-
-  const pagination = useClientPagination(posts)
 
   if (!canManage) {
     return <Navigate to="/admin" replace />
@@ -85,7 +96,7 @@ export function AdminBlogPage() {
                 </tr>
               </thead>
               <tbody>
-                {pagination.pageItems.map((post) => (
+                {posts.map((post) => (
                   <tr key={post.id} className="border-b border-border-subtle">
                     <td className="px-4 py-3">
                       <div className="font-medium">{post.title}</div>
@@ -109,7 +120,7 @@ export function AdminBlogPage() {
                 ))}
               </tbody>
             </table>
-            {posts.length === 0 && <p className="p-6 text-muted-text">No articles yet.</p>}
+            {total === 0 && !loading && <p className="p-6 text-muted-text">No articles yet.</p>}
           </div>
           <AdminPagination
             page={pagination.page}

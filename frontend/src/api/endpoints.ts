@@ -267,13 +267,17 @@ export const adminApi = {
     q?: string
     sort_by?: string
     sort_dir?: string
+    page?: number
+    page_size?: number
   }) =>
-    apiFetch<PlanInfo[]>(
+    apiFetch<PaginatedResponse<PlanInfo>>(
       `/admin/plans${buildQuery({
         active_only: params?.active_only ? true : undefined,
         q: params?.q,
         sort_by: params?.sort_by,
         sort_dir: params?.sort_dir,
+        page: params?.page,
+        page_size: params?.page_size,
       })}`,
     ),
   createPlan: (body: {
@@ -319,12 +323,20 @@ export const adminApi = {
     }),
   deletePlan: (planId: number) =>
     apiFetch<void>(`/admin/plans/${planId}`, { method: 'DELETE' }),
-  listRoles: (params?: { active_only?: boolean }) => {
-    const query = new URLSearchParams()
-    if (params?.active_only) query.set('active_only', 'true')
-    const suffix = query.toString() ? `?${query}` : ''
-    return apiFetch<RoleInfo[]>(`/admin/roles${suffix}`)
-  },
+  listRoles: (params?: {
+    active_only?: boolean
+    q?: string
+    page?: number
+    page_size?: number
+  }) =>
+    apiFetch<PaginatedResponse<RoleInfo>>(
+      `/admin/roles${buildQuery({
+        active_only: params?.active_only ? true : undefined,
+        q: params?.q,
+        page: params?.page,
+        page_size: params?.page_size,
+      })}`,
+    ),
   createRole: (body: {
     name: string
     description?: string
@@ -826,7 +838,13 @@ export const tutorialsApi = {
 }
 
 export const adminTutorialsApi = {
-  listVideos: () => apiFetch<TutorialVideo[]>('/admin/tutorials/videos'),
+  listVideos: (params?: { page?: number; page_size?: number }) =>
+    apiFetch<PaginatedResponse<TutorialVideo>>(
+      `/admin/tutorials/videos${buildQuery({
+        page: params?.page,
+        page_size: params?.page_size,
+      })}`,
+    ),
   uploadVideo: (title: string, file: File) => {
     const form = new FormData()
     form.append('title', title)
@@ -844,7 +862,13 @@ export const adminTutorialsApi = {
   deleteVideo: (videoId: number) =>
     apiFetch<void>(`/admin/tutorials/videos/${videoId}`, { method: 'DELETE' }),
 
-  listDocuments: () => apiFetch<TutorialDocument[]>('/admin/tutorials/documents'),
+  listDocuments: (params?: { page?: number; page_size?: number }) =>
+    apiFetch<PaginatedResponse<TutorialDocument>>(
+      `/admin/tutorials/documents${buildQuery({
+        page: params?.page,
+        page_size: params?.page_size,
+      })}`,
+    ),
   getDocument: (documentId: number) =>
     apiFetch<TutorialDocument>(`/admin/tutorials/documents/${documentId}`),
   createDocument: (body: {
@@ -873,7 +897,13 @@ export const adminTutorialsApi = {
   deleteDocument: (documentId: number) =>
     apiFetch<void>(`/admin/tutorials/documents/${documentId}`, { method: 'DELETE' }),
 
-  listTemplates: () => apiFetch<ControlDesignTemplate[]>('/admin/tutorials/templates'),
+  listTemplates: (params?: { page?: number; page_size?: number }) =>
+    apiFetch<PaginatedResponse<ControlDesignTemplate>>(
+      `/admin/tutorials/templates${buildQuery({
+        page: params?.page,
+        page_size: params?.page_size,
+      })}`,
+    ),
   uploadTemplate: (title: string, description: string, file: File) => {
     const form = new FormData()
     form.append('title', title)
@@ -1332,8 +1362,14 @@ export const adminSiteApi = {
       method: 'PUT',
       body: JSON.stringify(body),
     }),
-  listMenus: (location?: string) =>
-    apiFetch<NavMenuItem[]>(`/admin/site/menus${buildQuery({ location })}`),
+  listMenus: (params?: { location?: string; page?: number; page_size?: number }) =>
+    apiFetch<PaginatedResponse<NavMenuItem>>(
+      `/admin/site/menus${buildQuery({
+        location: params?.location,
+        page: params?.page,
+        page_size: params?.page_size,
+      })}`,
+    ),
   createMenu: (body: Omit<NavMenuItem, 'id'>) =>
     apiFetch<NavMenuItem>('/admin/site/menus', {
       method: 'POST',
@@ -1358,7 +1394,13 @@ export const adminMediaApi = {
 }
 
 export const adminBlogApi = {
-  list: () => apiFetch<BlogPostListItem[]>('/admin/blog'),
+  list: (params?: { page?: number; page_size?: number }) =>
+    apiFetch<PaginatedResponse<BlogPostListItem>>(
+      `/admin/blog${buildQuery({
+        page: params?.page,
+        page_size: params?.page_size,
+      })}`,
+    ),
   get: (postId: number) => apiFetch<BlogPost>(`/admin/blog/${postId}`),
   create: (body: {
     title: string

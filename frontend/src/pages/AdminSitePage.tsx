@@ -1,12 +1,12 @@
 import { Navigate } from 'react-router-dom'
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { adminSiteApi } from '../api/endpoints'
 import type { NavMenuItem, SiteBrand } from '../api/types'
 import { ImageUploadField } from '../components/ImageUploadField'
 import { AdminPagination } from '../components/admin/AdminPagination'
 import { StatusMessage } from '../components/StatusMessage'
 import { useAuth } from '../context/AuthContext'
-import { useClientPagination } from '../hooks/useClientPagination'
+import { useServerPagination } from '../hooks/useServerPagination'
 import {
   btnBase,
   btnPrimary,
@@ -103,6 +103,7 @@ export function AdminSitePage() {
   const [brand, setBrand] = useState<SiteBrand | null>(null)
   const [landing, setLanding] = useState<Record<string, unknown>>({})
   const [menus, setMenus] = useState<NavMenuItem[]>([])
+  const [menuTotal, setMenuTotal] = useState(0)
   const [menuLocation, setMenuLocation] = useState<string>('header')
   const [newMenu, setNewMenu] = useState({ label: '', href: '', is_external: false })
   const [loading, setLoading] = useState(true)
@@ -114,14 +115,12 @@ export function AdminSitePage() {
     setLoading(true)
     setError(null)
     try {
-      const [nextBrand, nextLanding, nextMenus] = await Promise.all([
+      const [nextBrand, nextLanding] = await Promise.all([
         adminSiteApi.getBrand(),
         adminSiteApi.getLanding(),
-        adminSiteApi.listMenus(),
       ])
       setBrand(nextBrand)
       setLanding(nextLanding)
-      setMenus(nextMenus)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load site settings')
     } finally {

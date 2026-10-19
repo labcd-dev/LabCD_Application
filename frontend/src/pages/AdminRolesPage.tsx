@@ -6,7 +6,8 @@ import type { ActionInfo, RoleInfo } from '../api/types'
 import { AdminPagination } from '../components/admin/AdminPagination'
 import { StatusMessage } from '../components/StatusMessage'
 import { useAuth } from '../context/AuthContext'
-import { useClientPagination } from '../hooks/useClientPagination'
+import { useDebouncedValue } from '../hooks/useDebouncedValue'
+import { useServerPagination } from '../hooks/useServerPagination'
 import {
   btnBase,
   btnCompact,
@@ -31,6 +32,8 @@ export function AdminRolesPage() {
   const [message, setMessage] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
+  const debouncedQuery = useDebouncedValue(query)
+  const [total, setTotal] = useState(0)
   const [panelOpen, setPanelOpen] = useState(false)
 
   const [editingRoleId, setEditingRoleId] = useState<number | null>(null)
@@ -42,13 +45,32 @@ export function AdminRolesPage() {
 
   const canManage = hasAction('admin:roles')
 
+  const pagination = useServerPagination({
+    total,
+    resetKey: debouncedQuery,
+  })
+
+  const listParams = useMemo(
+    () => ({
+      q: debouncedQuery.trim() || undefined,
+      page: pagination.page,
+      page_size: pagination.pageSize,
+    }),
+    [debouncedQuery, pagination.page, pagination.pageSize],
+  )
+
+  const reloadActions = async () => {
+    setActions(await adminApi.listActions())
+  }
+
+  const reloadRoles = async () => {
+    const rolePage = await adminApi.listRoles(listParams)
+    setRoles(rolePage.items)
+    setTotal(rolePage.total)
+  }
+
   const reload = async () => {
-    const [roleList, actionList] = await Promise.all([
-      adminApi.listRoles(),
-      adminApi.listActions(),
-    ])
-    setRoles(roleList)
-    setActions(actionList)
+    await Promise.all([reloadActions(), reloadRoles()])
   }
 
   useEffect(() => {
@@ -57,7 +79,7 @@ export function AdminRolesPage() {
       setLoading(true)
       setError(null)
       try {
-        await reload()
+        await reloadActions()
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load roles')
       } finally {
@@ -67,18 +89,18 @@ export function AdminRolesPage() {
     void load()
   }, [canManage])
 
-  const filteredRoles = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    if (!q) return roles
-    return roles.filter(
-      (role) =>
-        role.name.toLowerCase().includes(q) ||
-        role.description.toLowerCase().includes(q) ||
-        role.actions.some((code) => code.toLowerCase().includes(q)),
-    )
-  }, [roles, query])
-
-  const pagination = useClientPagination(filteredRoles, { resetKey: query })
+  useEffect(() => {
+    if (!canManage) return
+    const load = async () => {
+      setError(null)
+      try {
+        await reloadRoles()
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load roles')
+      }
+    }
+    void load()
+  }, [canManage, listParams])
   const grouped = useMemo(() => groupActions(actions), [actions])
 
   if (!canManage) {
@@ -241,7 +263,7 @@ export function AdminRolesPage() {
 
         {loading ? (
           <p className="py-8 text-center text-muted-text">Loading roles…</p>
-        ) : filteredRoles.length === 0 ? (
+        ) : total === 0 ? (
           <p className="py-8 text-center text-muted-text">
             {query ? 'No roles match your search' : 'No roles yet'}
           </p>
@@ -262,7 +284,7 @@ export function AdminRolesPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {pagination.pageItems.map((role) => (
+                  {roles.map((role) => (
                     <tr
                       key={role.id}
                       className="border-b border-border-subtle transition-colors last:border-b-0 hover:bg-surface-hover/50"

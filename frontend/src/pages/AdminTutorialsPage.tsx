@@ -1,5 +1,5 @@
 import { Navigate } from 'react-router-dom'
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Clapperboard, RefreshCw, Trash2, Upload } from 'lucide-react'
 import { adminTutorialsApi } from '../api/endpoints'
 import type {
@@ -11,7 +11,7 @@ import { AdminPagination } from '../components/admin/AdminPagination'
 import { MarkdownContent } from '../components/MarkdownContent'
 import { StatusMessage } from '../components/StatusMessage'
 import { useAuth } from '../context/AuthContext'
-import { useClientPagination } from '../hooks/useClientPagination'
+import { useServerPagination } from '../hooks/useServerPagination'
 import {
   btnBase,
   btnCompact,
@@ -44,6 +44,9 @@ export function AdminTutorialsPage() {
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [videoTotal, setVideoTotal] = useState(0)
+  const [docTotal, setDocTotal] = useState(0)
+  const [templateTotal, setTemplateTotal] = useState(0)
 
   const [uploadTitle, setUploadTitle] = useState('')
   const [uploading, setUploading] = useState(false)
@@ -60,33 +63,58 @@ export function AdminTutorialsPage() {
   const [templateUploading, setTemplateUploading] = useState(false)
   const templateFileRef = useRef<HTMLInputElement>(null)
 
+  const videoPagination = useServerPagination({ total: videoTotal })
+  const docPagination = useServerPagination({ total: docTotal })
+  const templatePagination = useServerPagination({ total: templateTotal })
+
+  const videoListParams = useMemo(
+    () => ({
+      page: videoPagination.page,
+      page_size: videoPagination.pageSize,
+    }),
+    [videoPagination.page, videoPagination.pageSize],
+  )
+  const docListParams = useMemo(
+    () => ({
+      page: docPagination.page,
+      page_size: docPagination.pageSize,
+    }),
+    [docPagination.page, docPagination.pageSize],
+  )
+  const templateListParams = useMemo(
+    () => ({
+      page: templatePagination.page,
+      page_size: templatePagination.pageSize,
+    }),
+    [templatePagination.page, templatePagination.pageSize],
+  )
+
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
       const [nextVideos, nextDocs, nextTemplates] = await Promise.all([
-        adminTutorialsApi.listVideos(),
-        adminTutorialsApi.listDocuments(),
-        adminTutorialsApi.listTemplates(),
+        adminTutorialsApi.listVideos(videoListParams),
+        adminTutorialsApi.listDocuments(docListParams),
+        adminTutorialsApi.listTemplates(templateListParams),
       ])
-      setVideos(nextVideos)
-      setDocuments(nextDocs)
-      setTemplates(nextTemplates)
+      setVideos(nextVideos.items)
+      setVideoTotal(nextVideos.total)
+      setDocuments(nextDocs.items)
+      setDocTotal(nextDocs.total)
+      setTemplates(nextTemplates.items)
+      setTemplateTotal(nextTemplates.total)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load tutorials admin')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [docListParams, templateListParams, videoListParams])
 
   useEffect(() => {
     if (!canManage) return
     void load()
   }, [canManage, load])
-
-  const videoPagination = useClientPagination(videos)
-  const docPagination = useClientPagination(documents)
-  const templatePagination = useClientPagination(templates)
 
   if (!canManage) {
     return <Navigate to="/admin" replace />
@@ -361,7 +389,7 @@ export function AdminTutorialsPage() {
           ) : (
             <div className="space-y-3">
               <ul className="m-0 list-none space-y-3 p-0">
-                {videoPagination.pageItems.map((video, index) => (
+                {videos.map((video, index) => (
                   <li
                     key={video.id}
                     className="flex flex-col gap-3 rounded-xl border border-border-subtle p-3 sm:flex-row sm:items-center"
@@ -466,7 +494,7 @@ export function AdminTutorialsPage() {
             ) : (
               <div className="mt-3 space-y-3">
                 <ul className="m-0 list-none space-y-2 p-0">
-                  {docPagination.pageItems.map((doc) => (
+                  {documents.map((doc) => (
                     <li
                       key={doc.id}
                       className="flex flex-col gap-2 rounded-xl border border-border-subtle p-3 sm:flex-row sm:items-center sm:justify-between"
@@ -562,7 +590,7 @@ export function AdminTutorialsPage() {
           ) : (
             <div className="space-y-3">
               <ul className="m-0 list-none space-y-3 p-0">
-                {templatePagination.pageItems.map((template) => (
+                {templates.map((template) => (
                   <li
                     key={template.id}
                     className="flex flex-col gap-3 rounded-xl border border-border-subtle p-3 sm:flex-row sm:items-center"
