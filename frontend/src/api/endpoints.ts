@@ -68,12 +68,6 @@ import type {
   UploadResponse, PlantModelUploadResponse,
   UserJourney,
   UserOption,
-  MediaUploadResponse,
-  SiteBrand,
-  NavMenuItem,
-  LandingPayload,
-  BlogPost,
-  BlogPostListItem,
   BugReport,
   BugReportSettings,
   AuthSessionInfo,
@@ -1338,99 +1332,6 @@ export const caseStudiesApi = {
   list: () => apiFetch<CaseStudiesResponse>('/case-studies'),
   mulo: (name: string) =>
     apiFetch<Record<string, unknown>>(`/case-studies/mulo/${encodeURIComponent(name)}`),
-}
-
-export const siteApi = {
-  getLanding: () => apiFetch<LandingPayload>('/site/landing'),
-}
-
-export const blogApi = {
-  list: () => apiFetch<BlogPostListItem[]>('/blog'),
-  get: (slug: string) => apiFetch<BlogPost>(`/blog/${encodeURIComponent(slug)}`),
-}
-
-export const adminSiteApi = {
-  getBrand: () => apiFetch<SiteBrand>('/admin/site/brand'),
-  updateBrand: (body: SiteBrand) =>
-    apiFetch<SiteBrand>('/admin/site/brand', {
-      method: 'PUT',
-      body: JSON.stringify(body),
-    }),
-  getLanding: () => apiFetch<Record<string, unknown>>('/admin/site/landing'),
-  updateLanding: (body: Record<string, unknown>) =>
-    apiFetch<Record<string, unknown>>('/admin/site/landing', {
-      method: 'PUT',
-      body: JSON.stringify(body),
-    }),
-  listMenus: (params?: { location?: string; page?: number; page_size?: number }) =>
-    apiFetch<PaginatedResponse<NavMenuItem>>(
-      `/admin/site/menus${buildQuery({
-        location: params?.location,
-        page: params?.page,
-        page_size: params?.page_size,
-      })}`,
-    ),
-  createMenu: (body: Omit<NavMenuItem, 'id'>) =>
-    apiFetch<NavMenuItem>('/admin/site/menus', {
-      method: 'POST',
-      body: JSON.stringify(body),
-    }),
-  updateMenu: (menuId: number, body: Partial<Omit<NavMenuItem, 'id'>>) =>
-    apiFetch<NavMenuItem>(`/admin/site/menus/${menuId}`, {
-      method: 'PATCH',
-      body: JSON.stringify(body),
-    }),
-  deleteMenu: (menuId: number) =>
-    apiFetch<void>(`/admin/site/menus/${menuId}`, { method: 'DELETE' }),
-}
-
-export const adminMediaApi = {
-  upload: (file: File, prefix = 'image') => {
-    const form = new FormData()
-    form.append('file', file)
-    form.append('prefix', prefix)
-    return apiFetch<MediaUploadResponse>('/admin/media', { method: 'POST', body: form })
-  },
-}
-
-export const adminBlogApi = {
-  list: (params?: { page?: number; page_size?: number }) =>
-    apiFetch<PaginatedResponse<BlogPostListItem>>(
-      `/admin/blog${buildQuery({
-        page: params?.page,
-        page_size: params?.page_size,
-      })}`,
-    ),
-  get: (postId: number) => apiFetch<BlogPost>(`/admin/blog/${postId}`),
-  create: (body: {
-    title: string
-    slug?: string | null
-    excerpt?: string
-    body_markdown?: string
-    cover_image_url?: string | null
-    status?: string
-  }) =>
-    apiFetch<BlogPost>('/admin/blog', {
-      method: 'POST',
-      body: JSON.stringify(body),
-    }),
-  update: (
-    postId: number,
-    body: {
-      title?: string
-      slug?: string
-      excerpt?: string
-      body_markdown?: string
-      cover_image_url?: string | null
-      status?: string
-    },
-  ) =>
-    apiFetch<BlogPost>(`/admin/blog/${postId}`, {
-      method: 'PATCH',
-      body: JSON.stringify(body),
-    }),
-  delete: (postId: number) =>
-    apiFetch<void>(`/admin/blog/${postId}`, { method: 'DELETE' }),
 }
 
 export const adaptiveApi = {

@@ -43,8 +43,6 @@ DEFAULT_ACTIONS: list[tuple[str, str]] = [
     ("admin:plant_model", "Manage plant-model chats"),
     ("admin:plans", "Manage subscription plans"),
     ("admin:roles", "Manage roles and permissions"),
-    ("admin:site", "Manage site CMS"),
-    ("admin:blog", "Manage blog"),
     ("admin:survey", "Manage surveys"),
     ("admin:tutorials", "Manage tutorial videos, docs, and templates"),
     ("admin:bug_reports", "Moderate bug reports"),

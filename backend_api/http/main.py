@@ -35,7 +35,6 @@ from backend_api.http.routers import (
     admin,
     auth,
     billing,
-    blog,
     bug_reports,
     case_studies,
     credits,
@@ -50,7 +49,6 @@ from backend_api.http.routers import (
     recommender,
     regularizer,
     silo,
-    site,
     sso,
     survey,
     trimmer,
@@ -134,8 +132,6 @@ def create_app() -> FastAPI:
     app.include_router(sso.router, prefix=API_PREFIX)
     app.include_router(credits.router, prefix=API_PREFIX)
     app.include_router(admin.router, prefix=API_PREFIX)
-    app.include_router(site.router, prefix=API_PREFIX)
-    app.include_router(blog.router, prefix=API_PREFIX)
     app.include_router(survey.router, prefix=API_PREFIX)
     app.include_router(tutorials.router, prefix=API_PREFIX)
     app.include_router(bug_reports.router, prefix=API_PREFIX)

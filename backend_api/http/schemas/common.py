@@ -34,10 +34,6 @@ class UploadResponse(BaseModel):
     file_content: str
 
 
-class MediaUploadResponse(BaseModel):
-    url: str
-
-
 class ModelsResponse(BaseModel):
     llm_models: List[str]
     rag_models: List[str]

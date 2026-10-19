@@ -629,51 +629,6 @@ class ControlDesignTemplate(Base):
     )
 
 
-class NavMenuItem(Base):
-    """Header/footer navigation link managed from the site CMS."""
-
-    __tablename__ = "nav_menu_items"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    location: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
-    label: Mapped[str] = mapped_column(String(120), nullable=False)
-    href: Mapped[str] = mapped_column(String(512), nullable=False)
-    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    is_external: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-
-
-class BlogPost(Base):
-    """Markdown blog article managed from the admin CMS."""
-
-    __tablename__ = "blog_posts"
-    __table_args__ = (UniqueConstraint("slug", name="uq_blog_posts_slug"),)
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    title: Mapped[str] = mapped_column(String(300), nullable=False)
-    slug: Mapped[str] = mapped_column(String(320), nullable=False, index=True)
-    excerpt: Mapped[str] = mapped_column(Text, default="", nullable=False)
-    body_markdown: Mapped[str] = mapped_column(Text, default="", nullable=False)
-    cover_image_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
-    status: Mapped[str] = mapped_column(String(20), default="draft", nullable=False, index=True)
-    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    author_id: Mapped[int | None] = mapped_column(
-        ForeignKey("users.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        nullable=False,
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
-        nullable=False,
-    )
-
-
 class BugReport(Base):
     """User-submitted bug report with optional screenshot."""
 

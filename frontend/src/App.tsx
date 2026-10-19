@@ -7,8 +7,6 @@ import { ProtectedRoute } from './components/ProtectedRoute'
 import { AuthProvider } from './context/AuthContext'
 import { PipelineProvider } from './context/PipelineContext'
 import { ThemeProvider } from './context/ThemeContext'
-import { AdminBlogEditorPage } from './pages/AdminBlogEditorPage'
-import { AdminBlogPage } from './pages/AdminBlogPage'
 import { AdminBugReportsPage } from './pages/AdminBugReportsPage'
 import { AdminOverviewPage } from './pages/AdminOverviewPage'
 import { AdminMonitoringPage } from './pages/AdminMonitoringPage'
@@ -24,14 +22,11 @@ import { AdminProjectDetailPage } from './pages/AdminProjectDetailPage'
 import { AdminProjectsPage } from './pages/AdminProjectsPage'
 import { AdminPlantModelChatDetailPage } from './pages/AdminPlantModelChatDetailPage'
 import { AdminPlantModelChatsPage } from './pages/AdminPlantModelChatsPage'
-import { AdminSitePage } from './pages/AdminSitePage'
 import { AdminSurveyPage } from './pages/AdminSurveyPage'
 import { AdminTutorialsPage } from './pages/AdminTutorialsPage'
 import { AdminUserDetailPage } from './pages/AdminUserDetailPage'
 import { AdminUserJourneyPage } from './pages/AdminUserJourneyPage'
 import { AdminUsersPage } from './pages/AdminUsersPage'
-import { BlogListPage } from './pages/BlogListPage'
-import { BlogPostPage } from './pages/BlogPostPage'
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 import { DesignPage } from './pages/DesignPage'
 import { LoginPage } from './pages/LoginPage'
@@ -62,8 +57,6 @@ export default function App() {
           <BrowserRouter>
             <GoogleAnalytics />
             <Routes>
-              <Route path="/blog" element={<BlogListPage />} />
-              <Route path="/blog/:slug" element={<BlogPostPage />} />
               <Route path="/" element={<Layout />}>
                 <Route index element={<LoginPage />} />
                 <Route path="login" element={<Navigate to="/" replace />} />
@@ -94,9 +87,6 @@ export default function App() {
               <Route element={<ProtectedRoute />}>
                 <Route path="admin" element={<AdminLayout />}>
                   <Route index element={<AdminOverviewPage />} />
-                  <Route path="site" element={<AdminSitePage />} />
-                  <Route path="blog" element={<AdminBlogPage />} />
-                  <Route path="blog/:id" element={<AdminBlogEditorPage />} />
                   <Route path="monitoring" element={<AdminMonitoringPage />} />
                   <Route path="analytics" element={<AdminAnalyticsPage />} />
                   <Route path="errors" element={<AdminErrorsPage />} />
