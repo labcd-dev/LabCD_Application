@@ -5,10 +5,12 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from backend_api.common.csv_utils import csv_response
+from backend_api.common.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 from backend_api.db.models import User
 from backend_api.db.session import get_db
 from backend_api.http.dependencies import get_current_user, require_action
 from backend_api.http.schemas.auth import UserOut
+from backend_api.http.schemas.common import PaginatedResponse
 from backend_api.http.schemas.survey import (
     BeforeTestSurveyRequest,
     BeforeTestSurveyResponseOut,
@@ -188,87 +190,112 @@ def list_survey_responses(
     date_from: str | None = Query(default=None),
     date_to: str | None = Query(default=None),
     tz: str | None = Query(default=None, max_length=64),
+    profile_page: int = Query(default=1, ge=1),
+    feedback_page: int = Query(default=1, ge=1),
+    before_test_page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
 ) -> SurveyResponsesOut:
-    profile_users = survey_service.list_profile_responses(
+    profile = survey_service.list_profile_responses(
         db,
         date_from=date_from,
         date_to=date_to,
         tz=tz,
+        page=profile_page,
+        page_size=page_size,
     )
-    feedback_rows = survey_service.list_feedback_responses(
+    feedback = survey_service.list_feedback_responses(
         db,
         date_from=date_from,
         date_to=date_to,
         tz=tz,
+        page=feedback_page,
+        page_size=page_size,
     )
-    before_test_rows = survey_service.list_before_test_responses(
+    before_test = survey_service.list_before_test_responses(
         db,
         date_from=date_from,
         date_to=date_to,
         tz=tz,
+        page=before_test_page,
+        page_size=page_size,
     )
     return SurveyResponsesOut(
-        profile=[
-            ProfileSurveyResponseOut(
-                user_id=u.id,
-                email=u.email,
-                university=u.university,
-                degree=u.degree,
-                major=u.major,
-                matlab_experience=u.matlab_experience,
-                control_design_experience=u.control_design_experience,
-                onboarding_answers=u.onboarding_answers,
-                completed_at=u.profile_survey_completed_at,
-            )
-            for u in profile_users
-        ],
-        feedback=[
-            FeedbackSurveyResponseOut(
-                id=row.id,
-                user_id=u.id,
-                email=u.email,
-                pipeline_type=row.pipeline_type,  # type: ignore[arg-type]
-                job_id=row.job_id,
-                project_id=row.project_id,
-                plant_name=row.plant_name,
-                score=row.score,
-                success=row.success,
-                technical_usefulness=row.technical_usefulness,
-                technical_usefulness_na=row.technical_usefulness_na,
-                trust=row.trust,
-                trust_na=row.trust_na,
-                satisfaction=row.satisfaction,
-                ease_of_use=row.ease_of_use,
-                product_value=row.product_value,
-                confidence=row.confidence,
-                reuse_intention=row.reuse_intention,
-                willingness_to_pay=row.willingness_to_pay,
-                nps=row.nps,
-                main_problems=row.main_problems,
-                is_bug=row.is_bug,
-                created_at=row.created_at,
-            )
-            for row, u in feedback_rows
-        ],
-        before_test=[
-            BeforeTestSurveyResponseOut(
-                id=row.id,
-                user_id=u.id,
-                email=u.email,
-                q1_last_worked=row.q1_last_worked,
-                q2_time_spent=row.q2_time_spent,
-                q3_knowledge_gaps=row.q3_knowledge_gaps,
-                q4_difficult_parts=row.q4_difficult_parts or [],
-                q5_biggest_problem=row.q5_biggest_problem or "",
-                q6_help_sources=row.q6_help_sources or [],
-                q7_considered_paying=row.q7_considered_paying,
-                q8a_amount_hired=row.q8a_amount_hired,
-                q8b_amount_paid_to_user=row.q8b_amount_paid_to_user,
-                q9_impact=row.q9_impact or [],
-                created_at=row.created_at,
-            )
-            for row, u in before_test_rows
-        ],
+        profile=PaginatedResponse(
+            items=[
+                ProfileSurveyResponseOut(
+                    user_id=u.id,
+                    email=u.email,
+                    university=u.university,
+                    degree=u.degree,
+                    major=u.major,
+                    matlab_experience=u.matlab_experience,
+                    control_design_experience=u.control_design_experience,
+                    onboarding_answers=u.onboarding_answers,
+                    completed_at=u.profile_survey_completed_at,
+                )
+                for u in profile.items
+            ],
+            total=profile.total,
+            page=profile.page,
+            page_size=profile.page_size,
+        ),
+        feedback=PaginatedResponse(
+            items=[
+                FeedbackSurveyResponseOut(
+                    id=row.id,
+                    user_id=u.id,
+                    email=u.email,
+                    pipeline_type=row.pipeline_type,  # type: ignore[arg-type]
+                    job_id=row.job_id,
+                    project_id=row.project_id,
+                    plant_name=row.plant_name,
+                    score=row.score,
+                    success=row.success,
+                    technical_usefulness=row.technical_usefulness,
+                    technical_usefulness_na=row.technical_usefulness_na,
+                    trust=row.trust,
+                    trust_na=row.trust_na,
+                    satisfaction=row.satisfaction,
+                    ease_of_use=row.ease_of_use,
+                    product_value=row.product_value,
+                    confidence=row.confidence,
+                    reuse_intention=row.reuse_intention,
+                    willingness_to_pay=row.willingness_to_pay,
+                    nps=row.nps,
+                    main_problems=row.main_problems,
+                    is_bug=row.is_bug,
+                    created_at=row.created_at,
+                )
+                for row, u in feedback.items
+            ],
+            total=feedback.total,
+            page=feedback.page,
+            page_size=feedback.page_size,
+        ),
+        before_test=PaginatedResponse(
+            items=[
+                BeforeTestSurveyResponseOut(
+                    id=row.id,
+                    user_id=u.id,
+                    email=u.email,
+                    q1_last_worked=row.q1_last_worked,
+                    q2_time_spent=row.q2_time_spent,
+                    q3_knowledge_gaps=row.q3_knowledge_gaps,
+                    q4_difficult_parts=row.q4_difficult_parts or [],
+                    q5_biggest_problem=row.q5_biggest_problem or "",
+                    q6_help_sources=row.q6_help_sources or [],
+                    q7_considered_paying=row.q7_considered_paying,
+                    q8a_amount_hired=row.q8a_amount_hired,
+                    q8b_amount_paid_to_user=row.q8b_amount_paid_to_user,
+                    q9_impact=row.q9_impact or [],
+                    created_at=row.created_at,
+                )
+                for row, u in before_test.items
+            ],
+            total=before_test.total,
+            page=before_test.page,
+            page_size=before_test.page_size,
+        ),
     )
 
 

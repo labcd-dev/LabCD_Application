@@ -7,6 +7,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from backend_api.common.pagination import PaginationResult, paginate_query
 from backend_api.db.models import NavMenuItem
 from backend_api.http.schemas.site import SiteBrand
 from backend_api.http.services import plan_service
@@ -82,16 +83,23 @@ def set_landing_content(db: Session, content: dict[str, Any]) -> dict[str, Any]:
     return merged
 
 
-def list_menus(db: Session, location: str | None = None) -> list[NavMenuItem]:
+def list_menus(
+    db: Session,
+    location: str | None = None,
+    *,
+    page: int = 1,
+    page_size: int | None = None,
+) -> PaginationResult[NavMenuItem]:
     ensure_site_seeded(db)
     query = db.query(NavMenuItem)
     if location:
         query = query.filter(NavMenuItem.location == location)
-    return query.order_by(NavMenuItem.location, NavMenuItem.sort_order, NavMenuItem.id).all()
+    query = query.order_by(NavMenuItem.location, NavMenuItem.sort_order, NavMenuItem.id)
+    return paginate_query(query, page=page, page_size=page_size)
 
 
 def menus_by_location(db: Session) -> dict[str, list[NavMenuItem]]:
-    items = list_menus(db)
+    items = list_menus(db, page_size=None).items
     grouped: dict[str, list[NavMenuItem]] = {loc: [] for loc in MENU_LOCATIONS}
     for item in items:
         grouped.setdefault(item.location, []).append(item)

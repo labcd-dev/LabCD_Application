@@ -12,6 +12,7 @@ from backend_api.http.schemas.auth import (
     AdminUserDetailOut,
     CreateUserRequest,
     DefaultPlanOut,
+    LoginHistoryOut,
     PlanCreateRequest,
     PlanOut,
     PlanUpdateRequest,
@@ -67,11 +68,14 @@ from backend_api.http.schemas.analytics import (
     TelegramAnalyticsTestResult,
 )
 from backend_api.http.schemas.monitoring import MonitoringResponse
+from backend_api.common.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
+from backend_api.http.schemas.common import PaginatedResponse
 from backend_api.http.schemas.projects import ProjectDetail, ProjectSummary, ProjectUpdateRequest
 from backend_api.http.schemas.plant_model import (
     PlantModelConversationDetail,
     PlantModelConversationSummary,
 )
+from pydantic import BaseModel
 from backend_api.http.services import (
     analytics_service,
     api_key_service,
@@ -385,7 +389,7 @@ def update_error_tracking_settings(
     )
 
 
-@router.get("/errors", response_model=list[ErrorEventOut])
+@router.get("/errors", response_model=PaginatedResponse[ErrorEventOut])
 def list_error_events(
     _: User = Depends(require_action("admin:errors")),
     db: Session = Depends(get_db),
@@ -396,11 +400,12 @@ def list_error_events(
     date_from: str | None = Query(default=None),
     date_to: str | None = Query(default=None),
     tz: str | None = Query(default=None, max_length=64),
-    limit: int = Query(default=200, ge=1, le=1000),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
     sort_by: str | None = Query(default=None),
     sort_dir: str | None = Query(default=None),
-) -> list[ErrorEventOut]:
-    events = error_tracking_service.list_errors(
+) -> PaginatedResponse[ErrorEventOut]:
+    result = error_tracking_service.list_errors(
         db,
         user_id=user_id,
         source=source,
@@ -409,11 +414,17 @@ def list_error_events(
         date_from=date_from,
         date_to=date_to,
         tz=tz,
-        limit=limit,
+        page=page,
+        page_size=page_size,
         sort_by=sort_by,
         sort_dir=sort_dir,
     )
-    return [ErrorEventOut(**error_tracking_service.event_to_dict(e)) for e in events]
+    return PaginatedResponse(
+        items=[ErrorEventOut(**error_tracking_service.event_to_dict(e)) for e in result.items],
+        total=result.total,
+        page=result.page,
+        page_size=result.page_size,
+    )
 
 
 @router.get("/errors/export.csv")
@@ -447,7 +458,7 @@ def export_error_events_csv(
     return csv_response(content, "error_events.csv")
 
 
-@router.get("/audit-log", response_model=list[AuditLogOut])
+@router.get("/audit-log", response_model=PaginatedResponse[AuditLogOut])
 def list_audit_log(
     _: User = Depends(require_action("admin:audit")),
     db: Session = Depends(get_db),
@@ -459,11 +470,12 @@ def list_audit_log(
     date_from: str | None = Query(default=None),
     date_to: str | None = Query(default=None),
     tz: str | None = Query(default=None, max_length=64),
-    limit: int = Query(default=200, ge=1, le=1000),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
     sort_by: str | None = Query(default=None),
     sort_dir: str | None = Query(default=None),
-) -> list[AuditLogOut]:
-    entries = audit_service.list_audits(
+) -> PaginatedResponse[AuditLogOut]:
+    result = audit_service.list_audits(
         db,
         category=category,
         action=action,
@@ -473,11 +485,17 @@ def list_audit_log(
         date_from=date_from,
         date_to=date_to,
         tz=tz,
-        limit=limit,
+        page=page,
+        page_size=page_size,
         sort_by=sort_by,
         sort_dir=sort_dir,
     )
-    return [AuditLogOut(**audit_service.entry_to_dict(e)) for e in entries]
+    return PaginatedResponse(
+        items=[AuditLogOut(**audit_service.entry_to_dict(e)) for e in result.items],
+        total=result.total,
+        page=result.page,
+        page_size=result.page_size,
+    )
 
 
 @router.get("/audit-log/export.csv")
@@ -536,7 +554,7 @@ def list_actions(
     return [ActionOut(code=a.code, description=a.description) for a in actions]
 
 
-@router.get("/plans", response_model=list[PlanOut])
+@router.get("/plans", response_model=PaginatedResponse[PlanOut])
 def list_plans(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -544,19 +562,26 @@ def list_plans(
     q: str | None = Query(default=None),
     sort_by: str | None = Query(default=None),
     sort_dir: str | None = Query(default=None),
-) -> list[PlanOut]:
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
+) -> PaginatedResponse[PlanOut]:
     if not (user.has_action("admin:plans") or user.has_action("admin:users")):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Missing required action: admin:plans")
-    return [
-        _plan_out(plan)
-        for plan in plan_service.list_plans(
-            db,
-            active_only=active_only,
-            q=q,
-            sort_by=sort_by,
-            sort_dir=sort_dir,
-        )
-    ]
+    result = plan_service.list_plans(
+        db,
+        active_only=active_only,
+        q=q,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+        page=page,
+        page_size=page_size,
+    )
+    return PaginatedResponse(
+        items=[_plan_out(plan) for plan in result.items],
+        total=result.total,
+        page=result.page,
+        page_size=result.page_size,
+    )
 
 
 @router.post("/plans", response_model=PlanOut, status_code=status.HTTP_201_CREATED)
@@ -713,15 +738,30 @@ def _role_out(role) -> RoleOut:
     return RoleOut(**role_service.role_out_dict(role))
 
 
-@router.get("/roles", response_model=list[RoleOut])
+@router.get("/roles", response_model=PaginatedResponse[RoleOut])
 def list_roles(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
     active_only: bool = Query(default=False),
-) -> list[RoleOut]:
+    q: str | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
+) -> PaginatedResponse[RoleOut]:
     if not (user.has_action("admin:roles") or user.has_action("admin:users")):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Missing required action: admin:roles")
-    return [_role_out(role) for role in role_service.list_roles(db, active_only=active_only)]
+    result = role_service.list_roles(
+        db,
+        active_only=active_only,
+        q=q,
+        page=page,
+        page_size=page_size,
+    )
+    return PaginatedResponse(
+        items=[_role_out(role) for role in result.items],
+        total=result.total,
+        page=result.page,
+        page_size=result.page_size,
+    )
 
 
 @router.post("/roles", response_model=RoleOut, status_code=status.HTTP_201_CREATED)
@@ -818,7 +858,73 @@ def delete_role(
         details={"name": role_name},
     )
 
-@router.get("/users", response_model=list[UserOut])
+class UserOptionOut(BaseModel):
+    id: int
+    email: str
+
+
+class OverviewStatsOut(BaseModel):
+    users_total: int
+    users_active: int
+    users_admins: int
+    plans_active: int
+    plans_total: int
+    projects_total: int
+    default_plan_id: int | None = None
+    default_plan_name: str | None = None
+    max_modules: int = 0
+
+
+class ProjectBenchmarkStatsOut(BaseModel):
+    total_evaluated: int
+    avg_score: float | None = None
+    avg_rating: float | None = None
+    alignment_pct: float | None = None
+    success_rate: float | None = None
+
+
+@router.get("/overview/stats", response_model=OverviewStatsOut)
+def get_overview_stats(
+    _: User = Depends(require_action("admin:access")),
+    db: Session = Depends(get_db),
+) -> OverviewStatsOut:
+    user_stats = admin_user_service.user_overview_stats(db)
+    plans = plan_service.list_plans(db, page_size=None).items
+    projects_total = project_service.list_all_projects(db, page=1, page_size=1).total
+    default_plan = plan_service.get_default_plan(db)
+    return OverviewStatsOut(
+        users_total=user_stats["total"],
+        users_active=user_stats["active"],
+        users_admins=user_stats["admins"],
+        plans_active=sum(1 for plan in plans if plan.is_active),
+        plans_total=len(plans),
+        projects_total=projects_total,
+        default_plan_id=default_plan.id if default_plan else None,
+        default_plan_name=default_plan.name if default_plan else None,
+        max_modules=max((len(plan.action_codes()) for plan in plans), default=0),
+    )
+
+
+@router.get("/users/options", response_model=list[UserOptionOut])
+def list_user_options(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> list[UserOptionOut]:
+    allowed = (
+        user.has_action("admin:users")
+        or user.has_action("admin:projects")
+        or user.has_action("admin:plant_model")
+        or user.has_action("admin:journey")
+    )
+    if not allowed:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Missing required admin list action",
+        )
+    return [UserOptionOut(**row) for row in admin_user_service.list_user_options(db)]
+
+
+@router.get("/users", response_model=PaginatedResponse[UserOut])
 def list_users(
     _: User = Depends(require_action("admin:users")),
     db: Session = Depends(get_db),
@@ -828,8 +934,10 @@ def list_users(
     tz: str | None = Query(default=None, max_length=64),
     sort_by: str | None = Query(default=None),
     sort_dir: str | None = Query(default=None),
-) -> list[UserOut]:
-    users = admin_user_service.list_users(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
+) -> PaginatedResponse[UserOut]:
+    result = admin_user_service.list_users(
         db,
         q=q,
         date_from=date_from,
@@ -837,8 +945,15 @@ def list_users(
         tz=tz,
         sort_by=sort_by,
         sort_dir=sort_dir,
+        page=page,
+        page_size=page_size,
     )
-    return [user_out(user) for user in users]
+    return PaginatedResponse(
+        items=[user_out(user) for user in result.items],
+        total=result.total,
+        page=result.page,
+        page_size=result.page_size,
+    )
 
 
 @router.get("/users/export.csv")
@@ -876,6 +991,95 @@ def get_user_detail(
     if detail is None:
         raise HTTPException(status_code=404, detail="User not found")
     return AdminUserDetailOut(**detail)
+
+
+@router.get("/users/{user_id}/projects", response_model=PaginatedResponse[ProjectSummary])
+def list_user_projects(
+    user_id: int,
+    _: User = Depends(require_action("admin:users")),
+    db: Session = Depends(get_db),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
+) -> PaginatedResponse[ProjectSummary]:
+    if get_user_by_id(db, user_id) is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    result = project_service.list_all_projects(
+        db,
+        user_id=user_id,
+        page=page,
+        page_size=page_size,
+    )
+    return PaginatedResponse(
+        items=[
+            ProjectSummary(**project_service.project_to_summary(p, include_owner=False))
+            for p in result.items
+        ],
+        total=result.total,
+        page=result.page,
+        page_size=result.page_size,
+    )
+
+
+@router.get("/users/{user_id}/errors", response_model=PaginatedResponse[ErrorEventOut])
+def list_user_errors(
+    user_id: int,
+    _: User = Depends(require_action("admin:users")),
+    db: Session = Depends(get_db),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
+) -> PaginatedResponse[ErrorEventOut]:
+    if get_user_by_id(db, user_id) is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    result = error_tracking_service.list_errors(
+        db,
+        user_id=user_id,
+        page=page,
+        page_size=page_size,
+    )
+    return PaginatedResponse(
+        items=[ErrorEventOut(**error_tracking_service.event_to_dict(e)) for e in result.items],
+        total=result.total,
+        page=result.page,
+        page_size=result.page_size,
+    )
+
+
+@router.get(
+    "/users/{user_id}/login-history",
+    response_model=PaginatedResponse[LoginHistoryOut],
+)
+def list_user_login_history(
+    user_id: int,
+    _: User = Depends(require_action("admin:users")),
+    db: Session = Depends(get_db),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
+) -> PaginatedResponse[LoginHistoryOut]:
+    if get_user_by_id(db, user_id) is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    result = admin_user_service.list_user_login_history(
+        db,
+        user_id,
+        page=page,
+        page_size=page_size,
+    )
+    return PaginatedResponse(
+        items=[
+            LoginHistoryOut(
+                id=row.id,
+                email=row.email,
+                success=row.success,
+                ip_address=row.ip_address,
+                user_agent=row.user_agent,
+                failure_reason=row.failure_reason,
+                created_at=row.created_at,
+            )
+            for row in result.items
+        ],
+        total=result.total,
+        page=result.page,
+        page_size=result.page_size,
+    )
 
 
 @router.get("/users/{user_id}/developer-key", response_model=DeveloperApiKeyMetaOut | None)
@@ -1455,7 +1659,30 @@ def delete_user(
         details={"email": email},
     )
 
-@router.get("/projects", response_model=list[ProjectSummary])
+@router.get("/projects/benchmark-stats", response_model=ProjectBenchmarkStatsOut)
+def get_project_benchmark_stats(
+    _: User = Depends(require_action("admin:projects")),
+    db: Session = Depends(get_db),
+    user_id: int | None = Query(default=None),
+    pipeline_type: str | None = Query(default=None),
+    q: str | None = Query(default=None),
+    date_from: str | None = Query(default=None),
+    date_to: str | None = Query(default=None),
+    tz: str | None = Query(default=None, max_length=64),
+) -> ProjectBenchmarkStatsOut:
+    stats = project_service.project_benchmark_stats(
+        db,
+        user_id=user_id,
+        pipeline_type=pipeline_type,
+        q=q,
+        date_from=date_from,
+        date_to=date_to,
+        tz=tz,
+    )
+    return ProjectBenchmarkStatsOut(**stats)
+
+
+@router.get("/projects", response_model=PaginatedResponse[ProjectSummary])
 def list_all_projects(
     _: User = Depends(require_action("admin:projects")),
     db: Session = Depends(get_db),
@@ -1467,8 +1694,10 @@ def list_all_projects(
     tz: str | None = Query(default=None, max_length=64),
     sort_by: str | None = Query(default=None),
     sort_dir: str | None = Query(default=None),
-) -> list[ProjectSummary]:
-    projects = project_service.list_all_projects(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
+) -> PaginatedResponse[ProjectSummary]:
+    result = project_service.list_all_projects(
         db,
         user_id=user_id,
         pipeline_type=pipeline_type,
@@ -1478,11 +1707,18 @@ def list_all_projects(
         tz=tz,
         sort_by=sort_by,
         sort_dir=sort_dir,
+        page=page,
+        page_size=page_size,
     )
-    return [
-        ProjectSummary(**project_service.project_to_summary(p, include_owner=True))
-        for p in projects
-    ]
+    return PaginatedResponse(
+        items=[
+            ProjectSummary(**project_service.project_to_summary(p, include_owner=True))
+            for p in result.items
+        ],
+        total=result.total,
+        page=result.page,
+        page_size=result.page_size,
+    )
 
 
 @router.get("/projects/export.csv")
@@ -1637,7 +1873,10 @@ def delete_any_project(
         success=True,
         details={"title": title},
     )
-@router.get("/plant-model/conversations", response_model=list[PlantModelConversationSummary])
+@router.get(
+    "/plant-model/conversations",
+    response_model=PaginatedResponse[PlantModelConversationSummary],
+)
 def list_all_plant_model_conversations(
     _: User = Depends(require_action("admin:plant_model")),
     db: Session = Depends(get_db),
@@ -1649,8 +1888,10 @@ def list_all_plant_model_conversations(
     tz: str | None = Query(default=None, max_length=64),
     sort_by: str | None = Query(default=None),
     sort_dir: str | None = Query(default=None),
-) -> list[PlantModelConversationSummary]:
-    conversations = plant_model_chat_service.list_all_conversations(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
+) -> PaginatedResponse[PlantModelConversationSummary]:
+    result = plant_model_chat_service.list_all_conversations(
         db,
         user_id=user_id,
         status=status_filter,
@@ -1660,13 +1901,20 @@ def list_all_plant_model_conversations(
         tz=tz,
         sort_by=sort_by,
         sort_dir=sort_dir,
+        page=page,
+        page_size=page_size,
     )
-    return [
-        PlantModelConversationSummary(
-            **plant_model_chat_service.conversation_to_summary(c, include_owner=True)
-        )
-        for c in conversations
-    ]
+    return PaginatedResponse(
+        items=[
+            PlantModelConversationSummary(
+                **plant_model_chat_service.conversation_to_summary(c, include_owner=True)
+            )
+            for c in result.items
+        ],
+        total=result.total,
+        page=result.page,
+        page_size=result.page_size,
+    )
 
 
 @router.get("/plant-model/conversations/export.csv")

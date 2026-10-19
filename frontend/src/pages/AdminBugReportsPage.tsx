@@ -11,8 +11,8 @@ import { ImageModal } from '../components/ImageModal'
 import { StatusMessage } from '../components/StatusMessage'
 import { useAuth } from '../context/AuthContext'
 import { useAdminDateRange } from '../hooks/useAdminDateRange'
-import { useClientPagination } from '../hooks/useClientPagination'
-import { useClientSort } from '../hooks/useClientSort'
+import { useServerPagination } from '../hooks/useServerPagination'
+import { useServerSort } from '../hooks/useServerSort'
 import { downloadCsv } from '../lib/downloadCsv'
 import {
   btnBase,
@@ -51,7 +51,16 @@ export function AdminBugReportsPage() {
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [total, setTotal] = useState(0)
   const [saving, setSaving] = useState(false)
+  const { sortBy, sortDir, toggle: toggleSort, resetKey: sortResetKey } = useServerSort(
+    'created_at',
+    'desc',
+  )
+  const pagination = useServerPagination({
+    total,
+    resetKey: `${statusFilter}|${dateRange.dateFrom}|${dateRange.dateTo}|${sortResetKey}`,
+  })
   const [updatingId, setUpdatingId] = useState<number | null>(null)
   const [modalImage, setModalImage] = useState<{
     url: string
@@ -63,46 +72,41 @@ export function AdminBugReportsPage() {
     setLoading(true)
     setError(null)
     try {
-      const [nextSettings, list] = await Promise.all([
+      const [nextSettings, page] = await Promise.all([
         bugReportsApi.getSettings(),
-        bugReportsApi.listAdmin({ status: statusFilter, ...dateRange.params }),
+        bugReportsApi.listAdmin({
+          status: statusFilter,
+          ...dateRange.params,
+          sort_by: sortBy,
+          sort_dir: sortDir,
+          page: pagination.page,
+          page_size: pagination.pageSize,
+        }),
       ])
       setSettings(nextSettings)
-      setReports(list)
-      setSelectedId((prev) => (prev && list.some((r) => r.id === prev) ? prev : null))
+      setReports(page.items)
+      setTotal(page.total)
+      setSelectedId((prev) =>
+        prev && page.items.some((r) => r.id === prev) ? prev : null,
+      )
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load bug reports')
     } finally {
       setLoading(false)
     }
-  }, [dateRange.params, statusFilter])
+  }, [
+    dateRange.params,
+    pagination.page,
+    pagination.pageSize,
+    sortBy,
+    sortDir,
+    statusFilter,
+  ])
 
   useEffect(() => {
     if (!canManage) return
     void load()
   }, [canManage, load])
-
-  const bugSortAccessors = useMemo(
-    () => ({
-      created_at: (r: BugReport) => r.created_at ?? '',
-      user_email: (r: BugReport) => r.user_email ?? '',
-      status: (r: BugReport) => r.status,
-    }),
-    [],
-  )
-
-  const {
-    sortedItems: sortedReports,
-    sortBy,
-    sortDir,
-    toggle: toggleSort,
-    resetKey: sortResetKey,
-  } = useClientSort({
-    items: reports,
-    defaultKey: 'created_at',
-    defaultDir: 'desc',
-    accessors: bugSortAccessors,
-  })
 
   const exportParams = useMemo(
     () => ({
@@ -113,10 +117,6 @@ export function AdminBugReportsPage() {
     }),
     [dateRange.params, sortBy, sortDir, statusFilter],
   )
-
-  const pagination = useClientPagination(sortedReports, {
-    resetKey: `${statusFilter}|${dateRange.dateFrom}|${dateRange.dateTo}|${sortResetKey}`,
-  })
 
   if (!canManage) {
     return <Navigate to="/admin" replace />
@@ -149,12 +149,11 @@ export function AdminBugReportsPage() {
     setMessage(null)
     try {
       const updated = await bugReportsApi.updateStatus(report.id, next)
-      setReports((prev) => {
-        if (statusFilter !== 'all' && updated.status !== statusFilter) {
-          return prev.filter((r) => r.id !== updated.id)
-        }
-        return prev.map((r) => (r.id === updated.id ? updated : r))
-      })
+      if (statusFilter !== 'all' && updated.status !== statusFilter) {
+        await load()
+      } else {
+        setReports((prev) => prev.map((r) => (r.id === updated.id ? updated : r)))
+      }
       setMessage(next === 'fixed' ? 'Marked as fixed.' : 'Reopened.')
       if (selectedId === updated.id) setSelectedId(updated.id)
     } catch (err) {
@@ -253,13 +252,13 @@ export function AdminBugReportsPage() {
 
       <section className={cardPanel}>
         <p className="mb-3 text-sm text-muted-text">
-          {reports.length} report{reports.length === 1 ? '' : 's'}
+          {total} report{total === 1 ? '' : 's'}
           {statusFilter !== 'all' ? ` (${statusFilter})` : ''}
         </p>
 
         {loading ? (
           <p className="text-sm text-muted-text">Loading…</p>
-        ) : reports.length === 0 ? (
+        ) : total === 0 ? (
           <p className="text-sm text-muted-text">No bug reports yet.</p>
         ) : (
           <div className="space-y-3">
@@ -297,7 +296,7 @@ export function AdminBugReportsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {pagination.pageItems.map((report) => (
+                  {reports.map((report) => (
                     <tr
                       key={report.id}
                       className={`border-b border-border-subtle align-top ${

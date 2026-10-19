@@ -4,13 +4,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
 from sqlalchemy.orm import Session
 
 from backend_api.db.models import User
 from backend_api.db.session import get_db
 from backend_api.http.dependencies import require_action
-from backend_api.http.schemas.common import MediaUploadResponse
+from backend_api.common.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
+from backend_api.http.schemas.common import MediaUploadResponse, PaginatedResponse
 from backend_api.http.schemas.site import (
     LandingPayload,
     NavMenuItemCreate,
@@ -118,13 +119,21 @@ def admin_put_landing(
     return result
 
 
-@router.get("/admin/site/menus", response_model=list[NavMenuItemOut])
+@router.get("/admin/site/menus", response_model=PaginatedResponse[NavMenuItemOut])
 def admin_list_menus(
     location: str | None = None,
     _: User = Depends(require_action("admin:site")),
     db: Session = Depends(get_db),
-) -> list[NavMenuItemOut]:
-    return [NavMenuItemOut.model_validate(m) for m in site_service.list_menus(db, location)]
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
+) -> PaginatedResponse[NavMenuItemOut]:
+    result = site_service.list_menus(db, location, page=page, page_size=page_size)
+    return PaginatedResponse(
+        items=[NavMenuItemOut.model_validate(m) for m in result.items],
+        total=result.total,
+        page=result.page,
+        page_size=result.page_size,
+    )
 
 
 @router.post("/admin/site/menus", response_model=NavMenuItemOut, status_code=status.HTTP_201_CREATED)

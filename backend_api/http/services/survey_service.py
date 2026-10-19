@@ -70,7 +70,7 @@ def feedback_completed_for(user: User, pipeline_type: str) -> bool:
 
 def list_videos(db: Session) -> list[TutorialVideo]:
     """Proxy for onboarding status; videos are owned by tutorials_service."""
-    return tutorials_service.list_videos(db)
+    return tutorials_service.list_videos(db, page_size=None).items
 
 
 def should_show_tutorial(user: User, videos: list[TutorialVideo]) -> bool:
@@ -264,8 +264,11 @@ def list_profile_responses(
     date_from: str | None = None,
     date_to: str | None = None,
     tz: str | None = None,
-) -> list[User]:
+    page: int = 1,
+    page_size: int | None = None,
+):
     from backend_api.common.date_range import apply_sql_date_range
+    from backend_api.common.pagination import paginate_query
 
     query = db.query(User).filter(User.profile_survey_completed_at.isnot(None))
     query = apply_sql_date_range(
@@ -275,7 +278,8 @@ def list_profile_responses(
         date_to=date_to,
         tz=tz,
     )
-    return query.order_by(User.profile_survey_completed_at.desc()).all()
+    query = query.order_by(User.profile_survey_completed_at.desc())
+    return paginate_query(query, page=page, page_size=page_size)
 
 
 def list_before_test_responses(
@@ -284,8 +288,11 @@ def list_before_test_responses(
     date_from: str | None = None,
     date_to: str | None = None,
     tz: str | None = None,
-) -> list[tuple[BeforeTestSurveyResponse, User]]:
+    page: int = 1,
+    page_size: int | None = None,
+):
     from backend_api.common.date_range import apply_sql_date_range
+    from backend_api.common.pagination import paginate_query
 
     query = (
         db.query(BeforeTestSurveyResponse, User)
@@ -298,8 +305,8 @@ def list_before_test_responses(
         date_to=date_to,
         tz=tz,
     )
-    rows = query.order_by(BeforeTestSurveyResponse.created_at.desc()).all()
-    return list(rows)
+    query = query.order_by(BeforeTestSurveyResponse.created_at.desc())
+    return paginate_query(query, page=page, page_size=page_size)
 
 
 def list_feedback_responses(
@@ -308,8 +315,11 @@ def list_feedback_responses(
     date_from: str | None = None,
     date_to: str | None = None,
     tz: str | None = None,
-) -> list[tuple[FeedbackSurveyResponse, User]]:
+    page: int = 1,
+    page_size: int | None = None,
+):
     from backend_api.common.date_range import apply_sql_date_range
+    from backend_api.common.pagination import paginate_query
 
     query = (
         db.query(FeedbackSurveyResponse, User)
@@ -322,8 +332,8 @@ def list_feedback_responses(
         date_to=date_to,
         tz=tz,
     )
-    rows = query.order_by(FeedbackSurveyResponse.created_at.desc()).all()
-    return list(rows)
+    query = query.order_by(FeedbackSurveyResponse.created_at.desc())
+    return paginate_query(query, page=page, page_size=page_size)
 
 
 def record_design_grade_feedback(

@@ -512,7 +512,7 @@ def _migrate_legacy_user_actions(db: Session) -> None:
         by_user.setdefault(int(user_id), []).append(str(code))
 
     plan_by_codes: dict[frozenset[str], Plan] = {}
-    for plan in plan_service.list_plans(db):
+    for plan in plan_service.list_plans(db, page_size=None).items:
         plan_by_codes[frozenset(plan.action_codes())] = plan
 
     default_plan = plan_service.get_default_plan(db)

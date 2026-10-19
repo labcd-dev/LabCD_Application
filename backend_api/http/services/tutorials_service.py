@@ -10,6 +10,7 @@ from pathlib import Path
 from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
+from backend_api.common.pagination import PaginationResult, paginate_query
 from backend_api.db.models import ControlDesignTemplate, TutorialDocument, TutorialVideo
 from backend_api.http.config import API_PREFIX, UPLOADS_DIR
 
@@ -62,12 +63,16 @@ def _unique_doc_slug(db: Session, base: str, exclude_id: int | None = None) -> s
 # --- Videos ---
 
 
-def list_videos(db: Session) -> list[TutorialVideo]:
-    return (
-        db.query(TutorialVideo)
-        .order_by(TutorialVideo.sort_order.asc(), TutorialVideo.id.asc())
-        .all()
+def list_videos(
+    db: Session,
+    *,
+    page: int = 1,
+    page_size: int | None = None,
+) -> PaginationResult[TutorialVideo]:
+    query = db.query(TutorialVideo).order_by(
+        TutorialVideo.sort_order.asc(), TutorialVideo.id.asc()
     )
+    return paginate_query(query, page=page, page_size=page_size)
 
 
 def get_video(db: Session, video_id: int) -> TutorialVideo | None:
@@ -147,12 +152,16 @@ def delete_video(db: Session, video: TutorialVideo) -> None:
 # --- Documents ---
 
 
-def list_documents(db: Session) -> list[TutorialDocument]:
-    return (
-        db.query(TutorialDocument)
-        .order_by(TutorialDocument.sort_order.asc(), TutorialDocument.id.asc())
-        .all()
+def list_documents(
+    db: Session,
+    *,
+    page: int = 1,
+    page_size: int | None = None,
+) -> PaginationResult[TutorialDocument]:
+    query = db.query(TutorialDocument).order_by(
+        TutorialDocument.sort_order.asc(), TutorialDocument.id.asc()
     )
+    return paginate_query(query, page=page, page_size=page_size)
 
 
 def get_document(db: Session, document_id: int) -> TutorialDocument | None:
@@ -221,12 +230,16 @@ def delete_document(db: Session, document: TutorialDocument) -> None:
 # --- Templates ---
 
 
-def list_templates(db: Session) -> list[ControlDesignTemplate]:
-    return (
-        db.query(ControlDesignTemplate)
-        .order_by(ControlDesignTemplate.sort_order.asc(), ControlDesignTemplate.id.asc())
-        .all()
+def list_templates(
+    db: Session,
+    *,
+    page: int = 1,
+    page_size: int | None = None,
+) -> PaginationResult[ControlDesignTemplate]:
+    query = db.query(ControlDesignTemplate).order_by(
+        ControlDesignTemplate.sort_order.asc(), ControlDesignTemplate.id.asc()
     )
+    return paginate_query(query, page=page, page_size=page_size)
 
 
 def get_template(db: Session, template_id: int) -> ControlDesignTemplate | None:

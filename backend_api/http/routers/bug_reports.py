@@ -7,6 +7,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from backend_api.common.csv_utils import csv_response
+from backend_api.common.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 from backend_api.db.models import User
 from backend_api.db.session import get_db
 from backend_api.http.dependencies import get_current_user, require_action
@@ -16,6 +17,7 @@ from backend_api.http.schemas.bug_reports import (
     BugReportSettingsUpdate,
     BugReportStatusUpdate,
 )
+from backend_api.http.schemas.common import PaginatedResponse
 from backend_api.http.services import audit_service, bug_report_service
 
 router = APIRouter(tags=["bug-reports"])
@@ -120,7 +122,7 @@ def admin_export_bug_reports_csv(
     return csv_response(content, "bug_reports.csv")
 
 
-@router.get("/admin/bug-reports", response_model=list[BugReportOut])
+@router.get("/admin/bug-reports", response_model=PaginatedResponse[BugReportOut])
 def admin_list_bug_reports(
     report_status: str | None = Query(None, alias="status", pattern="^(open|fixed|all)$"),
     date_from: str | None = Query(default=None),
@@ -128,10 +130,12 @@ def admin_list_bug_reports(
     tz: str | None = Query(default=None, max_length=64),
     sort_by: str | None = Query(default=None),
     sort_dir: str | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
     _: User = Depends(require_action("admin:bug_reports")),
     db: Session = Depends(get_db),
-) -> list[BugReportOut]:
-    rows = bug_report_service.list_reports(
+) -> PaginatedResponse[BugReportOut]:
+    result = bug_report_service.list_reports(
         db,
         status=report_status,
         date_from=date_from,
@@ -139,8 +143,18 @@ def admin_list_bug_reports(
         tz=tz,
         sort_by=sort_by,
         sort_dir=sort_dir,
+        page=page,
+        page_size=page_size,
     )
-    return [BugReportOut.model_validate(bug_report_service.to_out(r)) for r in rows]
+    return PaginatedResponse(
+        items=[
+            BugReportOut.model_validate(bug_report_service.to_out(r))
+            for r in result.items
+        ],
+        total=result.total,
+        page=result.page,
+        page_size=result.page_size,
+    )
 
 
 @router.get("/admin/bug-reports/{report_id}", response_model=BugReportOut)

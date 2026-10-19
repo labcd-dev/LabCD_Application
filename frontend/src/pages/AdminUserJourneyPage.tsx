@@ -2,7 +2,7 @@ import { Navigate } from 'react-router-dom'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { adminApi } from '../api/endpoints'
-import type { AuthUser, JourneySession, UserJourney } from '../api/types'
+import type { JourneySession, UserJourney, UserOption } from '../api/types'
 import { JourneyComments } from '../components/admin/journey/JourneyComments'
 import { JourneyDossierColumn } from '../components/admin/journey/JourneyDossierColumn'
 import { JourneyHero } from '../components/admin/journey/JourneyHero'
@@ -21,7 +21,7 @@ type ViewTab = 'dossier' | 'timeline'
 export function AdminUserJourneyPage() {
   const { hasAction } = useAuth()
   const canManage = hasAction('admin:users')
-  const [users, setUsers] = useState<AuthUser[]>([])
+  const [users, setUsers] = useState<UserOption[]>([])
   const [search, setSearch] = useState('')
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [journey, setJourney] = useState<UserJourney | null>(null)
@@ -38,8 +38,7 @@ export function AdminUserJourneyPage() {
     return users.filter((u) => {
       const idMatch = String(u.id) === q || String(u.id).includes(q)
       const emailMatch = u.email.toLowerCase().includes(q)
-      const nameMatch = (u.display_name || '').toLowerCase().includes(q)
-      return idMatch || emailMatch || nameMatch
+      return idMatch || emailMatch
     })
   }, [search, users])
 
@@ -47,7 +46,7 @@ export function AdminUserJourneyPage() {
     setLoadingUsers(true)
     setError(null)
     try {
-      const list = await adminApi.listUsers()
+      const list = await adminApi.listUserOptions()
       setUsers(list)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load users')

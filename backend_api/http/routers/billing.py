@@ -49,7 +49,11 @@ def list_public_plans(db: Session = Depends(get_db)) -> list[PublicPlanOut]:
     out so this page is purely additive and doesn't change what those plans
     look like anywhere else in the app.
     """
-    plans = [p for p in plan_service.list_plans(db, active_only=True) if p.plan_code]
+    plans = [
+        p
+        for p in plan_service.list_plans(db, active_only=True, page_size=None).items
+        if p.plan_code
+    ]
     plans.sort(key=lambda p: _PLAN_CODE_ORDER.get(p.plan_code or "", 99))
     return [
         PublicPlanOut(

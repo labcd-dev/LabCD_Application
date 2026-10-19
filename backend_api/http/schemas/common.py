@@ -1,8 +1,17 @@
 """Shared API schemas."""
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Generic, List, Optional, TypeVar
 
 from pydantic import BaseModel, Field
+
+T = TypeVar("T")
+
+
+class PaginatedResponse(BaseModel, Generic[T]):
+    items: List[T]
+    total: int
+    page: int
+    page_size: int
 
 
 class JobResponse(BaseModel):

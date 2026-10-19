@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
+from backend_api.common.pagination import PaginationResult, paginate_query
 from backend_api.db.models import BlogPost
 
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
@@ -30,11 +31,18 @@ def _unique_slug(db: Session, base: str, exclude_id: int | None = None) -> str:
         suffix += 1
 
 
-def list_posts(db: Session, *, published_only: bool = False) -> list[BlogPost]:
+def list_posts(
+    db: Session,
+    *,
+    published_only: bool = False,
+    page: int = 1,
+    page_size: int | None = None,
+) -> PaginationResult[BlogPost]:
     query = db.query(BlogPost)
     if published_only:
         query = query.filter(BlogPost.status == "published")
-    return query.order_by(BlogPost.created_at.desc()).all()
+    query = query.order_by(BlogPost.created_at.desc())
+    return paginate_query(query, page=page, page_size=page_size)
 
 
 def get_post(db: Session, post_id: int) -> BlogPost | None:

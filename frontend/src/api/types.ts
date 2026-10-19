@@ -37,6 +37,38 @@ export interface MediaUploadResponse {
   url: string
 }
 
+export interface PaginatedResponse<T> {
+  items: T[]
+  total: number
+  page: number
+  page_size: number
+}
+
+export interface UserOption {
+  id: number
+  email: string
+}
+
+export interface OverviewStats {
+  users_total: number
+  users_active: number
+  users_admins: number
+  plans_active: number
+  plans_total: number
+  projects_total: number
+  default_plan_id: number | null
+  default_plan_name: string | null
+  max_modules: number
+}
+
+export interface ProjectBenchmarkStats {
+  total_evaluated: number
+  avg_score: number | null
+  avg_rating: number | null
+  alignment_pct: number | null
+  success_rate: number | null
+}
+
 export interface ModelsResponse {
   llm_models: string[]
   rag_models: string[]
@@ -692,9 +724,9 @@ export interface BeforeTestSurveyResponseRow {
 }
 
 export interface SurveyResponses {
-  profile: ProfileSurveyResponseRow[]
-  feedback: FeedbackSurveyResponseRow[]
-  before_test?: BeforeTestSurveyResponseRow[]
+  profile: PaginatedResponse<ProfileSurveyResponseRow>
+  feedback: PaginatedResponse<FeedbackSurveyResponseRow>
+  before_test: PaginatedResponse<BeforeTestSurveyResponseRow>
 }
 
 export interface OutroSurveyPayload {

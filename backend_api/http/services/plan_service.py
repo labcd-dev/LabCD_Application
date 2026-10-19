@@ -6,6 +6,7 @@ from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
+from backend_api.common.pagination import PaginationResult, paginate_sequence
 from backend_api.db.models import AppSetting, Plan, User
 from backend_api.http.config import DEFAULT_LLM_MODELS
 from backend_api.http.services.auth_service import ensure_actions
@@ -72,7 +73,9 @@ def list_plans(
     q: str | None = None,
     sort_by: str | None = None,
     sort_dir: str | None = None,
-) -> list[Plan]:
+    page: int = 1,
+    page_size: int | None = None,
+) -> PaginationResult[Plan]:
     from backend_api.common.query_sort import sort_rows
 
     query = db.query(Plan)
@@ -93,7 +96,7 @@ def list_plans(
                 filtered.append(plan)
         plans = filtered
 
-    return sort_rows(
+    sorted_plans = sort_rows(
         plans,
         sort_by=sort_by,
         sort_dir=sort_dir,
@@ -105,6 +108,7 @@ def list_plans(
             "is_active": lambda p: bool(p.is_active),
         },
     )
+    return paginate_sequence(sorted_plans, page=page, page_size=page_size)
 
 
 def get_plan(db: Session, plan_id: int) -> Plan | None:

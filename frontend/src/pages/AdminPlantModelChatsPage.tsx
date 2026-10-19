@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { MessagesSquare, Search, Trash2 } from 'lucide-react'
 import { adminApi } from '../api/endpoints'
-import type { AuthUser, PlantModelConversationSummary } from '../api/types'
+import type { PlantModelConversationSummary, UserOption } from '../api/types'
 import { AdminDateRangeFilter } from '../components/admin/AdminDateRangeFilter'
 import { AdminDownloadCsvButton } from '../components/admin/AdminDownloadCsvButton'
 import { AdminPagination } from '../components/admin/AdminPagination'
@@ -10,8 +10,9 @@ import { AdminSortHeader } from '../components/admin/AdminSortHeader'
 import { StatusMessage } from '../components/StatusMessage'
 import { useAuth } from '../context/AuthContext'
 import { useAdminDateRange } from '../hooks/useAdminDateRange'
-import { useClientPagination } from '../hooks/useClientPagination'
-import { useClientSort } from '../hooks/useClientSort'
+import { useDebouncedValue } from '../hooks/useDebouncedValue'
+import { useServerPagination } from '../hooks/useServerPagination'
+import { useServerSort } from '../hooks/useServerSort'
 import { downloadCsv } from '../lib/downloadCsv'
 import {
   btnBase,
@@ -27,94 +28,87 @@ export function AdminPlantModelChatsPage() {
   const { hasAction } = useAuth()
   const canManage = hasAction('admin:plant_model')
   const [conversations, setConversations] = useState<PlantModelConversationSummary[]>([])
-  const [users, setUsers] = useState<AuthUser[]>([])
+  const [userOptions, setUserOptions] = useState<UserOption[]>([])
+  const [total, setTotal] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
+  const debouncedQuery = useDebouncedValue(query)
   const [userId, setUserId] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const dateRange = useAdminDateRange()
 
-  const load = async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const rows = await adminApi.listPlantModelConversations({
-        user_id: userId ? Number(userId) : undefined,
-        status: statusFilter || undefined,
-        ...dateRange.params,
-      })
-      setConversations(rows)
-      try {
-        setUsers(await adminApi.listUsers())
-      } catch {
-        setUsers([])
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load chats')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    if (!canManage) return
-    void load()
-  }, [userId, statusFilter, dateRange.dateFrom, dateRange.dateTo, canManage])
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    if (!q) return conversations
-    return conversations.filter(
-      (c) =>
-        c.title.toLowerCase().includes(q) ||
-        (c.system_name ?? '').toLowerCase().includes(q) ||
-        (c.owner_email ?? '').toLowerCase().includes(q) ||
-        c.status.toLowerCase().includes(q) ||
-        c.llm_model.toLowerCase().includes(q),
-    )
-  }, [conversations, query])
-
-  const chatSortAccessors = useMemo(
-    () => ({
-      title: (c: PlantModelConversationSummary) => c.system_name || c.title,
-      owner_email: (c: PlantModelConversationSummary) => c.owner_email ?? '',
-      llm_model: (c: PlantModelConversationSummary) => c.llm_model,
-      complexity: (c: PlantModelConversationSummary) => c.complexity ?? 0,
-      status: (c: PlantModelConversationSummary) => c.status,
-      updated_at: (c: PlantModelConversationSummary) => c.updated_at ?? '',
-    }),
-    [],
+  const { sortBy, sortDir, toggle: toggleSort, resetKey: sortResetKey } = useServerSort(
+    'updated_at',
+    'desc',
   )
 
-  const {
-    sortedItems: sortedChats,
-    sortBy,
-    sortDir,
-    toggle: toggleSort,
-    resetKey: sortResetKey,
-  } = useClientSort({
-    items: filtered,
-    defaultKey: 'updated_at',
-    defaultDir: 'desc',
-    accessors: chatSortAccessors,
+  const pagination = useServerPagination({
+    total,
+    resetKey: `${debouncedQuery}|${userId}|${statusFilter}|${dateRange.dateFrom}|${dateRange.dateTo}|${sortResetKey}`,
   })
+
+  const listParams = useMemo(
+    () => ({
+      user_id: userId ? Number(userId) : undefined,
+      status: statusFilter || undefined,
+      q: debouncedQuery.trim() || undefined,
+      ...dateRange.params,
+      sort_by: sortBy,
+      sort_dir: sortDir,
+      page: pagination.page,
+      page_size: pagination.pageSize,
+    }),
+    [
+      dateRange.params,
+      debouncedQuery,
+      pagination.page,
+      pagination.pageSize,
+      sortBy,
+      sortDir,
+      statusFilter,
+      userId,
+    ],
+  )
 
   const exportParams = useMemo(
     () => ({
       user_id: userId ? Number(userId) : undefined,
       status: statusFilter || undefined,
-      q: query.trim() || undefined,
+      q: debouncedQuery.trim() || undefined,
       ...dateRange.params,
       sort_by: sortBy,
       sort_dir: sortDir,
     }),
-    [dateRange.params, query, sortBy, sortDir, statusFilter, userId],
+    [dateRange.params, debouncedQuery, sortBy, sortDir, statusFilter, userId],
   )
 
-  const pagination = useClientPagination(sortedChats, {
-    resetKey: `${query}|${userId}|${statusFilter}|${dateRange.dateFrom}|${dateRange.dateTo}|${sortResetKey}`,
-  })
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const page = await adminApi.listPlantModelConversations(listParams)
+      setConversations(page.items)
+      setTotal(page.total)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load chats')
+    } finally {
+      setLoading(false)
+    }
+  }, [listParams])
+
+  useEffect(() => {
+    if (!canManage) return
+    void load()
+  }, [canManage, load])
+
+  useEffect(() => {
+    if (!canManage) return
+    void adminApi
+      .listUserOptions()
+      .then(setUserOptions)
+      .catch(() => setUserOptions([]))
+  }, [canManage])
 
   if (!canManage) {
     return <Navigate to="/admin" replace />
@@ -124,7 +118,7 @@ export function AdminPlantModelChatsPage() {
     if (!window.confirm('Delete this plant-model chat? This cannot be undone.')) return
     try {
       await adminApi.deletePlantModelConversation(conversationId)
-      setConversations((prev) => prev.filter((c) => c.id !== conversationId))
+      await load()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete chat')
     }
@@ -184,7 +178,7 @@ export function AdminPlantModelChatsPage() {
               onChange={(e) => setUserId(e.target.value)}
             >
               <option value="">All users</option>
-              {users.map((u) => (
+              {userOptions.map((u) => (
                 <option key={u.id} value={u.id}>
                   {u.email}
                 </option>
@@ -217,12 +211,12 @@ export function AdminPlantModelChatsPage() {
 
       {loading ? (
         <p className="text-muted-text">Loading chats…</p>
-      ) : filtered.length === 0 ? (
+      ) : total === 0 ? (
         <div className={`${cardPanel} text-center`}>
           <MessagesSquare className="mx-auto mb-3 size-10 text-muted" />
-          <p className="m-0 font-medium text-foreground">No chats found</p>
+          <p className="m-0 font-medium text-foreground">No conversations found</p>
           <p className="mt-1 mb-0 text-sm text-muted-text">
-            Conversations appear here after users start Design plant-model chats.
+            Chats appear here when users use Design chat to build plant models.
           </p>
         </div>
       ) : (
@@ -232,7 +226,7 @@ export function AdminPlantModelChatsPage() {
               <thead>
                 <tr className="border-b border-border bg-surface-muted text-xs uppercase tracking-wide text-muted">
                   <AdminSortHeader
-                    label="Chat"
+                    label="System / title"
                     sortKey="title"
                     activeKey={sortBy}
                     dir={sortDir}
@@ -248,7 +242,7 @@ export function AdminPlantModelChatsPage() {
                     className="px-4 py-3"
                   />
                   <AdminSortHeader
-                    label="LLM"
+                    label="Model"
                     sortKey="llm_model"
                     activeKey={sortBy}
                     dir={sortDir}
@@ -283,33 +277,33 @@ export function AdminPlantModelChatsPage() {
                 </tr>
               </thead>
               <tbody>
-                {pagination.pageItems.map((chat) => (
-                  <tr key={chat.id} className="border-b border-border-subtle last:border-0">
+                {conversations.map((conversation) => (
+                  <tr key={conversation.id} className="border-b border-border-subtle last:border-0">
                     <td className="px-4 py-3">
                       <div className="font-medium text-foreground">
-                        {chat.system_name || chat.title}
+                        {conversation.system_name || conversation.title}
                       </div>
-                      {chat.system_name && chat.system_name !== chat.title ? (
-                        <div className="text-xs text-muted-text">{chat.title}</div>
-                      ) : null}
+                      {conversation.system_name && (
+                        <div className="text-xs text-muted-text">{conversation.title}</div>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-muted-text">
-                      {chat.owner_email ?? (chat.user_id != null ? `#${chat.user_id}` : '—')}
+                      {conversation.owner_email ?? `#${conversation.user_id}`}
                     </td>
-                    <td className="px-4 py-3 text-muted-text">{chat.llm_model}</td>
-                    <td className="px-4 py-3 text-muted-text">
-                      {chat.complexity != null ? chat.complexity : '—'}
-                    </td>
+                    <td className="px-4 py-3 font-mono text-xs">{conversation.llm_model}</td>
+                    <td className="px-4 py-3">{conversation.complexity ?? '—'}</td>
                     <td className="px-4 py-3">
-                      <span className={statusBadgeClass(chat.status)}>{chat.status}</span>
+                      <span className={statusBadgeClass(conversation.status)}>
+                        {conversation.status}
+                      </span>
                     </td>
                     <td className="px-4 py-3 text-muted-text">
-                      {formatDateTime(chat.updated_at)}
+                      {formatDateTime(conversation.updated_at)}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex gap-2">
                         <Link
-                          to={`/admin/plant-model/${chat.id}`}
+                          to={`/admin/plant-model/${conversation.id}`}
                           className={`${btnBase} ${btnCompact}`}
                         >
                           View
@@ -317,7 +311,7 @@ export function AdminPlantModelChatsPage() {
                         <button
                           type="button"
                           className={`${btnBase} ${btnCompact}`}
-                          onClick={() => void handleDelete(chat.id)}
+                          onClick={() => void handleDelete(conversation.id)}
                         >
                           <Trash2 className="size-3.5" />
                         </button>

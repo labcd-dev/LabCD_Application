@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 
 from backend_api.common.date_range import apply_sql_date_range
-from backend_api.common.query_sort import sort_rows
-from backend_api.db.models import FeedbackSurveyResponse, LoginHistory, User
-from backend_api.http.services import error_tracking_service, project_service, session_service
+from backend_api.common.pagination import PaginationResult, paginate_query
+from backend_api.common.query_sort import apply_sql_order, resolve_sort_key
+from backend_api.db.models import FeedbackSurveyResponse, LoginHistory, Plan, Role, User
+from backend_api.http.services import session_service
 from backend_api.http.services.auth_service import get_user_by_id, is_last_active_admin
 from backend_api.http.services.profile_service import user_out
-
-LOGIN_HISTORY_LIMIT = 200
 
 USER_SORT_KEYS = (
     "email",
@@ -31,8 +31,15 @@ def list_users(
     tz: str | None = None,
     sort_by: str | None = None,
     sort_dir: str | None = None,
-) -> list[User]:
-    query = db.query(User).options(joinedload(User.plan), joinedload(User.role))
+    page: int = 1,
+    page_size: int | None = None,
+) -> PaginationResult[User]:
+    query = (
+        db.query(User)
+        .outerjoin(Plan, Plan.id == User.plan_id)
+        .outerjoin(Role, Role.id == User.role_id)
+        .options(joinedload(User.plan), joinedload(User.role))
+    )
     query = apply_sql_date_range(
         query,
         User.created_at,
@@ -40,37 +47,62 @@ def list_users(
         date_to=date_to,
         tz=tz,
     )
-    users = query.all()
-    needle = (q or "").strip().lower()
-    if needle:
-        filtered: list[User] = []
-        for user in users:
-            plan_name = user.plan.name if user.plan is not None else ""
-            role_name = user.role.name if user.role is not None else ""
-            actions = user.action_codes()
-            if (
-                needle in (user.email or "").lower()
-                or needle in plan_name.lower()
-                or needle in role_name.lower()
-                or any(needle in action.lower() for action in actions)
-            ):
-                filtered.append(user)
-        users = filtered
 
-    return sort_rows(
-        users,
-        sort_by=sort_by,
+    needle = (q or "").strip()
+    if needle:
+        like = f"%{needle}%"
+        query = query.filter(
+            or_(
+                User.email.ilike(like),
+                Plan.name.ilike(like),
+                Role.name.ilike(like),
+            )
+        )
+
+    sort_key = resolve_sort_key(sort_by, USER_SORT_KEYS, default="email")
+    query = apply_sql_order(
+        query,
+        {
+            "email": User.email,
+            "role_name": Role.name,
+            "is_active": User.is_active,
+            "plan_name": Plan.name,
+            "created_at": User.created_at,
+        },
+        sort_by=sort_key,
         sort_dir=sort_dir,
         default_key="email",
         default_dir="asc",
-        accessors={
-            "email": lambda u: u.email or "",
-            "role_name": lambda u: u.role.name if u.role is not None else "",
-            "is_active": lambda u: bool(u.is_active),
-            "plan_name": lambda u: u.plan.name if u.plan is not None else "",
-            "created_at": lambda u: u.created_at.isoformat() if u.created_at else "",
-        },
     )
+    return paginate_query(query, page=page, page_size=page_size)
+
+
+def list_user_options(db: Session) -> list[dict]:
+    """Lightweight id/email list for admin filter dropdowns."""
+    rows = db.query(User.id, User.email).order_by(User.email.asc()).all()
+    return [{"id": row.id, "email": row.email} for row in rows]
+
+
+def user_overview_stats(db: Session) -> dict[str, int]:
+    total = db.query(User).count()
+    active = db.query(User).filter(User.is_active.is_(True)).count()
+    admins = db.query(User).filter(User.is_admin.is_(True)).count()
+    return {"total": total, "active": active, "admins": admins}
+
+
+def list_user_login_history(
+    db: Session,
+    user_id: int,
+    *,
+    page: int = 1,
+    page_size: int | None = 25,
+) -> PaginationResult[LoginHistory]:
+    query = (
+        db.query(LoginHistory)
+        .filter(LoginHistory.user_id == user_id)
+        .order_by(LoginHistory.created_at.desc())
+    )
+    return paginate_query(query, page=page, page_size=page_size)
 
 
 def get_user_detail(db: Session, user_id: int) -> dict | None:
@@ -82,15 +114,6 @@ def get_user_detail(db: Session, user_id: int) -> dict | None:
         db.query(FeedbackSurveyResponse)
         .filter(FeedbackSurveyResponse.user_id == user_id)
         .order_by(FeedbackSurveyResponse.created_at.asc())
-        .all()
-    )
-    projects = project_service.list_all_projects(db, user_id=user_id)
-    errors = error_tracking_service.list_errors(db, user_id=user_id, limit=200)
-    login_rows = (
-        db.query(LoginHistory)
-        .filter(LoginHistory.user_id == user_id)
-        .order_by(LoginHistory.created_at.desc())
-        .limit(LOGIN_HISTORY_LIMIT)
         .all()
     )
 
@@ -126,25 +149,10 @@ def get_user_detail(db: Session, user_id: int) -> dict | None:
         "allowed_models": user.model_ids(),
         "profile_survey": profile_survey,
         "feedback_surveys": feedback_surveys,
-        "projects": [
-            project_service.project_to_summary(project, include_owner=False)
-            for project in projects
-        ],
-        "errors": [
-            error_tracking_service.event_to_dict(event) for event in errors
-        ],
-        "login_history": [
-            {
-                "id": row.id,
-                "email": row.email,
-                "success": row.success,
-                "ip_address": row.ip_address,
-                "user_agent": row.user_agent,
-                "failure_reason": row.failure_reason,
-                "created_at": row.created_at,
-            }
-            for row in login_rows
-        ],
+        # Nested lists are loaded via dedicated paginated endpoints.
+        "projects": [],
+        "errors": [],
+        "login_history": [],
         "sessions": [
             {
                 "id": row.id,

@@ -7,6 +7,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from backend_api.http.schemas.common import PaginatedResponse
 from backend_api.http.schemas.tutorials import TutorialVideoOut
 
 ExperienceLevel = Literal["None", "Beginner", "Intermediate", "Advanced"]
@@ -162,6 +163,6 @@ class BeforeTestSurveyResponseOut(BaseModel):
 
 
 class SurveyResponsesOut(BaseModel):
-    profile: list[ProfileSurveyResponseOut]
-    feedback: list[FeedbackSurveyResponseOut]
-    before_test: list[BeforeTestSurveyResponseOut] = []
+    profile: PaginatedResponse[ProfileSurveyResponseOut]
+    feedback: PaginatedResponse[FeedbackSurveyResponseOut]
+    before_test: PaginatedResponse[BeforeTestSurveyResponseOut]
