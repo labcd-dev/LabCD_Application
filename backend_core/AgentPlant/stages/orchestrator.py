@@ -20,6 +20,7 @@ from backend_core.AgentPlant.stages import stage5_objective as s5
 from backend_core.AgentPlant.stages import stage6_uncertainty as s6
 from backend_core.AgentPlant.stages import stage7_routing as s7
 from backend_core.AgentPlant.stages.pipeline_types import PipelineTurn, PlantPipelineState
+from backend_core.AgentPlant.stages.stage6_terms import clean_terms
 
 FLAT_KEYS_FROM_ROUTING = ("mpc_applicable", "adaptive_applicable")
 STAGE6_CONFIRM_HINT = "Answer my question first, then confirm."
@@ -133,14 +134,10 @@ class PlantPipelineOrchestrator:
     def _stage6_edit(self, state, edit, metadata):
         if not state.proposal.get("ready"):
             return state, PipelineTurn(reply=STAGE6_CONFIRM_HINT)
-        states = list(metadata.get("states") or [])
         proposal = dict(state.proposal)
         for key in ("uncertainty", "disturbance"):
             if key in edit:
-                cleaned = s6.clean_terms(edit[key], states)
-                if cleaned is None:
-                    raise ValueError(f"{key} names a state that does not exist on this plant")
-                proposal[key] = cleaned
+                proposal[key] = clean_terms(edit[key], key, metadata)
         state.proposal = proposal
         return state, PipelineTurn(reply="Updated the uncertainty and disturbance terms. Confirm when ready.")
 
@@ -175,6 +172,7 @@ class PlantPipelineOrchestrator:
             turn = s6.clarifier_turn(self._llm, metadata, [], None)
             state.proposal = _stage6_proposal(turn)
             text = turn["reply"]
+            state.dialogue = [{"role": "assistant", "content": text}]  # so the model remembers what it asked
             steps.append(s6.TRACE_LABEL)
         return state, PipelineTurn(reply=_join(prefix, text), steps=steps)
 
