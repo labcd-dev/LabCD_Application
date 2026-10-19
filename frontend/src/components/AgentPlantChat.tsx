@@ -18,6 +18,7 @@ import type {
   PlantModelStep,
   SimulateResponse,
 } from '../api/types'
+import { formatCaughtError, isInsufficientCreditsError } from '../lib/creditsGate'
 import { AUTO_MODEL, resolveChatModel } from '../lib/modelPicker'
 import { MarkdownContent } from './MarkdownContent'
 import { CodePreview } from './CodePreview'
@@ -994,8 +995,11 @@ export function AgentPlantChat({
           ]
         })
       } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : String(e)
-        setError(msg)
+        const creditsBlocked = isInsufficientCreditsError(e)
+        const msg =
+          formatCaughtError(e, 'Chat request failed') ??
+          'Credits used up — daily credits will reset soon.'
+        if (!creditsBlocked) setError(msg)
         setTraceOpen(false)
         setTurns((all) => {
           const withoutPending = all.filter((t) => t.id !== pendingId)
@@ -1004,7 +1008,7 @@ export function AgentPlantChat({
             {
               id: `a-err-${Date.now()}`,
               role: 'assistant',
-              content: `Error: ${msg}`,
+              content: creditsBlocked ? msg : `Error: ${msg}`,
               status: 'continue',
               at: Date.now(),
             },
@@ -1093,8 +1097,11 @@ export function AgentPlantChat({
           ]
         })
       } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : String(e)
-        setError(msg)
+        const creditsBlocked = isInsufficientCreditsError(e)
+        const msg =
+          formatCaughtError(e, 'Chat request failed') ??
+          'Credits used up — daily credits will reset soon.'
+        if (!creditsBlocked) setError(msg)
         setTraceOpen(false)
         setTurns((prev) => {
           const withoutPending = prev.filter((t) => t.id !== pendingId)
@@ -1103,7 +1110,7 @@ export function AgentPlantChat({
             {
               id: `a-err-${Date.now()}`,
               role: 'assistant',
-              content: `Error: ${msg}`,
+              content: creditsBlocked ? msg : `Error: ${msg}`,
               status: 'continue',
               at: Date.now(),
             },
@@ -1228,8 +1235,11 @@ export function AgentPlantChat({
         }
       }
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e)
-      setError(msg)
+      const creditsBlocked = isInsufficientCreditsError(e)
+      const msg =
+        formatCaughtError(e, 'Chat request failed') ??
+        'Credits used up — daily credits will reset soon.'
+      if (!creditsBlocked) setError(msg)
       setTraceOpen(false)
       setTurns((prev) => {
         const withoutPending = prev.filter((t) => t.id !== pendingId)
@@ -1238,7 +1248,7 @@ export function AgentPlantChat({
           {
             id: `a-err-${Date.now()}`,
             role: 'assistant',
-            content: `Error: ${msg}`,
+            content: creditsBlocked ? msg : `Error: ${msg}`,
             status: 'continue',
             at: Date.now(),
           },
@@ -1322,8 +1332,11 @@ export function AgentPlantChat({
         }
       }
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e)
-      setError(msg)
+      const creditsBlocked = isInsufficientCreditsError(e)
+      const msg =
+        formatCaughtError(e, 'Chat request failed') ??
+        'Credits used up — daily credits will reset soon.'
+      if (!creditsBlocked) setError(msg)
       setTraceOpen(false)
       setTurns((prev) => {
         const withoutPending = prev.filter((t) => t.id !== pendingId)
@@ -1332,7 +1345,7 @@ export function AgentPlantChat({
           {
             id: `a-err-${Date.now()}`,
             role: 'assistant',
-            content: `Error: ${msg}`,
+            content: creditsBlocked ? msg : `Error: ${msg}`,
             status: 'continue',
             at: Date.now(),
           },
@@ -1372,7 +1385,8 @@ export function AgentPlantChat({
           onUseModel(draft, conversationId)
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to launch control module')
+        const msg = formatCaughtError(err, 'Failed to launch control module')
+        if (msg) setError(msg)
       } finally {
         setHitlLaunching(false)
       }

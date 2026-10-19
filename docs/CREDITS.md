@@ -35,5 +35,6 @@ Charge formula: `max(min_charge, ceil(tokens/1000 * per_1k + minutes * per_minut
 - [ ] Register with `?ref=CODE` from an existing user’s referral code; after verify, inviter and invitee bonus balances increase once.
 - [ ] Profile → Credits: spendable / daily / bonus, **next reset time**, ledger, usage sessions, copy invite link.
 - [ ] When spendable is 0, Profile → Credits and the header credit chip show “Credits used up” plus the reset time.
-- [ ] With hard gate on and balance forced to 0 (admin adjust), starting a job returns “Credits used up” (HTTP 402) including the daily reset time.
+- [ ] With hard gate on and balance forced to 0 (admin adjust), starting a chat/job shows the **Credits used up** modal (animated) with next reset time; HTTP 402 still returned.
+- [ ] Clicking the header credit chip while used up opens the same modal.
 - [ ] After a UTC day change (or set `daily_date` back one day in DB), next balance read refills daily without changing bonus.

@@ -23,6 +23,7 @@ import type { MpcTuningParams } from '../components/mpc/MpcParameterDrawer'
 import { DesignCompletedToast } from '../components/DesignCompletedToast'
 import { GradeDesignModal } from '../components/GradeDesignModal'
 import { usePipeline } from '../context/PipelineContext'
+import { isInsufficientCreditsError } from '../lib/creditsGate'
 
 export function MpcPage() {
   const [searchParams] = useSearchParams()
@@ -631,6 +632,19 @@ if __name__ == '__main__':
       })
       setResults(null)
     } catch (err: unknown) {
+      if (isInsufficientCreditsError(err)) {
+        setMessages((prev) => {
+          const copy = [...prev]
+          const last = copy[copy.length - 1]
+          if (last && last.role === 'assistant') {
+            last.pending = false
+            last.content = 'Credits used up — daily credits will reset soon.'
+          }
+          return copy
+        })
+        return
+      }
+
       const msg = err instanceof Error ? err.message : 'Failed to launch MPC job'
       const isOffline =
         msg.toLowerCase().includes('fetch') ||
@@ -699,6 +713,21 @@ if __name__ == '__main__':
         return copy
       })
     } catch (err: unknown) {
+      if (isInsufficientCreditsError(err)) {
+        setMessages((prev) => {
+          const lastIdx = prev.findIndex((m) => m.id === pendingMsg.id)
+          if (lastIdx < 0) return prev
+          const copy = [...prev]
+          copy[lastIdx] = {
+            ...copy[lastIdx],
+            pending: false,
+            content: 'Credits used up — daily credits will reset soon.',
+          }
+          return copy
+        })
+        return
+      }
+
       const msg = err instanceof Error ? err.message : 'Follow-up chat query failed'
       const isOffline =
         msg.toLowerCase().includes('fetch') ||

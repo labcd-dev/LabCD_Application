@@ -51,6 +51,16 @@ function RailTip({ label }: { label: string }) {
   )
 }
 
+function railItemClassName(expanded: boolean, active?: boolean) {
+  return `group relative flex w-full items-center rounded-xl no-underline transition-all duration-150 ${
+    expanded ? 'gap-3 px-3.5 py-2.5' : 'size-10 place-items-center justify-center'
+  } ${
+    active
+      ? 'bg-primary/10 text-primary font-semibold border border-primary/20 shadow-sm dark:bg-primary/15'
+      : 'text-muted-text hover:bg-surface-hover hover:text-foreground font-medium'
+  }`
+}
+
 function RailItem({
   to,
   label,
@@ -67,13 +77,7 @@ function RailItem({
   return (
     <Link
       to={to}
-      className={`group relative flex items-center rounded-xl no-underline transition-all duration-150 ${
-        expanded ? 'gap-3 px-3.5 py-2.5' : 'size-10 place-items-center justify-center'
-      } ${
-        active
-          ? 'bg-primary/10 text-primary font-semibold border border-primary/20 shadow-sm dark:bg-primary/15'
-          : 'text-muted-text hover:bg-surface-hover hover:text-foreground font-medium'
-      }`}
+      className={railItemClassName(expanded, active)}
       aria-label={label}
       aria-current={active ? 'page' : undefined}
     >
@@ -92,6 +96,44 @@ function RailItem({
         <RailTip label={label} />
       )}
     </Link>
+  )
+}
+
+function RailAction({
+  label,
+  active,
+  expanded,
+  onClick,
+  children,
+}: {
+  label: string
+  active?: boolean
+  expanded: boolean
+  onClick: () => void
+  children: ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      className={railItemClassName(expanded, active)}
+      aria-label={label}
+      onClick={onClick}
+    >
+      {active && (
+        <span
+          className={`absolute top-1/2 h-4 w-1 -translate-y-1/2 rounded-full bg-primary ${
+            expanded ? 'left-1' : '-left-1'
+          }`}
+          aria-hidden
+        />
+      )}
+      <span className="grid size-[19px] shrink-0 place-items-center">{children}</span>
+      {expanded ? (
+        <span className="truncate text-[13.5px]">{label}</span>
+      ) : (
+        <RailTip label={label} />
+      )}
+    </button>
   )
 }
 
@@ -123,9 +165,12 @@ export function AppShell({ children, topbarActions }: AppShellProps) {
   const isSilo = location.pathname.startsWith('/silo')
   const isMulo = location.pathname.startsWith('/mulo')
   const isFullBleed = isProfile || isDesign || isMpc || isAdaptive
-  const isContinuingChat =
-    isDesign && new URLSearchParams(location.search).has('conversation')
+  const hasActiveChat = new URLSearchParams(location.search).has('conversation')
+  const isContinuingChat = isDesign && hasActiveChat
   const showCaseStudiesBack = isContinuingChat || isMpc || isAdaptive || isSilo || isMulo
+  const startNewChat = () => {
+    navigate('/design', { replace: true, state: { newChat: Date.now() } })
+  }
   const initials = userInitials(user)
   const label = sectionLabel(location.pathname)
   const sidebarWidth = sidebarOpen ? SIDEBAR_EXPANDED_WIDTH : SIDEBAR_COLLAPSED_WIDTH
@@ -206,20 +251,31 @@ export function AppShell({ children, topbarActions }: AppShellProps) {
           className={`flex flex-1 flex-col gap-1.5 ${sidebarOpen ? '' : 'items-center'}`}
           aria-label="App"
         >
-          <RailItem to="/design" label="Chat" active={isDesign} expanded={sidebarOpen}>
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="size-[19px]"
-              strokeWidth="1.6"
-              aria-hidden
+          {hasActiveChat ? (
+            <RailAction
+              label="+ New chat"
+              active={isDesign}
+              expanded={sidebarOpen}
+              onClick={startNewChat}
             >
-              <path d="M4 5h16v11H8l-4 4V5Z" />
-            </svg>
-          </RailItem>
+              <Plus className="size-[19px]" strokeWidth={1.6} aria-hidden />
+            </RailAction>
+          ) : (
+            <RailItem to="/design" label="Chat" active={isDesign} expanded={sidebarOpen}>
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="size-[19px]"
+                strokeWidth="1.6"
+                aria-hidden
+              >
+                <path d="M4 5h16v11H8l-4 4V5Z" />
+              </svg>
+            </RailItem>
+          )}
           <RailItem
             to="/case-studies"
             label="Case Studies & Projects"
@@ -393,9 +449,7 @@ export function AppShell({ children, topbarActions }: AppShellProps) {
               <button
                 type="button"
                 className="flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-primary to-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm shadow-primary/25 hover:brightness-110 active:scale-95 transition-all"
-                onClick={() =>
-                  navigate('/design', { replace: true, state: { newChat: Date.now() } })
-                }
+                onClick={startNewChat}
               >
                 <Plus className="size-3.5" aria-hidden />
                 <span>New chat</span>

@@ -105,6 +105,12 @@ export async function apiFetch<T>(
   if (!response.ok) {
     const message = await parseError(response)
     reportApiFailure(path, method, response.status, message)
+    if (response.status === 402) {
+      // Lazy import avoids coupling every API call to React credit UI.
+      void import('../lib/creditsGate').then(({ notifyCreditsUsedUp }) => {
+        notifyCreditsUsedUp(message)
+      })
+    }
     throw new ApiError(response.status, message)
   }
 

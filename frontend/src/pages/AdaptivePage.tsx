@@ -28,6 +28,7 @@ import { DesignCompletedToast } from '../components/DesignCompletedToast'
 import { GradeDesignModal } from '../components/GradeDesignModal'
 import { usePipeline } from '../context/PipelineContext'
 import { btnBase, btnCompact, btnPrimary, fieldInput, fieldLabel } from '../lib/classes'
+import { formatCaughtError } from '../lib/creditsGate'
 
 
 /** Keys Adaptive consumes from artifact adaptive-spec / plant.metadata */
@@ -577,8 +578,8 @@ export function AdaptivePage() {
       })
       setResults(null)
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to launch adaptive job'
-      setError(msg)
+      const msg = formatCaughtError(err, 'Failed to launch adaptive job')
+      if (msg) setError(msg)
     } finally {
       setLoading(false)
     }

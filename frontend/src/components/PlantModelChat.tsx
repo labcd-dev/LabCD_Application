@@ -17,6 +17,7 @@ import type {
   PlantModelSessionState,
 } from '../api/types'
 import { useAuth } from '../context/AuthContext'
+import { formatCaughtError } from '../lib/creditsGate'
 import { AUTO_MODEL, resolveChatModel } from '../lib/modelPicker'
 import { btnBase, btnCompact, btnPrimary } from '../lib/classes'
 import { CodePreview } from './CodePreview'
@@ -377,7 +378,8 @@ export function PlantModelChat({
         setFinalResult(null)
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Chat request failed')
+      const msg = formatCaughtError(err, 'Chat request failed')
+      if (msg) setError(msg)
       setMessages((prev) => prev.slice(0, -1))
       setInput(trimmed)
     } finally {
@@ -425,7 +427,8 @@ export function PlantModelChat({
         setFinalResult(draft)
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Complete request failed')
+      const msg = formatCaughtError(err, 'Complete request failed')
+      if (msg) setError(msg)
       setMessages((prev) => prev.slice(0, -1))
     } finally {
       setLoading(false)

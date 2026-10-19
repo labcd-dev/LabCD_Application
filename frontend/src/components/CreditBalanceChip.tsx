@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type MouseEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { Coins } from 'lucide-react'
 import { creditsApi } from '../api/endpoints'
 import type { CreditDashboard } from '../api/types'
+import { notifyCreditsUsedUp } from '../lib/creditsGate'
 import { formatCredits } from '../lib/formatCredits'
 import { formatDateTime, formatTimeUntil } from '../lib/formatDateTime'
 
@@ -38,9 +39,16 @@ export function CreditBalanceChip() {
     ? credits.used_up_message || 'Credits used up'
     : `Daily credits reset ${resetExact}`
 
+  const onUsedUpClick = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (!usedUp) return
+    event.preventDefault()
+    notifyCreditsUsedUp(credits.used_up_message)
+  }
+
   return (
     <Link
       to="/profile?section=credits"
+      onClick={onUsedUpClick}
       className={`flex max-w-[14rem] items-center gap-1.5 rounded-lg border px-2 py-1 no-underline transition-colors ${
         usedUp
           ? 'border-amber-500/40 bg-amber-500/10 text-amber-800 hover:bg-amber-500/15 dark:text-amber-200'

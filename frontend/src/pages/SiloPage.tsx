@@ -15,6 +15,7 @@ import {
   pageIntro,
   pageSection,
 } from '../lib/classes'
+import { formatCaughtError } from '../lib/creditsGate'
 import {
   buildSiloStartConfig,
   DEFAULT_SILO_ADVANCED_CONFIG,
@@ -64,7 +65,8 @@ export function SiloPage() {
       pipeline.setSiloJobId(job.job_id)
       navigate(`/projects/${pipeline.projectId}`)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start silo design')
+      const msg = formatCaughtError(err, 'Failed to start silo design')
+      if (msg) setError(msg)
     } finally {
       setLoading(false)
     }
