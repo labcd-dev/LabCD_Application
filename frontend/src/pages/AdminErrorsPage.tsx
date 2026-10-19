@@ -10,8 +10,9 @@ import { AdminSortHeader } from '../components/admin/AdminSortHeader'
 import { StatusMessage } from '../components/StatusMessage'
 import { useAuth } from '../context/AuthContext'
 import { useAdminDateRange } from '../hooks/useAdminDateRange'
-import { useClientPagination } from '../hooks/useClientPagination'
-import { useClientSort } from '../hooks/useClientSort'
+import { useDebouncedValue } from '../hooks/useDebouncedValue'
+import { useServerPagination } from '../hooks/useServerPagination'
+import { useServerSort } from '../hooks/useServerSort'
 import { downloadCsv } from '../lib/downloadCsv'
 import {
   btnBase,
@@ -49,35 +50,63 @@ export function AdminErrorsPage() {
   const [source, setSource] = useState('')
   const [statusCode, setStatusCode] = useState('')
   const [query, setQuery] = useState('')
+  const debouncedQuery = useDebouncedValue(query)
+  const [total, setTotal] = useState(0)
   const dateRange = useAdminDateRange()
+  const { sortBy, sortDir, toggle: toggleSort, resetKey: sortResetKey } = useServerSort(
+    'created_at',
+    'desc',
+  )
+  const pagination = useServerPagination({
+    total,
+    resetKey: `${source}|${statusCode}|${debouncedQuery}|${dateRange.dateFrom}|${dateRange.dateTo}|${sortResetKey}`,
+  })
+
+  useEffect(() => {
+    if (!canManage) return
+    void adminApi.getErrorTrackingSettings().then((nextSettings) => {
+      setSettings(nextSettings)
+      setErrorTrackingConfig(nextSettings)
+      if (nextSettings.enabled && nextSettings.frontend) {
+        installGlobalErrorHandlers()
+      }
+    }).catch(() => {
+      /* settings load failure is non-fatal for the list */
+    })
+  }, [canManage])
 
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
       const statusFilter = statusCode.trim() ? Number(statusCode) : undefined
-      const [nextSettings, list] = await Promise.all([
-        adminApi.getErrorTrackingSettings(),
-        adminApi.listErrors({
-          source: source || undefined,
-          status_code: Number.isFinite(statusFilter) ? statusFilter : undefined,
-          q: query.trim() || undefined,
-          ...dateRange.params,
-          limit: 200,
-        }),
-      ])
-      setSettings(nextSettings)
-      setErrorTrackingConfig(nextSettings)
-      if (nextSettings.enabled && nextSettings.frontend) {
-        installGlobalErrorHandlers()
-      }
-      setEvents(list)
+      const page = await adminApi.listErrors({
+        source: source || undefined,
+        status_code: Number.isFinite(statusFilter) ? statusFilter : undefined,
+        q: debouncedQuery.trim() || undefined,
+        ...dateRange.params,
+        sort_by: sortBy,
+        sort_dir: sortDir,
+        page: pagination.page,
+        page_size: pagination.pageSize,
+      })
+      setEvents(page.items)
+      setTotal(page.total)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load errors')
     } finally {
       setLoading(false)
     }
-  }, [dateRange.params, query, source, statusCode])
+  }, [
+    dateRange.params,
+    debouncedQuery,
+    pagination.page,
+    pagination.pageSize,
+    sortBy,
+    sortDir,
+    source,
+    statusCode,
+  ])
 
   useEffect(() => {
     if (!canManage) return
@@ -94,45 +123,17 @@ export function AdminErrorsPage() {
     return parts.length ? parts.join(', ') : 'all events'
   }, [dateRange.dateFrom, dateRange.dateTo, query, source, statusCode])
 
-  const errorSortAccessors = useMemo(
-    () => ({
-      created_at: (e: ErrorEvent) => e.created_at ?? '',
-      source: (e: ErrorEvent) => e.source,
-      status_code: (e: ErrorEvent) => e.status_code ?? -1,
-      path: (e: ErrorEvent) => e.path ?? '',
-      message: (e: ErrorEvent) => e.message,
-    }),
-    [],
-  )
-
-  const {
-    sortedItems: sortedEvents,
-    sortBy,
-    sortDir,
-    toggle: toggleSort,
-    resetKey: sortResetKey,
-  } = useClientSort({
-    items: events,
-    defaultKey: 'created_at',
-    defaultDir: 'desc',
-    accessors: errorSortAccessors,
-  })
-
   const exportParams = useMemo(() => {
     const statusFilter = statusCode.trim() ? Number(statusCode) : undefined
     return {
       source: source || undefined,
       status_code: Number.isFinite(statusFilter) ? statusFilter : undefined,
-      q: query.trim() || undefined,
+      q: debouncedQuery.trim() || undefined,
       ...dateRange.params,
       sort_by: sortBy,
       sort_dir: sortDir,
     }
-  }, [dateRange.params, query, sortBy, sortDir, source, statusCode])
-
-  const pagination = useClientPagination(sortedEvents, {
-    resetKey: `${source}|${statusCode}|${query}|${dateRange.dateFrom}|${dateRange.dateTo}|${sortResetKey}`,
-  })
+  }, [dateRange.params, debouncedQuery, sortBy, sortDir, source, statusCode])
 
   if (!canManage) {
     return <Navigate to="/admin" replace />
@@ -290,12 +291,12 @@ export function AdminErrorsPage() {
         </div>
 
         <p className="mb-3 text-sm text-muted-text">
-          Loaded {events.length} event{events.length === 1 ? '' : 's'} ({filteredHint})
+          {total} event{total === 1 ? '' : 's'} ({filteredHint})
         </p>
 
         {loading ? (
           <p className="text-sm text-muted-text">Loading…</p>
-        ) : events.length === 0 ? (
+        ) : total === 0 ? (
           <p className="text-sm text-muted-text">No error events yet.</p>
         ) : (
           <div className="space-y-3">
@@ -346,7 +347,7 @@ export function AdminErrorsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {pagination.pageItems.map((event) => (
+                  {events.map((event) => (
                     <tr key={event.id} className="border-b border-border-subtle align-top">
                       <td className="whitespace-nowrap px-2 py-2 text-muted-text">
                         {formatDateTime(event.created_at)}

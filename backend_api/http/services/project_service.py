@@ -387,11 +387,25 @@ def list_all_projects(
     tz: str | None = None,
     sort_by: str | None = None,
     sort_dir: str | None = None,
-) -> list[Project]:
-    from backend_api.common.date_range import apply_sql_date_range
-    from backend_api.common.query_sort import sort_rows
+    page: int = 1,
+    page_size: int | None = None,
+):
+    """List projects with optional server pagination.
 
-    query = db.query(Project).options(joinedload(Project.owner))
+    ``page_size=None`` returns the full filtered set (CSV/export).
+    Heavy ``file_content`` is deferred so list loads stay fast.
+    """
+    from sqlalchemy import or_
+    from sqlalchemy.orm import defer
+
+    from backend_api.common.date_range import apply_sql_date_range
+    from backend_api.common.pagination import paginate_query, paginate_sequence
+    from backend_api.common.query_sort import apply_sql_order, resolve_sort_key, sort_rows
+
+    query = db.query(Project).options(
+        joinedload(Project.owner),
+        defer(Project.file_content),
+    )
     if user_id is not None:
         query = query.filter(Project.user_id == user_id)
     if pipeline_type is not None:
@@ -403,48 +417,150 @@ def list_all_projects(
         date_to=date_to,
         tz=tz,
     )
-    projects = query.all()
 
-    needle = (q or "").strip().lower()
+    needle = (q or "").strip()
     if needle:
-        filtered: list[Project] = []
-        for project in projects:
-            owner_email = project.owner.email if project.owner else ""
-            if (
-                needle in (project.title or "").lower()
-                or needle in (project.file_name or "").lower()
-                or needle in (owner_email or "").lower()
-                or needle in (project.status or "").lower()
-            ):
-                filtered.append(project)
-        projects = filtered
+        like = f"%{needle}%"
+        query = query.filter(
+            or_(
+                Project.title.ilike(like),
+                Project.file_name.ilike(like),
+                Project.status.ilike(like),
+                Project.owner.has(User.email.ilike(like)),
+            )
+        )
 
-    def _score(project: Project) -> float:
-        summary = project_to_summary(project, include_owner=False)
-        value = summary.get("score")
-        return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else -1.0
-
-    def _rating(project: Project) -> float:
-        summary = project_to_summary(project, include_owner=False)
-        value = summary.get("rating")
-        return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else -1.0
-
-    return sort_rows(
-        projects,
-        sort_by=sort_by,
-        sort_dir=sort_dir,
-        default_key="updated_at",
-        default_dir="desc",
-        accessors={
-            "title": lambda p: p.title or "",
-            "owner_email": lambda p: p.owner.email if p.owner else "",
-            "pipeline_type": lambda p: p.pipeline_type or "",
-            "status": lambda p: p.status or "",
-            "score": _score,
-            "rating": _rating,
-            "updated_at": lambda p: p.updated_at.isoformat() if p.updated_at else "",
-        },
+    sort_key = resolve_sort_key(
+        sort_by,
+        ("title", "owner_email", "pipeline_type", "status", "score", "rating", "updated_at"),
+        default="updated_at",
     )
+
+    # Score/rating live in JSON — sort in memory on a light result set, then page.
+    if sort_key in {"score", "rating"}:
+        projects = query.all()
+
+        def _score(project: Project) -> float:
+            summary = project_to_summary(project, include_owner=False)
+            value = summary.get("score")
+            return (
+                float(value)
+                if isinstance(value, (int, float)) and not isinstance(value, bool)
+                else -1.0
+            )
+
+        def _rating(project: Project) -> float:
+            summary = project_to_summary(project, include_owner=False)
+            value = summary.get("rating")
+            return (
+                float(value)
+                if isinstance(value, (int, float)) and not isinstance(value, bool)
+                else -1.0
+            )
+
+        projects = sort_rows(
+            projects,
+            sort_by=sort_key,
+            sort_dir=sort_dir,
+            default_key="updated_at",
+            default_dir="desc",
+            accessors={
+                "score": _score,
+                "rating": _rating,
+                "updated_at": lambda p: p.updated_at.isoformat() if p.updated_at else "",
+            },
+        )
+        return paginate_sequence(projects, page=page, page_size=page_size)
+
+    if sort_key == "owner_email":
+        query = query.outerjoin(User, User.id == Project.user_id)
+        query = apply_sql_order(
+            query,
+            {"owner_email": User.email},
+            sort_by="owner_email",
+            sort_dir=sort_dir,
+            default_key="owner_email",
+            default_dir="desc",
+        )
+    else:
+        query = apply_sql_order(
+            query,
+            {
+                "title": Project.title,
+                "pipeline_type": Project.pipeline_type,
+                "status": Project.status,
+                "updated_at": Project.updated_at,
+            },
+            sort_by=sort_key,
+            sort_dir=sort_dir,
+            default_key="updated_at",
+            default_dir="desc",
+        )
+    return paginate_query(query, page=page, page_size=page_size)
+
+
+def project_benchmark_stats(
+    db: Session,
+    *,
+    user_id: int | None = None,
+    pipeline_type: str | None = None,
+    q: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    tz: str | None = None,
+) -> dict[str, Any]:
+    """Aggregate score/rating stats for the admin projects overview cards."""
+    page = list_all_projects(
+        db,
+        user_id=user_id,
+        pipeline_type=pipeline_type,
+        q=q,
+        date_from=date_from,
+        date_to=date_to,
+        tz=tz,
+        page_size=None,
+    )
+    summaries = [project_to_summary(p, include_owner=False) for p in page.items]
+    evaluated = [
+        s
+        for s in summaries
+        if (isinstance(s.get("score"), (int, float)) and not isinstance(s.get("score"), bool))
+        or (isinstance(s.get("rating"), (int, float)) and (s.get("rating") or 0) > 0)
+    ]
+    if not evaluated:
+        return {
+            "total_evaluated": 0,
+            "avg_score": None,
+            "avg_rating": None,
+            "alignment_pct": None,
+            "success_rate": None,
+        }
+
+    scored = [
+        s
+        for s in evaluated
+        if isinstance(s.get("score"), (int, float)) and not isinstance(s.get("score"), bool)
+    ]
+    rated = [
+        s
+        for s in evaluated
+        if isinstance(s.get("rating"), (int, float)) and (s.get("rating") or 0) > 0
+    ]
+    avg_score = sum(float(s["score"]) for s in scored) / len(scored) if scored else None
+    avg_rating = sum(float(s["rating"]) for s in rated) / len(rated) if rated else None
+    alignment_pct = None
+    if avg_score is not None and avg_rating is not None:
+        diff = abs(avg_score - avg_rating / 5)
+        alignment_pct = max(0.0, min(100.0, (1 - diff) * 100))
+    success_count = sum(1 for s in scored if s.get("success") is True)
+    success_rate = (success_count / len(scored)) * 100 if scored else None
+    return {
+        "total_evaluated": len(evaluated),
+        "avg_score": avg_score,
+        "avg_rating": avg_rating,
+        "alignment_pct": alignment_pct,
+        "success_rate": success_rate,
+    }
 
 
 def update_project(

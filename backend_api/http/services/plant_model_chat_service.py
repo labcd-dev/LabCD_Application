@@ -190,11 +190,21 @@ def list_all_conversations(
     tz: str | None = None,
     sort_by: str | None = None,
     sort_dir: str | None = None,
-) -> list[PlantModelConversation]:
-    from backend_api.common.date_range import apply_sql_date_range
-    from backend_api.common.query_sort import sort_rows
+    page: int = 1,
+    page_size: int | None = None,
+):
+    from sqlalchemy import or_
+    from sqlalchemy.orm import defer, noload
 
-    query = db.query(PlantModelConversation).options(joinedload(PlantModelConversation.owner))
+    from backend_api.common.date_range import apply_sql_date_range
+    from backend_api.common.pagination import paginate_query
+    from backend_api.common.query_sort import apply_sql_order, resolve_sort_key
+
+    query = db.query(PlantModelConversation).options(
+        joinedload(PlantModelConversation.owner),
+        noload(PlantModelConversation.messages),
+        defer(PlantModelConversation.final_python_code),
+    )
     if user_id is not None:
         query = query.filter(PlantModelConversation.user_id == user_id)
     if status is not None:
@@ -206,38 +216,51 @@ def list_all_conversations(
         date_to=date_to,
         tz=tz,
     )
-    conversations = query.all()
 
-    needle = (q or "").strip().lower()
+    needle = (q or "").strip()
     if needle:
-        filtered: list[PlantModelConversation] = []
-        for conversation in conversations:
-            owner_email = conversation.owner.email if conversation.owner else ""
-            if (
-                needle in (conversation.title or "").lower()
-                or needle in (conversation.final_system_name or "").lower()
-                or needle in (owner_email or "").lower()
-                or needle in (conversation.status or "").lower()
-                or needle in (conversation.llm_model or "").lower()
-            ):
-                filtered.append(conversation)
-        conversations = filtered
+        like = f"%{needle}%"
+        query = query.filter(
+            or_(
+                PlantModelConversation.title.ilike(like),
+                PlantModelConversation.final_system_name.ilike(like),
+                PlantModelConversation.status.ilike(like),
+                PlantModelConversation.llm_model.ilike(like),
+                PlantModelConversation.owner.has(User.email.ilike(like)),
+            )
+        )
 
-    return sort_rows(
-        conversations,
-        sort_by=sort_by,
-        sort_dir=sort_dir,
-        default_key="updated_at",
-        default_dir="desc",
-        accessors={
-            "title": lambda c: c.title or "",
-            "system_name": lambda c: c.final_system_name or "",
-            "owner_email": lambda c: c.owner.email if c.owner else "",
-            "llm_model": lambda c: c.llm_model or "",
-            "status": lambda c: c.status or "",
-            "updated_at": lambda c: c.updated_at.isoformat() if c.updated_at else "",
-        },
+    sort_key = resolve_sort_key(
+        sort_by,
+        ("title", "system_name", "owner_email", "llm_model", "status", "updated_at"),
+        default="updated_at",
     )
+    if sort_key == "owner_email":
+        query = query.outerjoin(User, User.id == PlantModelConversation.user_id)
+        query = apply_sql_order(
+            query,
+            {"owner_email": User.email},
+            sort_by="owner_email",
+            sort_dir=sort_dir,
+            default_key="owner_email",
+            default_dir="desc",
+        )
+    else:
+        query = apply_sql_order(
+            query,
+            {
+                "title": PlantModelConversation.title,
+                "system_name": PlantModelConversation.final_system_name,
+                "llm_model": PlantModelConversation.llm_model,
+                "status": PlantModelConversation.status,
+                "updated_at": PlantModelConversation.updated_at,
+            },
+            sort_by=sort_key,
+            sort_dir=sort_dir,
+            default_key="updated_at",
+            default_dir="desc",
+        )
+    return paginate_query(query, page=page, page_size=page_size)
 
 
 def assert_conversation_access(conversation: PlantModelConversation, user: User) -> None:

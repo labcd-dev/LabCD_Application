@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
 from backend_api.db.models import User
@@ -14,6 +14,8 @@ from backend_api.http.schemas.blog import (
     BlogPostOut,
     BlogPostUpdate,
 )
+from backend_api.common.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
+from backend_api.http.schemas.common import PaginatedResponse
 from backend_api.http.services import audit_service, blog_service
 
 router = APIRouter(tags=["blog"])
@@ -21,7 +23,10 @@ router = APIRouter(tags=["blog"])
 
 @router.get("/blog", response_model=list[BlogPostListItem])
 def list_published_posts(db: Session = Depends(get_db)) -> list[BlogPostListItem]:
-    return [BlogPostListItem.model_validate(p) for p in blog_service.list_posts(db, published_only=True)]
+    return [
+        BlogPostListItem.model_validate(p)
+        for p in blog_service.list_posts(db, published_only=True, page_size=None).items
+    ]
 
 
 @router.get("/blog/{slug}", response_model=BlogPostOut)
@@ -32,12 +37,20 @@ def get_published_post(slug: str, db: Session = Depends(get_db)) -> BlogPostOut:
     return BlogPostOut.model_validate(post)
 
 
-@router.get("/admin/blog", response_model=list[BlogPostListItem])
+@router.get("/admin/blog", response_model=PaginatedResponse[BlogPostListItem])
 def admin_list_posts(
     _: User = Depends(require_action("admin:blog")),
     db: Session = Depends(get_db),
-) -> list[BlogPostListItem]:
-    return [BlogPostListItem.model_validate(p) for p in blog_service.list_posts(db)]
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
+) -> PaginatedResponse[BlogPostListItem]:
+    result = blog_service.list_posts(db, page=page, page_size=page_size)
+    return PaginatedResponse(
+        items=[BlogPostListItem.model_validate(p) for p in result.items],
+        total=result.total,
+        page=result.page,
+        page_size=result.page_size,
+    )
 
 
 @router.get("/admin/blog/{post_id}", response_model=BlogPostOut)

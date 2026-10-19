@@ -453,7 +453,8 @@ def export_users_csv(
         tz=tz,
         sort_by=sort_by,
         sort_dir=sort_dir,
-    )
+        page_size=None,
+    ).items
     rows = [_user_csv_row(user) for user in users]
     return rows_to_csv(rows, USER_CSV_FIELDS)
 
@@ -484,7 +485,8 @@ def export_plans_csv(
         q=q,
         sort_by=sort_by,
         sort_dir=sort_dir,
-    ):
+        page_size=None,
+    ).items:
         data = plan_service.plan_out_dict(plan)
         rows.append(
             {
@@ -524,7 +526,8 @@ def export_projects_csv(
         tz=tz,
         sort_by=sort_by,
         sort_dir=sort_dir,
-    )
+        page_size=None,
+    ).items
     rows = [_project_csv_row(project) for project in projects]
     return rows_to_csv(rows, PROJECT_CSV_FIELDS)
 
@@ -568,7 +571,8 @@ def export_plant_model_conversations_csv(
         tz=tz,
         sort_by=sort_by,
         sort_dir=sort_dir,
-    )
+        page_size=None,
+    ).items
     rows = []
     for conversation in conversations:
         data = plant_model_chat_service.conversation_to_summary(
@@ -906,7 +910,8 @@ def export_project_profiling_csv(
         tz=tz,
         sort_by=sort_by,
         sort_dir=sort_dir,
-    )
+        page_size=None,
+    ).items
     session_rows, scenario_rows, best_rows = _collect_project_summary_rows(projects)
 
     sections = [
@@ -1008,8 +1013,8 @@ def _csv_section(name: str, content: str) -> str:
 
 def _overview_summary_csv(db: Session) -> str:
     users = db.query(User).order_by(User.email).all()
-    plans = plan_service.list_plans(db)
-    projects = project_service.list_all_projects(db)
+    plans = plan_service.list_plans(db, page_size=None).items
+    projects = project_service.list_all_projects(db, page_size=None).items
     default_plan = plan_service.get_default_plan(db)
     active_users = sum(1 for user in users if user.is_active)
     admin_count = sum(1 for user in users if user.is_admin)
@@ -1104,16 +1109,16 @@ def export_overview_csv(db: Session) -> str:
     """
     users = db.query(User).order_by(User.email).all()
     projects_by_user: dict[int, list[Project]] = defaultdict(list)
-    for project in project_service.list_all_projects(db):
+    for project in project_service.list_all_projects(db, page_size=None).items:
         projects_by_user[project.user_id].append(project)
 
     feedback_by_user: dict[int, list[FeedbackSurveyResponse]] = defaultdict(list)
-    for response, user in survey_service.list_feedback_responses(db):
+    for response, user in survey_service.list_feedback_responses(db, page_size=None).items:
         feedback_by_user[user.id].append(response)
 
     errors_by_user: dict[int, list[ErrorEvent]] = defaultdict(list)
     unassigned_errors: list[ErrorEvent] = []
-    for event in error_tracking_service.list_errors(db, limit=1000):
+    for event in error_tracking_service.list_errors(db, limit=1000).items:
         if event.user_id is None:
             unassigned_errors.append(event)
         else:
@@ -1194,7 +1199,8 @@ def export_profile_survey_csv(
             date_from=date_from,
             date_to=date_to,
             tz=tz,
-        )
+            page_size=None,
+        ).items
     ]
     return rows_to_csv(rows, PROFILE_SURVEY_CSV_FIELDS)
 
@@ -1213,7 +1219,8 @@ def export_before_test_survey_csv(
             date_from=date_from,
             date_to=date_to,
             tz=tz,
-        )
+            page_size=None,
+        ).items
     ]
     return rows_to_csv(rows, BEFORE_TEST_SURVEY_CSV_FIELDS)
 
@@ -1232,6 +1239,7 @@ def export_feedback_survey_csv(
             date_from=date_from,
             date_to=date_to,
             tz=tz,
-        )
+            page_size=None,
+        ).items
     ]
     return rows_to_csv(rows, FEEDBACK_SURVEY_CSV_FIELDS)

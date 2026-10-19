@@ -27,7 +27,7 @@ import { AdminPagination } from '../components/admin/AdminPagination'
 import { StatusMessage } from '../components/StatusMessage'
 import { useAuth } from '../context/AuthContext'
 import { useAdminDateRange } from '../hooks/useAdminDateRange'
-import { useClientPagination } from '../hooks/useClientPagination'
+import { useServerPagination } from '../hooks/useServerPagination'
 import { downloadCsv } from '../lib/downloadCsv'
 import {
   btnBase,
@@ -79,6 +79,9 @@ export function AdminSurveyPage() {
   const [profileRows, setProfileRows] = useState<ProfileSurveyResponseRow[]>([])
   const [feedbackRows, setFeedbackRows] = useState<FeedbackSurveyResponseRow[]>([])
   const [beforeTestRows, setBeforeTestRows] = useState<BeforeTestSurveyResponseRow[]>([])
+  const [profileTotal, setProfileTotal] = useState(0)
+  const [feedbackTotal, setFeedbackTotal] = useState(0)
+  const [beforeTestTotal, setBeforeTestTotal] = useState(0)
   const [selectedFeedback, setSelectedFeedback] = useState<FeedbackSurveyResponseRow | null>(null)
   const [selectedBeforeTest, setSelectedBeforeTest] = useState<BeforeTestSurveyResponseRow | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -87,24 +90,56 @@ export function AdminSurveyPage() {
   const [saving, setSaving] = useState(false)
   const dateRange = useAdminDateRange()
 
+  const dateResetKey = `${dateRange.dateFrom}|${dateRange.dateTo}`
+
+  const feedbackPagination = useServerPagination({
+    total: feedbackTotal,
+    resetKey: `${dateResetKey}|feedback`,
+  })
+  const beforeTestPagination = useServerPagination({
+    total: beforeTestTotal,
+    resetKey: `${dateResetKey}|before`,
+  })
+  const profilePagination = useServerPagination({
+    total: profileTotal,
+    resetKey: `${dateResetKey}|profile`,
+  })
+
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
       const [nextSettings, responses] = await Promise.all([
         adminApi.getSurveySettings(),
-        adminApi.listSurveyResponses(dateRange.params),
+        adminApi.listSurveyResponses({
+          ...dateRange.params,
+          profile_page: profilePagination.page,
+          feedback_page: feedbackPagination.page,
+          before_test_page: beforeTestPagination.page,
+          page_size: profilePagination.pageSize,
+        }),
       ])
       setSettings(nextSettings)
-      setProfileRows(responses.profile || [])
-      setFeedbackRows(responses.feedback || [])
-      setBeforeTestRows(responses.before_test || [])
+      setProfileRows(responses.profile.items)
+      setProfileTotal(responses.profile.total)
+      setFeedbackRows(responses.feedback.items)
+      setFeedbackTotal(responses.feedback.total)
+      setBeforeTestRows(responses.before_test.items)
+      setBeforeTestTotal(responses.before_test.total)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load survey admin')
     } finally {
       setLoading(false)
     }
-  }, [dateRange.params])
+  }, [
+    beforeTestPagination.page,
+    beforeTestPagination.pageSize,
+    dateRange.params,
+    feedbackPagination.page,
+    feedbackPagination.pageSize,
+    profilePagination.page,
+    profilePagination.pageSize,
+  ])
 
   useEffect(() => {
     if (!canManage) return
@@ -112,16 +147,6 @@ export function AdminSurveyPage() {
   }, [canManage, load])
 
   const dateExportParams = useMemo(() => dateRange.params, [dateRange.params])
-
-  const feedbackPagination = useClientPagination(feedbackRows, {
-    resetKey: `${dateRange.dateFrom}|${dateRange.dateTo}|feedback`,
-  })
-  const beforeTestPagination = useClientPagination(beforeTestRows, {
-    resetKey: `${dateRange.dateFrom}|${dateRange.dateTo}|before`,
-  })
-  const profilePagination = useClientPagination(profileRows, {
-    resetKey: `${dateRange.dateFrom}|${dateRange.dateTo}|profile`,
-  })
 
   if (!canManage) {
     return <Navigate to="/admin" replace />
@@ -221,7 +246,7 @@ export function AdminSurveyPage() {
           <MessageSquare className="size-3.5" />
           <span>Outro Feedback Surveys</span>
           <span className="rounded-full bg-surface-muted border border-border px-1.5 py-0.2 text-[10px] font-mono">
-            {feedbackRows.length}
+            {feedbackTotal}
           </span>
         </button>
 
@@ -237,7 +262,7 @@ export function AdminSurveyPage() {
           <HelpCircle className="size-3.5" />
           <span>Before-Test Surveys</span>
           <span className="rounded-full bg-surface-muted border border-border px-1.5 py-0.2 text-[10px] font-mono">
-            {beforeTestRows.length}
+            {beforeTestTotal}
           </span>
         </button>
 
@@ -253,7 +278,7 @@ export function AdminSurveyPage() {
           <UserCheck className="size-3.5" />
           <span>Profile Surveys</span>
           <span className="rounded-full bg-surface-muted border border-border px-1.5 py-0.2 text-[10px] font-mono">
-            {profileRows.length}
+            {profileTotal}
           </span>
         </button>
       </div>
@@ -282,11 +307,11 @@ export function AdminSurveyPage() {
                   setError(err instanceof Error ? err.message : 'Failed to download CSV')
                 }
               }}
-              disabled={loading || feedbackRows.length === 0}
+              disabled={loading || feedbackTotal === 0}
             />
           </div>
 
-          {feedbackRows.length === 0 ? (
+          {feedbackTotal === 0 ? (
             <p className="text-sm text-muted-text py-4 text-center">No outro feedback surveys submitted yet.</p>
           ) : (
             <div className="space-y-3">
@@ -311,7 +336,7 @@ export function AdminSurveyPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {feedbackPagination.pageItems.map((row) => {
+                    {feedbackRows.map((row) => {
                       const hasScore = typeof row.score === 'number' && Number.isFinite(row.score)
                       const isSuccess = row.success === true
                       const isFailed = row.success === false
@@ -517,11 +542,11 @@ export function AdminSurveyPage() {
                   setError(err instanceof Error ? err.message : 'Failed to download CSV')
                 }
               }}
-              disabled={loading || beforeTestRows.length === 0}
+              disabled={loading || beforeTestTotal === 0}
             />
           </div>
 
-          {beforeTestRows.length === 0 ? (
+          {beforeTestTotal === 0 ? (
             <p className="text-sm text-muted-text py-4 text-center">No before-test surveys submitted yet.</p>
           ) : (
             <div className="space-y-3">
@@ -544,7 +569,7 @@ export function AdminSurveyPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {beforeTestPagination.pageItems.map((row) => (
+                    {beforeTestRows.map((row) => (
                       <tr
                         key={row.id}
                         className="border-b border-border-subtle hover:bg-surface-hover/50 transition-colors"
@@ -697,11 +722,11 @@ export function AdminSurveyPage() {
                   setError(err instanceof Error ? err.message : 'Failed to download CSV')
                 }
               }}
-              disabled={loading || profileRows.length === 0}
+              disabled={loading || profileTotal === 0}
             />
           </div>
 
-          {profileRows.length === 0 ? (
+          {profileTotal === 0 ? (
             <p className="text-sm text-muted-text py-4 text-center">No profile surveys submitted yet.</p>
           ) : (
             <div className="space-y-3">
@@ -719,7 +744,7 @@ export function AdminSurveyPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {profilePagination.pageItems.map((row) => (
+                    {profileRows.map((row) => (
                       <tr key={row.user_id} className="border-b border-border-subtle hover:bg-surface-hover/50 transition-colors">
                         <td className="px-2.5 py-2 text-foreground font-medium">{row.email}</td>
                         <td className="px-2.5 py-2 text-muted-text">{row.university ?? '—'}</td>

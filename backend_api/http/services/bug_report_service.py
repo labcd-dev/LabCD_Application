@@ -103,9 +103,13 @@ def list_reports(
     tz: str | None = None,
     sort_by: str | None = None,
     sort_dir: str | None = None,
-) -> list[BugReport]:
+    page: int = 1,
+    page_size: int | None = None,
+):
     from backend_api.common.date_range import apply_sql_date_range
-    from backend_api.common.query_sort import sort_rows
+    from backend_api.common.pagination import paginate_query
+    from backend_api.common.query_sort import apply_sql_order, resolve_sort_key
+    from backend_api.db.models import User
 
     query = db.query(BugReport).options(joinedload(BugReport.user))
     if status and status != "all":
@@ -117,19 +121,34 @@ def list_reports(
         date_to=date_to,
         tz=tz,
     )
-    reports = query.all()
-    return sort_rows(
-        reports,
-        sort_by=sort_by,
-        sort_dir=sort_dir,
-        default_key="created_at",
-        default_dir="desc",
-        accessors={
-            "created_at": lambda r: r.created_at.isoformat() if r.created_at else "",
-            "user_email": lambda r: r.user.email if r.user is not None else "",
-            "status": lambda r: r.status or "",
-        },
+    sort_key = resolve_sort_key(
+        sort_by,
+        ("created_at", "user_email", "status"),
+        default="created_at",
     )
+    if sort_key == "user_email":
+        query = query.outerjoin(User, User.id == BugReport.user_id)
+        query = apply_sql_order(
+            query,
+            {"user_email": User.email},
+            sort_by="user_email",
+            sort_dir=sort_dir,
+            default_key="user_email",
+            default_dir="desc",
+        )
+    else:
+        query = apply_sql_order(
+            query,
+            {
+                "created_at": BugReport.created_at,
+                "status": BugReport.status,
+            },
+            sort_by=sort_key,
+            sort_dir=sort_dir,
+            default_key="created_at",
+            default_dir="desc",
+        )
+    return paginate_query(query, page=page, page_size=page_size)
 
 
 def get_report(db: Session, report_id: int) -> BugReport | None:
@@ -186,7 +205,8 @@ def export_csv(
         tz=tz,
         sort_by=sort_by,
         sort_dir=sort_dir,
-    )
+        page_size=None,
+    ).items
     buffer = io.StringIO()
     fieldnames = [
         "id",

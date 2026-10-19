@@ -1,4 +1,4 @@
-import type { AuthUser } from '../../../api/types'
+import type { UserOption } from '../../../api/types'
 import { cardPanel, fieldInput } from '../../../lib/classes'
 import { Search } from 'lucide-react'
 
@@ -7,7 +7,7 @@ type Props = {
   onSearchChange: (value: string) => void
   selectedId: number | null
   onSelect: (id: number | null) => void
-  users: AuthUser[]
+  users: UserOption[]
   loading: boolean
 }
 
@@ -28,7 +28,7 @@ export function JourneyUserPicker({
           <input
             type="search"
             className={`${fieldInput} pl-9`}
-            placeholder="Email, user id, display name…"
+            placeholder="Email or user id…"
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
           />
@@ -49,7 +49,6 @@ export function JourneyUserPicker({
           {users.map((u) => (
             <option key={u.id} value={u.id}>
               {u.email} · usr_{u.id}
-              {u.display_name ? ` · ${u.display_name}` : ''}
             </option>
           ))}
         </select>

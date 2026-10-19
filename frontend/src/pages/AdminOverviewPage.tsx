@@ -2,18 +2,15 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { FolderKanban, Package, Shield, UserCheck, Users, Zap } from 'lucide-react'
 import { adminApi } from '../api/endpoints'
-import type { AuthUser, PlanInfo, ProjectSummary } from '../api/types'
+import type { OverviewStats, PlanInfo } from '../api/types'
 import { AdminDownloadCsvButton } from '../components/admin/AdminDownloadCsvButton'
 import { StatusMessage } from '../components/StatusMessage'
 import { downloadCsv } from '../lib/downloadCsv'
 import { btnPrimary, cardPanel } from '../lib/classes'
 
 export function AdminOverviewPage() {
-  const [users, setUsers] = useState<AuthUser[]>([])
+  const [stats, setStats] = useState<OverviewStats | null>(null)
   const [plans, setPlans] = useState<PlanInfo[]>([])
-  const [projects, setProjects] = useState<ProjectSummary[]>([])
-  const [defaultPlanId, setDefaultPlanId] = useState<number | null>(null)
-  const [defaultPlanName, setDefaultPlanName] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -22,17 +19,12 @@ export function AdminOverviewPage() {
       setLoading(true)
       setError(null)
       try {
-        const [userList, planList, projectList, defaultPlan] = await Promise.all([
-          adminApi.listUsers(),
-          adminApi.listPlans(),
-          adminApi.listProjects(),
-          adminApi.getDefaultPlan(),
+        const [overviewStats, planList] = await Promise.all([
+          adminApi.getOverviewStats(),
+          adminApi.listPlans({ page: 1, page_size: 100 }),
         ])
-        setUsers(userList)
-        setPlans(planList)
-        setProjects(projectList)
-        setDefaultPlanId(defaultPlan.plan_id)
-        setDefaultPlanName(defaultPlan.plan?.name ?? null)
+        setStats(overviewStats)
+        setPlans(planList.items)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load overview')
       } finally {
@@ -42,26 +34,25 @@ export function AdminOverviewPage() {
     void load()
   }, [])
 
-  const activeUsers = users.filter((u) => u.is_active).length
-  const adminCount = users.filter((u) => u.is_admin).length
-  const activePlans = plans.filter((p) => p.is_active).length
+  const defaultPlanId = stats?.default_plan_id ?? null
+  const defaultPlanName = stats?.default_plan_name ?? null
 
-  const stats = [
+  const statCards = [
     {
       label: 'Total users',
-      value: loading ? '—' : String(users.length),
+      value: loading ? '—' : String(stats?.users_total ?? 0),
       icon: Users,
       hint: 'Accounts on this platform',
     },
     {
       label: 'Active',
-      value: loading ? '—' : String(activeUsers),
+      value: loading ? '—' : String(stats?.users_active ?? 0),
       icon: UserCheck,
       hint: 'Can sign in today',
     },
     {
       label: 'Plans',
-      value: loading ? '—' : String(activePlans),
+      value: loading ? '—' : String(stats?.plans_active ?? 0),
       icon: Package,
       hint: defaultPlanName
         ? `Default registration: ${defaultPlanName}`
@@ -69,19 +60,19 @@ export function AdminOverviewPage() {
     },
     {
       label: 'Projects',
-      value: loading ? '—' : String(projects.length),
+      value: loading ? '—' : String(stats?.projects_total ?? 0),
       icon: FolderKanban,
       hint: 'User design sessions',
     },
     {
       label: 'Admins',
-      value: loading ? '—' : String(adminCount),
+      value: loading ? '—' : String(stats?.users_admins ?? 0),
       icon: Shield,
       hint: 'Full control access',
     },
     {
       label: 'Catalog size',
-      value: loading ? '—' : String(plans.reduce((n, p) => Math.max(n, p.actions.length), 0)),
+      value: loading ? '—' : String(stats?.max_modules ?? 0),
       icon: Zap,
       hint: 'Most modules on a single plan',
     },
@@ -118,7 +109,7 @@ export function AdminOverviewPage() {
       {error && <StatusMessage type="error" message={error} />}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {stats.map(({ label, value, icon: Icon, hint }) => (
+        {statCards.map(({ label, value, icon: Icon, hint }) => (
           <div
             key={label}
             className={`${cardPanel} relative overflow-hidden transition-transform duration-200 hover:-translate-y-0.5`}

@@ -10,8 +10,9 @@ import { AdminSortHeader } from '../components/admin/AdminSortHeader'
 import { StatusMessage } from '../components/StatusMessage'
 import { useAuth } from '../context/AuthContext'
 import { useAdminDateRange } from '../hooks/useAdminDateRange'
-import { useClientPagination } from '../hooks/useClientPagination'
-import { useClientSort } from '../hooks/useClientSort'
+import { useDebouncedValue } from '../hooks/useDebouncedValue'
+import { useServerPagination } from '../hooks/useServerPagination'
+import { useServerSort } from '../hooks/useServerSort'
 import { downloadCsv } from '../lib/downloadCsv'
 import {
   btnBase,
@@ -53,8 +54,14 @@ export function AdminAuditLogPage() {
   const [successFilter, setSuccessFilter] = useState<SuccessFilter>('all')
   const [actionFilter, setActionFilter] = useState('')
   const [query, setQuery] = useState('')
+  const debouncedQuery = useDebouncedValue(query)
+  const [total, setTotal] = useState(0)
   const dateRange = useAdminDateRange()
   const [selectedId, setSelectedId] = useState<number | null>(null)
+  const { sortBy, sortDir, toggle: toggleSort, resetKey: sortResetKey } = useServerSort(
+    'created_at',
+    'desc',
+  )
 
   const filterParams = useMemo(() => {
     const success =
@@ -63,34 +70,14 @@ export function AdminAuditLogPage() {
       category: category === 'all' ? undefined : category,
       action: actionFilter.trim() || undefined,
       success,
-      q: query.trim() || undefined,
+      q: debouncedQuery.trim() || undefined,
       ...dateRange.params,
     }
-  }, [actionFilter, category, dateRange.params, query, successFilter])
+  }, [actionFilter, category, dateRange.params, debouncedQuery, successFilter])
 
-  const auditSortAccessors = useMemo(
-    () => ({
-      created_at: (e: AuditLogEntry) => e.created_at ?? '',
-      category: (e: AuditLogEntry) => e.category,
-      action: (e: AuditLogEntry) => e.action,
-      actor_email: (e: AuditLogEntry) => e.actor_email ?? '',
-      success: (e: AuditLogEntry) => e.success,
-      ip_address: (e: AuditLogEntry) => e.ip_address ?? '',
-    }),
-    [],
-  )
-
-  const {
-    sortedItems: sortedEntries,
-    sortBy,
-    sortDir,
-    toggle: toggleSort,
-    resetKey: sortResetKey,
-  } = useClientSort({
-    items: entries,
-    defaultKey: 'created_at',
-    defaultDir: 'desc',
-    accessors: auditSortAccessors,
+  const pagination = useServerPagination({
+    total,
+    resetKey: `${category}|${successFilter}|${actionFilter}|${debouncedQuery}|${dateRange.dateFrom}|${dateRange.dateTo}|${sortResetKey}`,
   })
 
   const exportParams = useMemo(
@@ -106,27 +93,29 @@ export function AdminAuditLogPage() {
     setLoading(true)
     setError(null)
     try {
-      const list = await adminApi.listAuditLog({
+      const page = await adminApi.listAuditLog({
         ...filterParams,
-        limit: 200,
+        sort_by: sortBy,
+        sort_dir: sortDir,
+        page: pagination.page,
+        page_size: pagination.pageSize,
       })
-      setEntries(list)
-      setSelectedId((prev) => (prev && list.some((e) => e.id === prev) ? prev : null))
+      setEntries(page.items)
+      setTotal(page.total)
+      setSelectedId((prev) =>
+        prev && page.items.some((e) => e.id === prev) ? prev : null,
+      )
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load audit log')
     } finally {
       setLoading(false)
     }
-  }, [filterParams])
+  }, [filterParams, pagination.page, pagination.pageSize, sortBy, sortDir])
 
   useEffect(() => {
     if (!canManage) return
     void load()
   }, [canManage, load])
-
-  const pagination = useClientPagination(sortedEntries, {
-    resetKey: `${category}|${successFilter}|${actionFilter}|${query}|${dateRange.dateFrom}|${dateRange.dateTo}|${sortResetKey}`,
-  })
 
   if (!canManage) {
     return <Navigate to="/admin" replace />
@@ -241,12 +230,12 @@ export function AdminAuditLogPage() {
         </div>
 
         <p className="mb-3 text-sm text-muted-text">
-          {entries.length} event{entries.length === 1 ? '' : 's'}
+          {total} event{total === 1 ? '' : 's'}
         </p>
 
         {loading ? (
           <p className="text-sm text-muted-text">Loading…</p>
-        ) : entries.length === 0 ? (
+        ) : total === 0 ? (
           <p className="text-sm text-muted-text">No audit events yet.</p>
         ) : (
           <div className="space-y-3">
@@ -306,7 +295,7 @@ export function AdminAuditLogPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {pagination.pageItems.map((entry) => (
+                  {entries.map((entry) => (
                     <tr
                       key={entry.id}
                       className={`cursor-pointer border-b border-border-subtle align-top ${

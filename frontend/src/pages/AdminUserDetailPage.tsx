@@ -1,12 +1,19 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Copy, KeyRound, Shield, Trash2, UserX } from 'lucide-react'
 import { adminApi } from '../api/endpoints'
-import type { AdminUserCredits, AdminUserDetail, DeveloperApiKeyMeta } from '../api/types'
+import type {
+  AdminUserCredits,
+  AdminUserDetail,
+  DeveloperApiKeyMeta,
+  ErrorEvent,
+  LoginHistoryEntry,
+  ProjectSummary,
+} from '../api/types'
 import { AdminPagination } from '../components/admin/AdminPagination'
 import { StatusMessage } from '../components/StatusMessage'
 import { useAuth } from '../context/AuthContext'
-import { useClientPagination } from '../hooks/useClientPagination'
+import { useServerPagination } from '../hooks/useServerPagination'
 import {
   btnBase,
   btnCompact,
@@ -59,6 +66,24 @@ export function AdminUserDetailPage() {
   const [freshApiKey, setFreshApiKey] = useState<string | null>(null)
   const canCredits = hasAction('admin:credits')
   const canManageUsers = hasAction('admin:users')
+  const [projects, setProjects] = useState<ProjectSummary[]>([])
+  const [projectsTotal, setProjectsTotal] = useState(0)
+  const [errors, setErrors] = useState<ErrorEvent[]>([])
+  const [errorsTotal, setErrorsTotal] = useState(0)
+  const [loginHistory, setLoginHistory] = useState<LoginHistoryEntry[]>([])
+  const [loginTotal, setLoginTotal] = useState(0)
+  const projectsPagination = useServerPagination({
+    total: projectsTotal,
+    resetKey: id,
+  })
+  const errorsPagination = useServerPagination({
+    total: errorsTotal,
+    resetKey: id,
+  })
+  const loginPagination = useServerPagination({
+    total: loginTotal,
+    resetKey: id,
+  })
 
   const loadDetail = async (opts?: { quiet?: boolean }) => {
     if (!opts?.quiet) setLoading(true)
@@ -96,13 +121,67 @@ export function AdminUserDetailPage() {
     void loadDetail()
   }, [id, canCredits, canManageUsers])
 
-  const projects = detail?.projects ?? []
-  const errors = detail?.errors ?? []
-  const loginHistory = detail?.login_history ?? []
+  const loadProjects = useCallback(async () => {
+    if (!Number.isFinite(id)) return
+    try {
+      const page = await adminApi.listUserProjects(id, {
+        page: projectsPagination.page,
+        page_size: projectsPagination.pageSize,
+      })
+      setProjects(page.items)
+      setProjectsTotal(page.total)
+    } catch {
+      setProjects([])
+      setProjectsTotal(0)
+    }
+  }, [id, projectsPagination.page, projectsPagination.pageSize])
+
+  const loadErrors = useCallback(async () => {
+    if (!Number.isFinite(id)) return
+    try {
+      const page = await adminApi.listUserErrors(id, {
+        page: errorsPagination.page,
+        page_size: errorsPagination.pageSize,
+      })
+      setErrors(page.items)
+      setErrorsTotal(page.total)
+    } catch {
+      setErrors([])
+      setErrorsTotal(0)
+    }
+  }, [id, errorsPagination.page, errorsPagination.pageSize])
+
+  const loadLoginHistory = useCallback(async () => {
+    if (!Number.isFinite(id)) return
+    try {
+      const page = await adminApi.listUserLoginHistory(id, {
+        page: loginPagination.page,
+        page_size: loginPagination.pageSize,
+      })
+      setLoginHistory(page.items)
+      setLoginTotal(page.total)
+    } catch {
+      setLoginHistory([])
+      setLoginTotal(0)
+    }
+  }, [id, loginPagination.page, loginPagination.pageSize])
+
+  useEffect(() => {
+    if (!Number.isFinite(id)) return
+    void loadProjects()
+  }, [id, loadProjects])
+
+  useEffect(() => {
+    if (!Number.isFinite(id)) return
+    void loadErrors()
+  }, [id, loadErrors])
+
+  useEffect(() => {
+    if (!Number.isFinite(id)) return
+    void loadLoginHistory()
+  }, [id, loadLoginHistory])
+
   const sessions = detail?.sessions ?? []
-  const projectsPagination = useClientPagination(projects)
-  const errorsPagination = useClientPagination(errors)
-  const loginPagination = useClientPagination(loginHistory)
 
   const isSelf = detail != null && currentUser?.id === detail.user.id
 
@@ -762,9 +841,9 @@ export function AdminUserDetailPage() {
 
       <div className={cardPanel}>
         <h2 className="m-0 mb-4 text-lg font-semibold text-foreground">
-          Login history ({loginHistory.length})
+          Login history ({loginTotal})
         </h2>
-        {loginHistory.length === 0 ? (
+        {loginTotal === 0 ? (
           <p className="m-0 text-sm text-muted-text">No login attempts recorded for this user.</p>
         ) : (
           <div className="space-y-3">
@@ -780,7 +859,7 @@ export function AdminUserDetailPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {loginPagination.pageItems.map((entry) => (
+                  {loginHistory.map((entry) => (
                     <tr key={entry.id} className="border-b border-border-subtle align-top">
                       <td className="px-2 py-2 whitespace-nowrap text-muted-text">
                         {formatDateTime(entry.created_at)}
@@ -885,9 +964,9 @@ export function AdminUserDetailPage() {
 
       <div className={cardPanel}>
         <h2 className="m-0 mb-4 text-lg font-semibold text-foreground">
-          Projects ({projects.length})
+          Projects ({projectsTotal})
         </h2>
-        {projects.length === 0 ? (
+        {projectsTotal === 0 ? (
           <p className="m-0 text-sm text-muted-text">No projects created by this user.</p>
         ) : (
           <div className="space-y-3">
@@ -904,7 +983,7 @@ export function AdminUserDetailPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {projectsPagination.pageItems.map((project) => (
+                  {projects.map((project) => (
                     <tr key={project.id} className="border-b border-border-subtle">
                       <td className="px-2 py-2 font-medium text-foreground">{project.title}</td>
                       <td className="px-2 py-2">{pipelineLabel(project.pipeline_type)}</td>
@@ -942,9 +1021,9 @@ export function AdminUserDetailPage() {
 
       <div className={cardPanel}>
         <h2 className="m-0 mb-4 text-lg font-semibold text-foreground">
-          Error tracking ({errors.length})
+          Error tracking ({errorsTotal})
         </h2>
-        {errors.length === 0 ? (
+        {errorsTotal === 0 ? (
           <p className="m-0 text-sm text-muted-text">No errors recorded for this user.</p>
         ) : (
           <div className="space-y-3">
@@ -960,7 +1039,7 @@ export function AdminUserDetailPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {errorsPagination.pageItems.map((event) => (
+                  {errors.map((event) => (
                     <tr key={event.id} className="border-b border-border-subtle align-top">
                       <td className="px-2 py-2 whitespace-nowrap text-muted-text">
                         {formatDateTime(event.created_at)}

@@ -1,6 +1,6 @@
 """User and admin routes for the tutorials learning module."""
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
 from sqlalchemy.orm import Session
 
 from backend_api.db.models import User
@@ -16,6 +16,8 @@ from backend_api.http.schemas.tutorials import (
     TutorialVideoOut,
     TutorialVideoUpdateRequest,
 )
+from backend_api.common.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
+from backend_api.http.schemas.common import PaginatedResponse
 from backend_api.http.services import audit_service, tutorials_service
 
 router = APIRouter(tags=["tutorials"])
@@ -29,7 +31,10 @@ def list_videos(
     _: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> list[TutorialVideoOut]:
-    return [TutorialVideoOut.model_validate(v) for v in tutorials_service.list_videos(db)]
+    return [
+        TutorialVideoOut.model_validate(v)
+        for v in tutorials_service.list_videos(db, page_size=None).items
+    ]
 
 
 @router.get("/tutorials/documents", response_model=list[TutorialDocumentSummaryOut])
@@ -39,7 +44,7 @@ def list_documents(
 ) -> list[TutorialDocumentSummaryOut]:
     return [
         TutorialDocumentSummaryOut.model_validate(d)
-        for d in tutorials_service.list_documents(db)
+        for d in tutorials_service.list_documents(db, page_size=None).items
     ]
 
 
@@ -62,19 +67,27 @@ def list_templates(
 ) -> list[ControlDesignTemplateOut]:
     return [
         ControlDesignTemplateOut.model_validate(t)
-        for t in tutorials_service.list_templates(db)
+        for t in tutorials_service.list_templates(db, page_size=None).items
     ]
 
 
 # --- Admin: videos ---
 
 
-@router.get("/admin/tutorials/videos", response_model=list[TutorialVideoOut])
+@router.get("/admin/tutorials/videos", response_model=PaginatedResponse[TutorialVideoOut])
 def admin_list_videos(
     _: User = Depends(require_action("admin:tutorials")),
     db: Session = Depends(get_db),
-) -> list[TutorialVideoOut]:
-    return [TutorialVideoOut.model_validate(v) for v in tutorials_service.list_videos(db)]
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
+) -> PaginatedResponse[TutorialVideoOut]:
+    result = tutorials_service.list_videos(db, page=page, page_size=page_size)
+    return PaginatedResponse(
+        items=[TutorialVideoOut.model_validate(v) for v in result.items],
+        total=result.total,
+        page=result.page,
+        page_size=result.page_size,
+    )
 
 
 @router.post(
@@ -166,14 +179,20 @@ def admin_delete_video(
 # --- Admin: documents ---
 
 
-@router.get("/admin/tutorials/documents", response_model=list[TutorialDocumentOut])
+@router.get("/admin/tutorials/documents", response_model=PaginatedResponse[TutorialDocumentOut])
 def admin_list_documents(
     _: User = Depends(require_action("admin:tutorials")),
     db: Session = Depends(get_db),
-) -> list[TutorialDocumentOut]:
-    return [
-        TutorialDocumentOut.model_validate(d) for d in tutorials_service.list_documents(db)
-    ]
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
+) -> PaginatedResponse[TutorialDocumentOut]:
+    result = tutorials_service.list_documents(db, page=page, page_size=page_size)
+    return PaginatedResponse(
+        items=[TutorialDocumentOut.model_validate(d) for d in result.items],
+        total=result.total,
+        page=result.page,
+        page_size=result.page_size,
+    )
 
 
 @router.post(
@@ -281,15 +300,20 @@ def admin_delete_document(
 # --- Admin: templates ---
 
 
-@router.get("/admin/tutorials/templates", response_model=list[ControlDesignTemplateOut])
+@router.get("/admin/tutorials/templates", response_model=PaginatedResponse[ControlDesignTemplateOut])
 def admin_list_templates(
     _: User = Depends(require_action("admin:tutorials")),
     db: Session = Depends(get_db),
-) -> list[ControlDesignTemplateOut]:
-    return [
-        ControlDesignTemplateOut.model_validate(t)
-        for t in tutorials_service.list_templates(db)
-    ]
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
+) -> PaginatedResponse[ControlDesignTemplateOut]:
+    result = tutorials_service.list_templates(db, page=page, page_size=page_size)
+    return PaginatedResponse(
+        items=[ControlDesignTemplateOut.model_validate(t) for t in result.items],
+        total=result.total,
+        page=result.page,
+        page_size=result.page_size,
+    )
 
 
 @router.post(

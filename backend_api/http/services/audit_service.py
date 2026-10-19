@@ -128,12 +128,15 @@ def list_audits(
     date_from: str | None = None,
     date_to: str | None = None,
     tz: str | None = None,
-    limit: int = 200,
+    limit: int | None = None,
     max_limit: int = 1000,
+    page: int = 1,
+    page_size: int | None = None,
     sort_by: str | None = None,
     sort_dir: str | None = None,
-) -> list[AuditLog]:
+):
     from backend_api.common.date_range import apply_sql_date_range
+    from backend_api.common.pagination import paginate_query
     from backend_api.common.query_sort import apply_sql_order
 
     query = db.query(AuditLog)
@@ -178,7 +181,15 @@ def list_audits(
         default_key="created_at",
         default_dir="desc",
     )
-    return query.limit(max(1, min(limit, max_limit))).all()
+    if page_size is None and limit is not None:
+        page_size = max(1, min(limit, max_limit))
+        page = 1
+    return paginate_query(
+        query,
+        page=page,
+        page_size=page_size,
+        max_size=max_limit if page_size is not None else 100,
+    )
 
 
 def entry_to_dict(entry: AuditLog) -> dict[str, Any]:
@@ -251,7 +262,7 @@ def export_csv(
         max_limit=10000,
         sort_by=sort_by,
         sort_dir=sort_dir,
-    )
+    ).items
     fieldnames = [
         "id",
         "created_at",

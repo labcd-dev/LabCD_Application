@@ -16,8 +16,9 @@ import { AdminPagination } from '../components/admin/AdminPagination'
 import { AdminSortHeader } from '../components/admin/AdminSortHeader'
 import { StatusMessage } from '../components/StatusMessage'
 import { useAuth } from '../context/AuthContext'
-import { useClientPagination } from '../hooks/useClientPagination'
-import { useClientSort } from '../hooks/useClientSort'
+import { useDebouncedValue } from '../hooks/useDebouncedValue'
+import { useServerPagination } from '../hooks/useServerPagination'
+import { useServerSort } from '../hooks/useServerSort'
 import { downloadCsv } from '../lib/downloadCsv'
 import {
   btnBase,
@@ -40,6 +41,8 @@ export function AdminPlansPage() {
   const [message, setMessage] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
+  const debouncedQuery = useDebouncedValue(query)
+  const [total, setTotal] = useState(0)
   const [panelOpen, setPanelOpen] = useState(false)
 
   const [editingPlanId, setEditingPlanId] = useState<number | null>(null)
@@ -57,17 +60,57 @@ export function AdminPlansPage() {
   const [stripePriceIdMonthly, setStripePriceIdMonthly] = useState('')
   const [stripePriceIdYearly, setStripePriceIdYearly] = useState('')
 
-  const reload = async () => {
-    const [planList, actionList, defaultPlan, models] = await Promise.all([
-      adminApi.listPlans(),
+  const { sortBy, sortDir, toggle: toggleSort, resetKey: sortResetKey } = useServerSort(
+    'price',
+    'asc',
+  )
+
+  const filterResetKey = `${debouncedQuery}|${sortResetKey}`
+
+  const pagination = useServerPagination({
+    total,
+    resetKey: filterResetKey,
+  })
+
+  const listParams = useMemo(
+    () => ({
+      q: debouncedQuery.trim() || undefined,
+      sort_by: sortBy,
+      sort_dir: sortDir,
+      page: pagination.page,
+      page_size: pagination.pageSize,
+    }),
+    [debouncedQuery, pagination.page, pagination.pageSize, sortBy, sortDir],
+  )
+
+  const exportParams = useMemo(
+    () => ({
+      q: debouncedQuery.trim() || undefined,
+      sort_by: sortBy,
+      sort_dir: sortDir,
+    }),
+    [debouncedQuery, sortBy, sortDir],
+  )
+
+  const reloadMeta = async () => {
+    const [actionList, defaultPlan, models] = await Promise.all([
       adminApi.listActions(),
       adminApi.getDefaultPlan(),
       healthApi.models(),
     ])
-    setPlans(planList)
     setActions(actionList)
     setDefaultPlanId(defaultPlan.plan_id)
     setCatalogModels(models.llm_models)
+  }
+
+  const reloadPlans = async () => {
+    const planPage = await adminApi.listPlans(listParams)
+    setPlans(planPage.items)
+    setTotal(planPage.total)
+  }
+
+  const reload = async () => {
+    await Promise.all([reloadMeta(), reloadPlans()])
   }
 
   useEffect(() => {
@@ -76,7 +119,7 @@ export function AdminPlansPage() {
       setLoading(true)
       setError(null)
       try {
-        await reload()
+        await reloadMeta()
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load plans')
       } finally {
@@ -86,52 +129,18 @@ export function AdminPlansPage() {
     void load()
   }, [canManage])
 
-  const filteredPlans = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    if (!q) return plans
-    return plans.filter(
-      (plan) =>
-        plan.name.toLowerCase().includes(q) ||
-        plan.description.toLowerCase().includes(q) ||
-        plan.actions.some((code) => code.toLowerCase().includes(q)) ||
-        (plan.models ?? []).some((model) => model.toLowerCase().includes(q)),
-    )
-  }, [plans, query])
-
-  const planSortAccessors = useMemo(
-    () => ({
-      name: (plan: PlanInfo) => plan.name,
-      price: (plan: PlanInfo) => plan.price,
-      is_active: (plan: PlanInfo) => plan.is_active,
-    }),
-    [],
-  )
-
-  const {
-    sortedItems: sortedPlans,
-    sortBy,
-    sortDir,
-    toggle: toggleSort,
-    resetKey: sortResetKey,
-  } = useClientSort({
-    items: filteredPlans,
-    defaultKey: 'price',
-    defaultDir: 'asc',
-    accessors: planSortAccessors,
-  })
-
-  const exportParams = useMemo(
-    () => ({
-      q: query.trim() || undefined,
-      sort_by: sortBy,
-      sort_dir: sortDir,
-    }),
-    [query, sortBy, sortDir],
-  )
-
-  const pagination = useClientPagination(sortedPlans, {
-    resetKey: `${query}|${sortResetKey}`,
-  })
+  useEffect(() => {
+    if (!canManage) return
+    const load = async () => {
+      setError(null)
+      try {
+        await reloadPlans()
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load plans')
+      }
+    }
+    void load()
+  }, [canManage, listParams])
 
   if (!canManage) {
     return <Navigate to="/admin" replace />
@@ -339,7 +348,7 @@ export function AdminPlansPage() {
 
         {loading ? (
           <p className="py-8 text-center text-muted-text">Loading plans…</p>
-        ) : filteredPlans.length === 0 ? (
+        ) : total === 0 ? (
           <p className="py-8 text-center text-muted-text">
             {query ? 'No plans match your search' : 'No plans yet'}
           </p>
@@ -381,7 +390,7 @@ export function AdminPlansPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {pagination.pageItems.map((plan) => {
+                  {plans.map((plan) => {
                     const isDefault = plan.id === defaultPlanId
                     const planModels = plan.models ?? []
                     return (

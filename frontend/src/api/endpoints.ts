@@ -27,8 +27,12 @@ import type {
   FeedbackSurveyResponseRow,
   JobResponse,
   JobStatusResponse,
+  LoginHistoryEntry,
   ModelsResponse,
   MonitoringResponse,
+  OverviewStats,
+  PaginatedResponse,
+  ProjectBenchmarkStats,
   AnalyticsResponse,
   TelegramAnalyticsSettings,
   TelegramAnalyticsSettingsUpdate,
@@ -63,6 +67,7 @@ import type {
   TutorialVideo,
   UploadResponse, PlantModelUploadResponse,
   UserJourney,
+  UserOption,
   MediaUploadResponse,
   SiteBrand,
   NavMenuItem,
@@ -236,6 +241,8 @@ export const authApi = {
 
 export const adminApi = {
   getMonitoring: () => apiFetch<MonitoringResponse>('/admin/monitoring'),
+  getOverviewStats: () => apiFetch<OverviewStats>('/admin/overview/stats'),
+  listUserOptions: () => apiFetch<UserOption[]>('/admin/users/options'),
   getAnalytics: (days = 30, tz = viewerTimeZone()) => {
     const query = new URLSearchParams({
       days: String(days),
@@ -260,13 +267,17 @@ export const adminApi = {
     q?: string
     sort_by?: string
     sort_dir?: string
+    page?: number
+    page_size?: number
   }) =>
-    apiFetch<PlanInfo[]>(
+    apiFetch<PaginatedResponse<PlanInfo>>(
       `/admin/plans${buildQuery({
         active_only: params?.active_only ? true : undefined,
         q: params?.q,
         sort_by: params?.sort_by,
         sort_dir: params?.sort_dir,
+        page: params?.page,
+        page_size: params?.page_size,
       })}`,
     ),
   createPlan: (body: {
@@ -312,12 +323,20 @@ export const adminApi = {
     }),
   deletePlan: (planId: number) =>
     apiFetch<void>(`/admin/plans/${planId}`, { method: 'DELETE' }),
-  listRoles: (params?: { active_only?: boolean }) => {
-    const query = new URLSearchParams()
-    if (params?.active_only) query.set('active_only', 'true')
-    const suffix = query.toString() ? `?${query}` : ''
-    return apiFetch<RoleInfo[]>(`/admin/roles${suffix}`)
-  },
+  listRoles: (params?: {
+    active_only?: boolean
+    q?: string
+    page?: number
+    page_size?: number
+  }) =>
+    apiFetch<PaginatedResponse<RoleInfo>>(
+      `/admin/roles${buildQuery({
+        active_only: params?.active_only ? true : undefined,
+        q: params?.q,
+        page: params?.page,
+        page_size: params?.page_size,
+      })}`,
+    ),
   createRole: (body: {
     name: string
     description?: string
@@ -356,8 +375,10 @@ export const adminApi = {
     tz?: string
     sort_by?: string
     sort_dir?: string
+    page?: number
+    page_size?: number
   }) =>
-    apiFetch<AuthUser[]>(
+    apiFetch<PaginatedResponse<AuthUser>>(
       `/admin/users${buildQuery({
         q: params?.q,
         date_from: params?.date_from,
@@ -365,6 +386,8 @@ export const adminApi = {
         tz: params?.tz,
         sort_by: params?.sort_by,
         sort_dir: params?.sort_dir,
+        page: params?.page,
+        page_size: params?.page_size,
       })}`,
     ),
   getUser: (userId: number) => apiFetch<AdminUserDetail>(`/admin/users/${userId}`),
@@ -439,8 +462,10 @@ export const adminApi = {
     tz?: string
     sort_by?: string
     sort_dir?: string
+    page?: number
+    page_size?: number
   }) =>
-    apiFetch<ProjectSummary[]>(
+    apiFetch<PaginatedResponse<ProjectSummary>>(
       `/admin/projects${buildQuery({
         user_id: params?.user_id,
         pipeline_type: params?.pipeline_type,
@@ -450,6 +475,53 @@ export const adminApi = {
         tz: params?.tz,
         sort_by: params?.sort_by,
         sort_dir: params?.sort_dir,
+        page: params?.page,
+        page_size: params?.page_size,
+      })}`,
+    ),
+  getProjectBenchmarkStats: (params?: {
+    user_id?: number
+    pipeline_type?: string
+    q?: string
+    date_from?: string
+    date_to?: string
+    tz?: string
+  }) =>
+    apiFetch<ProjectBenchmarkStats>(
+      `/admin/projects/benchmark-stats${buildQuery({
+        user_id: params?.user_id,
+        pipeline_type: params?.pipeline_type,
+        q: params?.q,
+        date_from: params?.date_from,
+        date_to: params?.date_to,
+        tz: params?.tz,
+      })}`,
+    ),
+  listUserProjects: (
+    userId: number,
+    params?: { page?: number; page_size?: number },
+  ) =>
+    apiFetch<PaginatedResponse<ProjectSummary>>(
+      `/admin/users/${userId}/projects${buildQuery({
+        page: params?.page,
+        page_size: params?.page_size,
+      })}`,
+    ),
+  listUserErrors: (userId: number, params?: { page?: number; page_size?: number }) =>
+    apiFetch<PaginatedResponse<ErrorEvent>>(
+      `/admin/users/${userId}/errors${buildQuery({
+        page: params?.page,
+        page_size: params?.page_size,
+      })}`,
+    ),
+  listUserLoginHistory: (
+    userId: number,
+    params?: { page?: number; page_size?: number },
+  ) =>
+    apiFetch<PaginatedResponse<LoginHistoryEntry>>(
+      `/admin/users/${userId}/login-history${buildQuery({
+        page: params?.page,
+        page_size: params?.page_size,
       })}`,
     ),
   getProject: (projectId: number) =>
@@ -475,8 +547,10 @@ export const adminApi = {
     tz?: string
     sort_by?: string
     sort_dir?: string
+    page?: number
+    page_size?: number
   }) =>
-    apiFetch<PlantModelConversationSummary[]>(
+    apiFetch<PaginatedResponse<PlantModelConversationSummary>>(
       `/admin/plant-model/conversations${buildQuery({
         user_id: params?.user_id,
         status: params?.status,
@@ -486,6 +560,8 @@ export const adminApi = {
         tz: params?.tz,
         sort_by: params?.sort_by,
         sort_dir: params?.sort_dir,
+        page: params?.page,
+        page_size: params?.page_size,
       })}`,
     ),
   downloadPlantModelConversationsCsv: (params?: {
@@ -550,11 +626,12 @@ export const adminApi = {
     date_from?: string
     date_to?: string
     tz?: string
-    limit?: number
+    page?: number
+    page_size?: number
     sort_by?: string
     sort_dir?: string
   }) =>
-    apiFetch<ErrorEvent[]>(
+    apiFetch<PaginatedResponse<ErrorEvent>>(
       `/admin/errors${buildQuery({
         user_id: params?.user_id,
         source: params?.source,
@@ -563,7 +640,8 @@ export const adminApi = {
         date_from: params?.date_from,
         date_to: params?.date_to,
         tz: params?.tz,
-        limit: params?.limit,
+        page: params?.page,
+        page_size: params?.page_size,
         sort_by: params?.sort_by,
         sort_dir: params?.sort_dir,
       })}`,
@@ -576,7 +654,6 @@ export const adminApi = {
     date_from?: string
     date_to?: string
     tz?: string
-    limit?: number
     sort_by?: string
     sort_dir?: string
   }) =>
@@ -588,7 +665,6 @@ export const adminApi = {
       date_from: params?.date_from,
       date_to: params?.date_to,
       tz: params?.tz,
-      limit: params?.limit,
       sort_by: params?.sort_by,
       sort_dir: params?.sort_dir,
     }),
@@ -601,11 +677,12 @@ export const adminApi = {
     date_from?: string
     date_to?: string
     tz?: string
-    limit?: number
+    page?: number
+    page_size?: number
     sort_by?: string
     sort_dir?: string
   }) =>
-    apiFetch<AuditLogEntry[]>(
+    apiFetch<PaginatedResponse<AuditLogEntry>>(
       `/admin/audit-log${buildQuery({
         category: params?.category,
         action: params?.action,
@@ -615,7 +692,8 @@ export const adminApi = {
         date_from: params?.date_from,
         date_to: params?.date_to,
         tz: params?.tz,
-        limit: params?.limit,
+        page: params?.page,
+        page_size: params?.page_size,
         sort_by: params?.sort_by,
         sort_dir: params?.sort_dir,
       })}`,
@@ -629,7 +707,6 @@ export const adminApi = {
     date_from?: string
     date_to?: string
     tz?: string
-    limit?: number
     sort_by?: string
     sort_dir?: string
   }) =>
@@ -642,7 +719,6 @@ export const adminApi = {
       date_from: params?.date_from,
       date_to: params?.date_to,
       tz: params?.tz,
-      limit: params?.limit,
       sort_by: params?.sort_by,
       sort_dir: params?.sort_dir,
     }),
@@ -735,12 +811,20 @@ export const adminApi = {
     date_from?: string
     date_to?: string
     tz?: string
+    profile_page?: number
+    feedback_page?: number
+    before_test_page?: number
+    page_size?: number
   }) =>
     apiFetch<SurveyResponses>(
       `/admin/survey/responses${buildQuery({
         date_from: params?.date_from,
         date_to: params?.date_to,
         tz: params?.tz,
+        profile_page: params?.profile_page,
+        feedback_page: params?.feedback_page,
+        before_test_page: params?.before_test_page,
+        page_size: params?.page_size,
       })}`,
     ),
 }
@@ -754,7 +838,13 @@ export const tutorialsApi = {
 }
 
 export const adminTutorialsApi = {
-  listVideos: () => apiFetch<TutorialVideo[]>('/admin/tutorials/videos'),
+  listVideos: (params?: { page?: number; page_size?: number }) =>
+    apiFetch<PaginatedResponse<TutorialVideo>>(
+      `/admin/tutorials/videos${buildQuery({
+        page: params?.page,
+        page_size: params?.page_size,
+      })}`,
+    ),
   uploadVideo: (title: string, file: File) => {
     const form = new FormData()
     form.append('title', title)
@@ -772,7 +862,13 @@ export const adminTutorialsApi = {
   deleteVideo: (videoId: number) =>
     apiFetch<void>(`/admin/tutorials/videos/${videoId}`, { method: 'DELETE' }),
 
-  listDocuments: () => apiFetch<TutorialDocument[]>('/admin/tutorials/documents'),
+  listDocuments: (params?: { page?: number; page_size?: number }) =>
+    apiFetch<PaginatedResponse<TutorialDocument>>(
+      `/admin/tutorials/documents${buildQuery({
+        page: params?.page,
+        page_size: params?.page_size,
+      })}`,
+    ),
   getDocument: (documentId: number) =>
     apiFetch<TutorialDocument>(`/admin/tutorials/documents/${documentId}`),
   createDocument: (body: {
@@ -801,7 +897,13 @@ export const adminTutorialsApi = {
   deleteDocument: (documentId: number) =>
     apiFetch<void>(`/admin/tutorials/documents/${documentId}`, { method: 'DELETE' }),
 
-  listTemplates: () => apiFetch<ControlDesignTemplate[]>('/admin/tutorials/templates'),
+  listTemplates: (params?: { page?: number; page_size?: number }) =>
+    apiFetch<PaginatedResponse<ControlDesignTemplate>>(
+      `/admin/tutorials/templates${buildQuery({
+        page: params?.page,
+        page_size: params?.page_size,
+      })}`,
+    ),
   uploadTemplate: (title: string, description: string, file: File) => {
     const form = new FormData()
     form.append('title', title)
@@ -934,8 +1036,10 @@ export const bugReportsApi = {
     tz?: string
     sort_by?: string
     sort_dir?: string
+    page?: number
+    page_size?: number
   }) =>
-    apiFetch<BugReport[]>(
+    apiFetch<PaginatedResponse<BugReport>>(
       `/admin/bug-reports${buildQuery({
         status: params?.status,
         date_from: params?.date_from,
@@ -943,6 +1047,8 @@ export const bugReportsApi = {
         tz: params?.tz,
         sort_by: params?.sort_by,
         sort_dir: params?.sort_dir,
+        page: params?.page,
+        page_size: params?.page_size,
       })}`,
     ),
   getAdmin: (reportId: number) => apiFetch<BugReport>(`/admin/bug-reports/${reportId}`),
@@ -1256,8 +1362,14 @@ export const adminSiteApi = {
       method: 'PUT',
       body: JSON.stringify(body),
     }),
-  listMenus: (location?: string) =>
-    apiFetch<NavMenuItem[]>(`/admin/site/menus${buildQuery({ location })}`),
+  listMenus: (params?: { location?: string; page?: number; page_size?: number }) =>
+    apiFetch<PaginatedResponse<NavMenuItem>>(
+      `/admin/site/menus${buildQuery({
+        location: params?.location,
+        page: params?.page,
+        page_size: params?.page_size,
+      })}`,
+    ),
   createMenu: (body: Omit<NavMenuItem, 'id'>) =>
     apiFetch<NavMenuItem>('/admin/site/menus', {
       method: 'POST',
@@ -1282,7 +1394,13 @@ export const adminMediaApi = {
 }
 
 export const adminBlogApi = {
-  list: () => apiFetch<BlogPostListItem[]>('/admin/blog'),
+  list: (params?: { page?: number; page_size?: number }) =>
+    apiFetch<PaginatedResponse<BlogPostListItem>>(
+      `/admin/blog${buildQuery({
+        page: params?.page,
+        page_size: params?.page_size,
+      })}`,
+    ),
   get: (postId: number) => apiFetch<BlogPost>(`/admin/blog/${postId}`),
   create: (body: {
     title: string

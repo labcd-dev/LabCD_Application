@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { Activity, FolderKanban, Search, Sparkles, Star, Trash2, TrendingUp } from 'lucide-react'
 import { adminApi } from '../api/endpoints'
-import type { AuthUser, ProjectSummary } from '../api/types'
+import type { ProjectBenchmarkStats, ProjectSummary, UserOption } from '../api/types'
 import { AdminDateRangeFilter } from '../components/admin/AdminDateRangeFilter'
 import { AdminDownloadCsvButton } from '../components/admin/AdminDownloadCsvButton'
 import { AdminPagination } from '../components/admin/AdminPagination'
@@ -10,8 +10,9 @@ import { AdminSortHeader } from '../components/admin/AdminSortHeader'
 import { StatusMessage } from '../components/StatusMessage'
 import { useAuth } from '../context/AuthContext'
 import { useAdminDateRange } from '../hooks/useAdminDateRange'
-import { useClientPagination } from '../hooks/useClientPagination'
-import { useClientSort } from '../hooks/useClientSort'
+import { useDebouncedValue } from '../hooks/useDebouncedValue'
+import { useServerPagination } from '../hooks/useServerPagination'
+import { useServerSort } from '../hooks/useServerSort'
 import { downloadCsv } from '../lib/downloadCsv'
 import {
   btnBase,
@@ -32,134 +33,116 @@ export function AdminProjectsPage() {
   const { hasAction } = useAuth()
   const canManage = hasAction('admin:projects')
   const [projects, setProjects] = useState<ProjectSummary[]>([])
-  const [users, setUsers] = useState<AuthUser[]>([])
+  const [userOptions, setUserOptions] = useState<UserOption[]>([])
+  const [benchmarkStats, setBenchmarkStats] = useState<ProjectBenchmarkStats | null>(null)
+  const [total, setTotal] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
+  const debouncedQuery = useDebouncedValue(query)
   const [userId, setUserId] = useState('')
   const [pipelineFilter, setPipelineFilter] = useState('')
   const dateRange = useAdminDateRange()
 
-  const load = async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const projectList = await adminApi.listProjects({
-        user_id: userId ? Number(userId) : undefined,
-        pipeline_type: pipelineFilter || undefined,
-        ...dateRange.params,
-      })
-      setProjects(projectList)
-      try {
-        setUsers(await adminApi.listUsers())
-      } catch {
-        setUsers([])
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load projects')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    if (!canManage) return
-    void load()
-  }, [userId, pipelineFilter, dateRange.dateFrom, dateRange.dateTo, canManage])
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    if (!q) return projects
-    return projects.filter(
-      (p) =>
-        p.title.toLowerCase().includes(q) ||
-        p.file_name.toLowerCase().includes(q) ||
-        (p.owner_email ?? '').toLowerCase().includes(q) ||
-        p.status.toLowerCase().includes(q),
-    )
-  }, [projects, query])
-
-  const benchmarkStats = useMemo(() => {
-    const evaluated = projects.filter(
-      (p) =>
-        (typeof p.score === 'number' && Number.isFinite(p.score)) ||
-        (typeof p.rating === 'number' && p.rating > 0),
-    )
-    if (evaluated.length === 0) return null
-
-    const scored = evaluated.filter((p) => typeof p.score === 'number' && Number.isFinite(p.score))
-    const rated = evaluated.filter((p) => typeof p.rating === 'number' && p.rating > 0)
-
-    const avgScore =
-      scored.length > 0
-        ? scored.reduce((acc, p) => acc + (p.score as number), 0) / scored.length
-        : null
-
-    const avgRating =
-      rated.length > 0
-        ? rated.reduce((acc, p) => acc + (p.rating as number), 0) / rated.length
-        : null
-
-    let alignmentPct: number | null = null
-    if (avgScore !== null && avgRating !== null) {
-      const diff = Math.abs(avgScore - avgRating / 5)
-      alignmentPct = Math.max(0, Math.min(100, (1 - diff) * 100))
-    }
-
-    const successCount = scored.filter((p) => p.success === true).length
-
-    return {
-      totalEvaluated: evaluated.length,
-      avgScore,
-      avgRating,
-      alignmentPct,
-      successRate: scored.length > 0 ? (successCount / scored.length) * 100 : null,
-    }
-  }, [projects])
-
-  const projectSortAccessors = useMemo(
-    () => ({
-      title: (p: ProjectSummary) => p.title,
-      owner_email: (p: ProjectSummary) => p.owner_email ?? '',
-      pipeline_type: (p: ProjectSummary) => p.pipeline_type,
-      status: (p: ProjectSummary) => p.status,
-      score: (p: ProjectSummary) =>
-        typeof p.score === 'number' && Number.isFinite(p.score) ? p.score : -1,
-      rating: (p: ProjectSummary) =>
-        typeof p.rating === 'number' && Number.isFinite(p.rating) ? p.rating : -1,
-      updated_at: (p: ProjectSummary) => p.updated_at ?? '',
-    }),
-    [],
+  const { sortBy, sortDir, toggle: toggleSort, resetKey: sortResetKey } = useServerSort(
+    'updated_at',
+    'desc',
   )
 
-  const {
-    sortedItems: sortedProjects,
-    sortBy,
-    sortDir,
-    toggle: toggleSort,
-    resetKey: sortResetKey,
-  } = useClientSort({
-    items: filtered,
-    defaultKey: 'updated_at',
-    defaultDir: 'desc',
-    accessors: projectSortAccessors,
+  const filterResetKey = `${debouncedQuery}|${userId}|${pipelineFilter}|${dateRange.dateFrom}|${dateRange.dateTo}|${sortResetKey}`
+
+  const pagination = useServerPagination({
+    total,
+    resetKey: filterResetKey,
   })
+
+  const listParams = useMemo(
+    () => ({
+      user_id: userId ? Number(userId) : undefined,
+      pipeline_type: pipelineFilter || undefined,
+      q: debouncedQuery.trim() || undefined,
+      ...dateRange.params,
+      sort_by: sortBy,
+      sort_dir: sortDir,
+      page: pagination.page,
+      page_size: pagination.pageSize,
+    }),
+    [
+      dateRange.params,
+      debouncedQuery,
+      pagination.page,
+      pagination.pageSize,
+      pipelineFilter,
+      sortBy,
+      sortDir,
+      userId,
+    ],
+  )
 
   const exportParams = useMemo(
     () => ({
       user_id: userId ? Number(userId) : undefined,
       pipeline_type: pipelineFilter || undefined,
-      q: query.trim() || undefined,
+      q: debouncedQuery.trim() || undefined,
       ...dateRange.params,
       sort_by: sortBy,
       sort_dir: sortDir,
     }),
-    [dateRange.params, pipelineFilter, query, sortBy, sortDir, userId],
+    [dateRange.params, debouncedQuery, pipelineFilter, sortBy, sortDir, userId],
   )
 
-  const pagination = useClientPagination(sortedProjects, {
-    resetKey: `${query}|${userId}|${pipelineFilter}|${dateRange.dateFrom}|${dateRange.dateTo}|${sortResetKey}`,
-  })
+  const benchmarkParams = useMemo(
+    () => ({
+      user_id: userId ? Number(userId) : undefined,
+      pipeline_type: pipelineFilter || undefined,
+      q: debouncedQuery.trim() || undefined,
+      ...dateRange.params,
+    }),
+    [dateRange.params, debouncedQuery, pipelineFilter, userId],
+  )
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const projectPage = await adminApi.listProjects(listParams)
+      setProjects(projectPage.items)
+      setTotal(projectPage.total)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load projects')
+    } finally {
+      setLoading(false)
+    }
+  }, [listParams])
+
+  useEffect(() => {
+    if (!canManage) return
+    void load()
+  }, [canManage, load])
+
+  useEffect(() => {
+    if (!canManage) return
+    let cancelled = false
+    void adminApi
+      .getProjectBenchmarkStats(benchmarkParams)
+      .then((stats) => {
+        if (!cancelled) setBenchmarkStats(stats.total_evaluated > 0 ? stats : null)
+      })
+      .catch(() => {
+        if (!cancelled) setBenchmarkStats(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [benchmarkParams, canManage])
+
+  useEffect(() => {
+    if (!canManage) return
+    void adminApi
+      .listUserOptions()
+      .then(setUserOptions)
+      .catch(() => setUserOptions([]))
+  }, [canManage])
 
   if (!canManage) {
     return <Navigate to="/admin" replace />
@@ -169,7 +152,7 @@ export function AdminProjectsPage() {
     if (!window.confirm('Delete this user project? This cannot be undone.')) return
     try {
       await adminApi.deleteProject(projectId)
-      setProjects((prev) => prev.filter((p) => p.id !== projectId))
+      await load()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete project')
     }
@@ -248,7 +231,7 @@ export function AdminProjectsPage() {
               onChange={(e) => setUserId(e.target.value)}
             >
               <option value="">All users</option>
-              {users.map((u) => (
+              {userOptions.map((u) => (
                 <option key={u.id} value={u.id}>
                   {u.email}
                 </option>
@@ -281,7 +264,6 @@ export function AdminProjectsPage() {
         />
       </div>
 
-      {/* AI System Benchmark vs Human Rating Alignment Overview */}
       {benchmarkStats && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <div className="rounded-2xl border border-border bg-surface-elevated p-4 shadow-xs">
@@ -290,7 +272,7 @@ export function AdminProjectsPage() {
               <Activity className="size-4 text-cyan-500" />
             </div>
             <div className="mt-1 font-mono text-2xl font-bold text-foreground">
-              {benchmarkStats.totalEvaluated}
+              {benchmarkStats.total_evaluated}
             </div>
             <p className="mt-0.5 text-[11px] text-muted-text">Completed simulation jobs</p>
           </div>
@@ -301,10 +283,12 @@ export function AdminProjectsPage() {
               <Sparkles className="size-4 text-purple-500" />
             </div>
             <div className="mt-1 flex items-baseline gap-1.5 font-mono text-2xl font-bold text-foreground">
-              {benchmarkStats.avgScore !== null ? `${(benchmarkStats.avgScore * 100).toFixed(1)}%` : '—'}
-              {benchmarkStats.successRate !== null && (
+              {benchmarkStats.avg_score !== null
+                ? `${(benchmarkStats.avg_score * 100).toFixed(1)}%`
+                : '—'}
+              {benchmarkStats.success_rate !== null && (
                 <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold font-sans">
-                  ({benchmarkStats.successRate.toFixed(0)}% pass)
+                  ({benchmarkStats.success_rate.toFixed(0)}% pass)
                 </span>
               )}
             </div>
@@ -317,7 +301,7 @@ export function AdminProjectsPage() {
               <Star className="size-4 fill-amber-400 text-amber-400" />
             </div>
             <div className="mt-1 flex items-baseline gap-1.5 font-mono text-2xl font-bold text-amber-600 dark:text-amber-400">
-              {benchmarkStats.avgRating !== null ? benchmarkStats.avgRating.toFixed(2) : '—'}
+              {benchmarkStats.avg_rating !== null ? benchmarkStats.avg_rating.toFixed(2) : '—'}
               <span className="text-xs text-muted font-normal">/ 5.0</span>
             </div>
             <p className="mt-0.5 text-[11px] text-muted-text">Engineer satisfaction grades</p>
@@ -329,7 +313,9 @@ export function AdminProjectsPage() {
               <TrendingUp className="size-4 text-emerald-500" />
             </div>
             <div className="mt-1 flex items-baseline gap-1 font-mono text-2xl font-bold text-emerald-600 dark:text-emerald-400">
-              {benchmarkStats.alignmentPct !== null ? `${benchmarkStats.alignmentPct.toFixed(1)}%` : '—'}
+              {benchmarkStats.alignment_pct !== null
+                ? `${benchmarkStats.alignment_pct.toFixed(1)}%`
+                : '—'}
             </div>
             <p className="mt-0.5 text-[11px] text-muted-text">Perception correlation index</p>
           </div>
@@ -338,7 +324,7 @@ export function AdminProjectsPage() {
 
       {loading ? (
         <p className="text-muted-text">Loading projects…</p>
-      ) : filtered.length === 0 ? (
+      ) : total === 0 ? (
         <div className={`${cardPanel} text-center`}>
           <FolderKanban className="mx-auto mb-3 size-10 text-muted" />
           <p className="m-0 font-medium text-foreground">No projects found</p>
@@ -413,7 +399,7 @@ export function AdminProjectsPage() {
                 </tr>
               </thead>
               <tbody>
-                {pagination.pageItems.map((project) => (
+                {projects.map((project) => (
                   <tr key={project.id} className="border-b border-border-subtle last:border-0">
                     <td className="px-4 py-3">
                       <div className="font-medium text-foreground">{project.title}</div>

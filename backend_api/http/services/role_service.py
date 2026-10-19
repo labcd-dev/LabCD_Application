@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
+from backend_api.common.pagination import PaginationResult, paginate_sequence
 from backend_api.db.models import Role, User
 from backend_api.http.services.auth_service import ensure_actions
 
@@ -23,11 +24,32 @@ def role_out_dict(role: Role) -> dict:
     }
 
 
-def list_roles(db: Session, *, active_only: bool = False) -> list[Role]:
+def list_roles(
+    db: Session,
+    *,
+    active_only: bool = False,
+    q: str | None = None,
+    page: int = 1,
+    page_size: int | None = None,
+) -> PaginationResult[Role]:
     query = db.query(Role)
     if active_only:
         query = query.filter(Role.is_active.is_(True))
-    return query.order_by(Role.name).all()
+    roles = query.order_by(Role.name).all()
+
+    needle = (q or "").strip().lower()
+    if needle:
+        filtered: list[Role] = []
+        for role in roles:
+            if (
+                needle in (role.name or "").lower()
+                or needle in (role.description or "").lower()
+                or any(needle in code.lower() for code in role.action_codes())
+            ):
+                filtered.append(role)
+        roles = filtered
+
+    return paginate_sequence(roles, page=page, page_size=page_size)
 
 
 def get_role(db: Session, role_id: int) -> Role | None:

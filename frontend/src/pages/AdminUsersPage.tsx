@@ -21,9 +21,9 @@ import { PasswordStrengthMeter } from '../components/PasswordStrengthMeter'
 import { StatusMessage } from '../components/StatusMessage'
 import { useAuth } from '../context/AuthContext'
 import { useAdminDateRange } from '../hooks/useAdminDateRange'
-import { useClientPagination } from '../hooks/useClientPagination'
-import { useClientSort } from '../hooks/useClientSort'
-import { isInAdminDateRange } from '../lib/dateRangeFilter'
+import { useDebouncedValue } from '../hooks/useDebouncedValue'
+import { useServerPagination } from '../hooks/useServerPagination'
+import { useServerSort } from '../hooks/useServerSort'
 import { downloadCsv } from '../lib/downloadCsv'
 import {
   btnBase,
@@ -47,7 +47,17 @@ export function AdminUsersPage() {
   const [message, setMessage] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
+  const debouncedQuery = useDebouncedValue(query)
+  const [total, setTotal] = useState(0)
   const dateRange = useAdminDateRange()
+  const { sortBy, sortDir, toggle: toggleSort, resetKey: sortResetKey } = useServerSort(
+    'email',
+    'asc',
+  )
+  const pagination = useServerPagination({
+    total,
+    resetKey: `${debouncedQuery}|${dateRange.dateFrom}|${dateRange.dateTo}|${sortResetKey}`,
+  })
   const [panelOpen, setPanelOpen] = useState(false)
 
   const [email, setEmail] = useState('')
@@ -69,16 +79,49 @@ export function AdminUsersPage() {
     [roles],
   )
 
+  const listParams = useMemo(
+    () => ({
+      q: debouncedQuery.trim() || undefined,
+      ...dateRange.params,
+      sort_by: sortBy,
+      sort_dir: sortDir,
+      page: pagination.page,
+      page_size: pagination.pageSize,
+    }),
+    [
+      dateRange.params,
+      debouncedQuery,
+      pagination.page,
+      pagination.pageSize,
+      sortBy,
+      sortDir,
+    ],
+  )
+
   const refreshUsers = async () => {
-    const [userList, planList, roleList] = await Promise.all([
-      adminApi.listUsers(),
-      adminApi.listPlans(),
-      adminApi.listRoles(),
-    ])
-    setUsers(userList)
-    setPlans(planList)
-    setRoles(roleList)
+    const userPage = await adminApi.listUsers(listParams)
+    setUsers(userPage.items)
+    setTotal(userPage.total)
   }
+
+  useEffect(() => {
+    if (!canManage) return
+    const loadCatalog = async () => {
+      try {
+        const [planList, roleList, defaultPlan] = await Promise.all([
+          adminApi.listPlans({ page: 1, page_size: 100 }),
+          adminApi.listRoles({ page: 1, page_size: 100 }),
+          adminApi.getDefaultPlan(),
+        ])
+        setPlans(planList.items)
+        setRoles(roleList.items)
+        setDefaultPlanId(defaultPlan.plan_id)
+      } catch {
+        /* catalog errors surface on next full load */
+      }
+    }
+    void loadCatalog()
+  }, [canManage])
 
   useEffect(() => {
     if (!canManage) return
@@ -86,16 +129,9 @@ export function AdminUsersPage() {
       setLoading(true)
       setError(null)
       try {
-        const [userList, planList, roleList, defaultPlan] = await Promise.all([
-          adminApi.listUsers(),
-          adminApi.listPlans(),
-          adminApi.listRoles(),
-          adminApi.getDefaultPlan(),
-        ])
-        setUsers(userList)
-        setPlans(planList)
-        setRoles(roleList)
-        setDefaultPlanId(defaultPlan.plan_id)
+        const userPage = await adminApi.listUsers(listParams)
+        setUsers(userPage.items)
+        setTotal(userPage.total)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load users')
       } finally {
@@ -103,61 +139,17 @@ export function AdminUsersPage() {
       }
     }
     void load()
-  }, [canManage])
-
-  const filteredUsers = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    return users.filter((u) => {
-      if (!isInAdminDateRange(u.created_at, dateRange.dateFrom, dateRange.dateTo)) {
-        return false
-      }
-      if (!q) return true
-      return (
-        u.email.toLowerCase().includes(q) ||
-        (u.plan_name?.toLowerCase().includes(q) ?? false) ||
-        (u.role_name?.toLowerCase().includes(q) ?? false) ||
-        u.actions.some((a) => a.toLowerCase().includes(q))
-      )
-    })
-  }, [users, query, dateRange.dateFrom, dateRange.dateTo])
-
-  const userSortAccessors = useMemo(
-    () => ({
-      email: (u: AuthUser) => u.email,
-      role_name: (u: AuthUser) => u.role_name ?? '',
-      is_active: (u: AuthUser) => u.is_active,
-      plan_name: (u: AuthUser) => u.plan_name ?? '',
-      created_at: (u: AuthUser) => u.created_at ?? '',
-    }),
-    [],
-  )
-
-  const {
-    sortedItems: sortedUsers,
-    sortBy,
-    sortDir,
-    toggle: toggleSort,
-    resetKey: sortResetKey,
-  } = useClientSort({
-    items: filteredUsers,
-    defaultKey: 'email',
-    defaultDir: 'asc',
-    accessors: userSortAccessors,
-  })
+  }, [canManage, listParams])
 
   const exportParams = useMemo(
     () => ({
-      q: query.trim() || undefined,
+      q: debouncedQuery.trim() || undefined,
       ...dateRange.params,
       sort_by: sortBy,
       sort_dir: sortDir,
     }),
-    [dateRange.params, query, sortBy, sortDir],
+    [dateRange.params, debouncedQuery, sortBy, sortDir],
   )
-
-  const pagination = useClientPagination(sortedUsers, {
-    resetKey: `${query}|${dateRange.dateFrom}|${dateRange.dateTo}|${sortResetKey}`,
-  })
 
   const planOptions = useMemo(() => {
     const options = [...activePlans]
@@ -360,7 +352,7 @@ export function AdminUsersPage() {
 
         {loading ? (
           <p className="py-8 text-center text-muted-text">Loading users…</p>
-        ) : filteredUsers.length === 0 ? (
+        ) : total === 0 ? (
           <div className="flex flex-col items-center gap-3 py-12 text-center">
             <div className="rounded-2xl bg-surface-muted p-4 text-primary">
               <UserPlus className="size-8" aria-hidden />
@@ -433,7 +425,7 @@ export function AdminUsersPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {pagination.pageItems.map((user) => (
+                  {users.map((user) => (
                     <tr
                       key={user.id}
                       className="border-b border-border-subtle transition-colors last:border-b-0 hover:bg-surface-hover/50"
