@@ -328,27 +328,29 @@ export function AdminUsersPage() {
       {message && <StatusMessage type="success" message={message} />}
 
       <div className={`${cardPanel} space-y-4`}>
-        <div className="relative">
-          <Search
-            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted"
-            aria-hidden
-          />
-          <input
-            className={`${fieldInput} w-full pl-10`}
-            type="search"
-            placeholder="Search by email, plan, or module…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            aria-label="Search users"
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-[14rem] flex-1">
+            <Search
+              className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted"
+              aria-hidden
+            />
+            <input
+              className={`${fieldInput} w-full pl-10`}
+              type="search"
+              placeholder="Search by email, plan, or module…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              aria-label="Search users"
+            />
+          </div>
+          <AdminDateRangeFilter
+            dateFrom={dateRange.dateFrom}
+            dateTo={dateRange.dateTo}
+            onDateFromChange={dateRange.setDateFrom}
+            onDateToChange={dateRange.setDateTo}
+            onClear={dateRange.clear}
           />
         </div>
-        <AdminDateRangeFilter
-          dateFrom={dateRange.dateFrom}
-          dateTo={dateRange.dateTo}
-          onDateFromChange={dateRange.setDateFrom}
-          onDateToChange={dateRange.setDateTo}
-          onClear={dateRange.clear}
-        />
 
         {loading ? (
           <p className="py-8 text-center text-muted-text">Loading users…</p>
@@ -410,7 +412,6 @@ export function AdminUsersPage() {
                       onSort={toggleSort}
                       className="px-4 py-3"
                     />
-                    <th className="px-4 py-3 font-medium">Modules</th>
                     <AdminSortHeader
                       label="Created"
                       sortKey="created_at"
@@ -470,22 +471,6 @@ export function AdminUsersPage() {
                           <span className="font-medium text-foreground">{user.plan_name}</span>
                         ) : (
                           <span className="text-muted-text">None</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        {user.actions.length === 0 ? (
-                          <span className="text-muted-text">None</span>
-                        ) : (
-                          <div className="flex max-w-md flex-wrap gap-1.5">
-                            {user.actions.map((code) => (
-                              <span
-                                key={code}
-                                className="rounded-md bg-surface-elevated px-1.5 py-0.5 font-mono text-[0.68rem] text-foreground-secondary ring-1 ring-border-subtle"
-                              >
-                                {code}
-                              </span>
-                            ))}
-                          </div>
                         )}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-muted-text">

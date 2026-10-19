@@ -266,8 +266,6 @@ export function AdminErrorsPage() {
               />
             </div>
           </label>
-        </div>
-        <div className="mb-4 flex flex-wrap items-end gap-3">
           <AdminDateRangeFilter
             dateFrom={dateRange.dateFrom}
             dateTo={dateRange.dateTo}

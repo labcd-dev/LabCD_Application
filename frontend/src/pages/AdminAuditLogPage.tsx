@@ -184,8 +184,8 @@ export function AdminAuditLogPage() {
       {error && <StatusMessage type="error" message={error} />}
 
       <section className={cardPanel}>
-        <div className="mb-4 grid gap-3 sm:grid-cols-3">
-          <label className="block">
+        <div className="mb-4 flex flex-wrap items-end gap-3">
+          <label className="block min-w-[10rem] flex-1">
             <span className={fieldLabel}>Action</span>
             <input
               className={fieldInput}
@@ -194,7 +194,7 @@ export function AdminAuditLogPage() {
               placeholder="e.g. auth.login"
             />
           </label>
-          <label className="block">
+          <label className="block min-w-[8rem] flex-1">
             <span className={fieldLabel}>Result</span>
             <select
               className={fieldInput}
@@ -206,7 +206,7 @@ export function AdminAuditLogPage() {
               <option value="failure">Failure</option>
             </select>
           </label>
-          <label className="block">
+          <label className="block min-w-[12rem] flex-[2]">
             <span className={fieldLabel}>Search</span>
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-text" />
@@ -218,8 +218,6 @@ export function AdminAuditLogPage() {
               />
             </div>
           </label>
-        </div>
-        <div className="mb-4">
           <AdminDateRangeFilter
             dateFrom={dateRange.dateFrom}
             dateTo={dateRange.dateTo}

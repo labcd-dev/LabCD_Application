@@ -205,6 +205,13 @@ export function AdminBugReportsPage() {
               </button>
             ))}
           </div>
+          <AdminDateRangeFilter
+            dateFrom={dateRange.dateFrom}
+            dateTo={dateRange.dateTo}
+            onDateFromChange={dateRange.setDateFrom}
+            onDateToChange={dateRange.setDateTo}
+            onClear={dateRange.clear}
+          />
           <button
             type="button"
             className={`${btnBase} ${btnCompact}`}
@@ -223,16 +230,6 @@ export function AdminBugReportsPage() {
 
       {error && <StatusMessage type="error" message={error} />}
       {message && <StatusMessage type="success" message={message} />}
-
-      <div className={cardPanel}>
-        <AdminDateRangeFilter
-          dateFrom={dateRange.dateFrom}
-          dateTo={dateRange.dateTo}
-          onDateFromChange={dateRange.setDateFrom}
-          onDateToChange={dateRange.setDateTo}
-          onClear={dateRange.clear}
-        />
-      </div>
 
       <section className={cardPanel}>
         <h2 className="mb-3 text-base font-semibold text-foreground">Module settings</h2>

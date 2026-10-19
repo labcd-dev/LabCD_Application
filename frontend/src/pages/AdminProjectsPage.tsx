@@ -210,8 +210,8 @@ export function AdminProjectsPage() {
       {error && <StatusMessage type="error" message={error} />}
 
       <div className={`${cardPanel} space-y-3`}>
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div className="relative sm:col-span-1">
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="relative min-w-[12rem] flex-1">
             <Search className="pointer-events-none absolute left-3 top-[2.35rem] size-4 text-muted" />
             <label className={fieldLabel}>
               <span>Search</span>
@@ -223,7 +223,7 @@ export function AdminProjectsPage() {
               />
             </label>
           </div>
-          <label className={fieldLabel}>
+          <label className={`${fieldLabel} min-w-[10rem] flex-1`}>
             <span>Owner</span>
             <select
               className={fieldInput}
@@ -238,7 +238,7 @@ export function AdminProjectsPage() {
               ))}
             </select>
           </label>
-          <label className={fieldLabel}>
+          <label className={`${fieldLabel} min-w-[10rem] flex-1`}>
             <span>Pipeline</span>
             <select
               className={fieldInput}
@@ -252,16 +252,16 @@ export function AdminProjectsPage() {
               <option value="mpcDesign">Agentic MPC</option>
             </select>
           </label>
+          <AdminDateRangeFilter
+            className="mb-4"
+            dateFrom={dateRange.dateFrom}
+            dateTo={dateRange.dateTo}
+            onDateFromChange={dateRange.setDateFrom}
+            onDateToChange={dateRange.setDateTo}
+            onClear={dateRange.clear}
+            label="Updated"
+          />
         </div>
-        <AdminDateRangeFilter
-          dateFrom={dateRange.dateFrom}
-          dateTo={dateRange.dateTo}
-          onDateFromChange={dateRange.setDateFrom}
-          onDateToChange={dateRange.setDateTo}
-          onClear={dateRange.clear}
-          fromLabel="Updated from"
-          toLabel="Updated to"
-        />
       </div>
 
       {benchmarkStats && (

@@ -185,29 +185,28 @@ export function AdminSurveyPage() {
             Configure survey triggers and monitor user ratings, before-test benchmarks, and outro evaluations.
           </p>
         </div>
-        <button
-          type="button"
-          className={`${btnBase} ${btnCompact}`}
-          disabled={loading}
-          onClick={() => void load()}
-        >
-          <RefreshCw className="size-3.5" />
-          Refresh
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <AdminDateRangeFilter
+            dateFrom={dateRange.dateFrom}
+            dateTo={dateRange.dateTo}
+            onDateFromChange={dateRange.setDateFrom}
+            onDateToChange={dateRange.setDateTo}
+            onClear={dateRange.clear}
+          />
+          <button
+            type="button"
+            className={`${btnBase} ${btnCompact}`}
+            disabled={loading}
+            onClick={() => void load()}
+          >
+            <RefreshCw className="size-3.5" />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {error && <StatusMessage type="error" message={error} />}
       {message && <StatusMessage type="success" message={message} />}
-
-      <div className={cardPanel}>
-        <AdminDateRangeFilter
-          dateFrom={dateRange.dateFrom}
-          dateTo={dateRange.dateTo}
-          onDateFromChange={dateRange.setDateFrom}
-          onDateToChange={dateRange.setDateTo}
-          onClear={dateRange.clear}
-        />
-      </div>
 
       {/* Global Module Settings */}
       <div className={cardPanel}>
