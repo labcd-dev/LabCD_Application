@@ -3,11 +3,13 @@ import { Link, Navigate } from 'react-router-dom'
 import { MessagesSquare, Search, Trash2 } from 'lucide-react'
 import { adminApi } from '../api/endpoints'
 import type { AuthUser, PlantModelConversationSummary } from '../api/types'
+import { AdminDateRangeFilter } from '../components/admin/AdminDateRangeFilter'
 import { AdminDownloadCsvButton } from '../components/admin/AdminDownloadCsvButton'
 import { AdminPagination } from '../components/admin/AdminPagination'
 import { AdminSortHeader } from '../components/admin/AdminSortHeader'
 import { StatusMessage } from '../components/StatusMessage'
 import { useAuth } from '../context/AuthContext'
+import { useAdminDateRange } from '../hooks/useAdminDateRange'
 import { useClientPagination } from '../hooks/useClientPagination'
 import { useClientSort } from '../hooks/useClientSort'
 import { downloadCsv } from '../lib/downloadCsv'
@@ -31,6 +33,7 @@ export function AdminPlantModelChatsPage() {
   const [query, setQuery] = useState('')
   const [userId, setUserId] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
+  const dateRange = useAdminDateRange()
 
   const load = async () => {
     setLoading(true)
@@ -39,6 +42,7 @@ export function AdminPlantModelChatsPage() {
       const rows = await adminApi.listPlantModelConversations({
         user_id: userId ? Number(userId) : undefined,
         status: statusFilter || undefined,
+        ...dateRange.params,
       })
       setConversations(rows)
       try {
@@ -56,7 +60,7 @@ export function AdminPlantModelChatsPage() {
   useEffect(() => {
     if (!canManage) return
     void load()
-  }, [userId, statusFilter, canManage])
+  }, [userId, statusFilter, dateRange.dateFrom, dateRange.dateTo, canManage])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -101,14 +105,15 @@ export function AdminPlantModelChatsPage() {
       user_id: userId ? Number(userId) : undefined,
       status: statusFilter || undefined,
       q: query.trim() || undefined,
+      ...dateRange.params,
       sort_by: sortBy,
       sort_dir: sortDir,
     }),
-    [query, sortBy, sortDir, statusFilter, userId],
+    [dateRange.params, query, sortBy, sortDir, statusFilter, userId],
   )
 
   const pagination = useClientPagination(sortedChats, {
-    resetKey: `${query}|${userId}|${statusFilter}|${sortResetKey}`,
+    resetKey: `${query}|${userId}|${statusFilter}|${dateRange.dateFrom}|${dateRange.dateTo}|${sortResetKey}`,
   })
 
   if (!canManage) {
@@ -157,46 +162,57 @@ export function AdminPlantModelChatsPage() {
 
       {error && <StatusMessage type="error" message={error} />}
 
-      <div className={`${cardPanel} grid gap-3 sm:grid-cols-3`}>
-        <div className="relative sm:col-span-1">
-          <Search className="pointer-events-none absolute left-3 top-[2.35rem] size-4 text-muted" />
+      <div className={`${cardPanel} space-y-3`}>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="relative sm:col-span-1">
+            <Search className="pointer-events-none absolute left-3 top-[2.35rem] size-4 text-muted" />
+            <label className={fieldLabel}>
+              <span>Search</span>
+              <input
+                className={`${fieldInput} pl-9`}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Title, owner, model…"
+              />
+            </label>
+          </div>
           <label className={fieldLabel}>
-            <span>Search</span>
-            <input
-              className={`${fieldInput} pl-9`}
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Title, owner, model…"
-            />
+            <span>Owner</span>
+            <select
+              className={fieldInput}
+              value={userId}
+              onChange={(e) => setUserId(e.target.value)}
+            >
+              <option value="">All users</option>
+              {users.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.email}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className={fieldLabel}>
+            <span>Status</span>
+            <select
+              className={fieldInput}
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+            >
+              <option value="">All</option>
+              <option value="active">Active</option>
+              <option value="complete">Complete</option>
+            </select>
           </label>
         </div>
-        <label className={fieldLabel}>
-          <span>Owner</span>
-          <select
-            className={fieldInput}
-            value={userId}
-            onChange={(e) => setUserId(e.target.value)}
-          >
-            <option value="">All users</option>
-            {users.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.email}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className={fieldLabel}>
-          <span>Status</span>
-          <select
-            className={fieldInput}
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-          >
-            <option value="">All</option>
-            <option value="active">Active</option>
-            <option value="complete">Complete</option>
-          </select>
-        </label>
+        <AdminDateRangeFilter
+          dateFrom={dateRange.dateFrom}
+          dateTo={dateRange.dateTo}
+          onDateFromChange={dateRange.setDateFrom}
+          onDateToChange={dateRange.setDateTo}
+          onClear={dateRange.clear}
+          fromLabel="Updated from"
+          toLabel="Updated to"
+        />
       </div>
 
       {loading ? (

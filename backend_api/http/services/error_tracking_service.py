@@ -248,11 +248,15 @@ def list_errors(
     source: str | None = None,
     status_code: int | None = None,
     q: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    tz: str | None = None,
     limit: int = 200,
     max_limit: int = 1000,
     sort_by: str | None = None,
     sort_dir: str | None = None,
 ) -> list[ErrorEvent]:
+    from backend_api.common.date_range import apply_sql_date_range
     from backend_api.common.query_sort import apply_sql_order
 
     query = db.query(ErrorEvent)
@@ -271,6 +275,13 @@ def list_errors(
                 ErrorEvent.page_url.ilike(like),
             )
         )
+    query = apply_sql_date_range(
+        query,
+        ErrorEvent.created_at,
+        date_from=date_from,
+        date_to=date_to,
+        tz=tz,
+    )
     query = apply_sql_order(
         query,
         {
@@ -311,6 +322,9 @@ def export_csv(
     source: str | None = None,
     status_code: int | None = None,
     q: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    tz: str | None = None,
     limit: int = 10000,
     sort_by: str | None = None,
     sort_dir: str | None = None,
@@ -321,6 +335,9 @@ def export_csv(
         source=source,
         status_code=status_code,
         q=q,
+        date_from=date_from,
+        date_to=date_to,
+        tz=tz,
         limit=limit,
         max_limit=10000,
         sort_by=sort_by,

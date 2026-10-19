@@ -3,11 +3,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { RefreshCw, Search } from 'lucide-react'
 import { adminApi } from '../api/endpoints'
 import type { ErrorEvent, ErrorTrackingSettings } from '../api/types'
+import { AdminDateRangeFilter } from '../components/admin/AdminDateRangeFilter'
 import { AdminDownloadCsvButton } from '../components/admin/AdminDownloadCsvButton'
 import { AdminPagination } from '../components/admin/AdminPagination'
 import { AdminSortHeader } from '../components/admin/AdminSortHeader'
 import { StatusMessage } from '../components/StatusMessage'
 import { useAuth } from '../context/AuthContext'
+import { useAdminDateRange } from '../hooks/useAdminDateRange'
 import { useClientPagination } from '../hooks/useClientPagination'
 import { useClientSort } from '../hooks/useClientSort'
 import { downloadCsv } from '../lib/downloadCsv'
@@ -47,6 +49,7 @@ export function AdminErrorsPage() {
   const [source, setSource] = useState('')
   const [statusCode, setStatusCode] = useState('')
   const [query, setQuery] = useState('')
+  const dateRange = useAdminDateRange()
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -59,6 +62,7 @@ export function AdminErrorsPage() {
           source: source || undefined,
           status_code: Number.isFinite(statusFilter) ? statusFilter : undefined,
           q: query.trim() || undefined,
+          ...dateRange.params,
           limit: 200,
         }),
       ])
@@ -73,7 +77,7 @@ export function AdminErrorsPage() {
     } finally {
       setLoading(false)
     }
-  }, [query, source, statusCode])
+  }, [dateRange.params, query, source, statusCode])
 
   useEffect(() => {
     if (!canManage) return
@@ -85,8 +89,10 @@ export function AdminErrorsPage() {
     if (source) parts.push(`source=${source}`)
     if (statusCode.trim()) parts.push(`status=${statusCode.trim()}`)
     if (query.trim()) parts.push(`q="${query.trim()}"`)
+    if (dateRange.dateFrom) parts.push(`from=${dateRange.dateFrom}`)
+    if (dateRange.dateTo) parts.push(`to=${dateRange.dateTo}`)
     return parts.length ? parts.join(', ') : 'all events'
-  }, [query, source, statusCode])
+  }, [dateRange.dateFrom, dateRange.dateTo, query, source, statusCode])
 
   const errorSortAccessors = useMemo(
     () => ({
@@ -118,13 +124,14 @@ export function AdminErrorsPage() {
       source: source || undefined,
       status_code: Number.isFinite(statusFilter) ? statusFilter : undefined,
       q: query.trim() || undefined,
+      ...dateRange.params,
       sort_by: sortBy,
       sort_dir: sortDir,
     }
-  }, [query, sortBy, sortDir, source, statusCode])
+  }, [dateRange.params, query, sortBy, sortDir, source, statusCode])
 
   const pagination = useClientPagination(sortedEvents, {
-    resetKey: `${source}|${statusCode}|${query}|${sortResetKey}`,
+    resetKey: `${source}|${statusCode}|${query}|${dateRange.dateFrom}|${dateRange.dateTo}|${sortResetKey}`,
   })
 
   if (!canManage) {
@@ -258,6 +265,15 @@ export function AdminErrorsPage() {
               />
             </div>
           </label>
+        </div>
+        <div className="mb-4 flex flex-wrap items-end gap-3">
+          <AdminDateRangeFilter
+            dateFrom={dateRange.dateFrom}
+            dateTo={dateRange.dateTo}
+            onDateFromChange={dateRange.setDateFrom}
+            onDateToChange={dateRange.setDateTo}
+            onClear={dateRange.clear}
+          />
           <button
             type="button"
             className={`${btnBase} ${btnCompact}`}

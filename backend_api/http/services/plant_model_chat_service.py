@@ -185,9 +185,13 @@ def list_all_conversations(
     user_id: int | None = None,
     status: str | None = None,
     q: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    tz: str | None = None,
     sort_by: str | None = None,
     sort_dir: str | None = None,
 ) -> list[PlantModelConversation]:
+    from backend_api.common.date_range import apply_sql_date_range
     from backend_api.common.query_sort import sort_rows
 
     query = db.query(PlantModelConversation).options(joinedload(PlantModelConversation.owner))
@@ -195,6 +199,13 @@ def list_all_conversations(
         query = query.filter(PlantModelConversation.user_id == user_id)
     if status is not None:
         query = query.filter(PlantModelConversation.status == status)
+    query = apply_sql_date_range(
+        query,
+        PlantModelConversation.updated_at,
+        date_from=date_from,
+        date_to=date_to,
+        tz=tz,
+    )
     conversations = query.all()
 
     needle = (q or "").strip().lower()

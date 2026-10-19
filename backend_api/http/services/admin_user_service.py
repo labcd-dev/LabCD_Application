@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session, joinedload
 
+from backend_api.common.date_range import apply_sql_date_range
 from backend_api.common.query_sort import sort_rows
 from backend_api.db.models import FeedbackSurveyResponse, LoginHistory, User
 from backend_api.http.services import error_tracking_service, project_service, session_service
@@ -25,14 +26,21 @@ def list_users(
     db: Session,
     *,
     q: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    tz: str | None = None,
     sort_by: str | None = None,
     sort_dir: str | None = None,
 ) -> list[User]:
-    users = (
-        db.query(User)
-        .options(joinedload(User.plan), joinedload(User.role))
-        .all()
+    query = db.query(User).options(joinedload(User.plan), joinedload(User.role))
+    query = apply_sql_date_range(
+        query,
+        User.created_at,
+        date_from=date_from,
+        date_to=date_to,
+        tz=tz,
     )
+    users = query.all()
     needle = (q or "").strip().lower()
     if needle:
         filtered: list[User] = []

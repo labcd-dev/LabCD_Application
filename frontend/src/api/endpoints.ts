@@ -347,10 +347,20 @@ export const adminApi = {
       method: 'PUT',
       body: JSON.stringify({ plan_id: planId }),
     }),
-  listUsers: (params?: { q?: string; sort_by?: string; sort_dir?: string }) =>
+  listUsers: (params?: {
+    q?: string
+    date_from?: string
+    date_to?: string
+    tz?: string
+    sort_by?: string
+    sort_dir?: string
+  }) =>
     apiFetch<AuthUser[]>(
       `/admin/users${buildQuery({
         q: params?.q,
+        date_from: params?.date_from,
+        date_to: params?.date_to,
+        tz: params?.tz,
         sort_by: params?.sort_by,
         sort_dir: params?.sort_dir,
       })}`,
@@ -411,6 +421,9 @@ export const adminApi = {
     user_id?: number
     pipeline_type?: string
     q?: string
+    date_from?: string
+    date_to?: string
+    tz?: string
     sort_by?: string
     sort_dir?: string
   }) =>
@@ -419,6 +432,9 @@ export const adminApi = {
         user_id: params?.user_id,
         pipeline_type: params?.pipeline_type,
         q: params?.q,
+        date_from: params?.date_from,
+        date_to: params?.date_to,
+        tz: params?.tz,
         sort_by: params?.sort_by,
         sort_dir: params?.sort_dir,
       })}`,
@@ -441,6 +457,9 @@ export const adminApi = {
     user_id?: number
     status?: string
     q?: string
+    date_from?: string
+    date_to?: string
+    tz?: string
     sort_by?: string
     sort_dir?: string
   }) =>
@@ -449,6 +468,9 @@ export const adminApi = {
         user_id: params?.user_id,
         status: params?.status,
         q: params?.q,
+        date_from: params?.date_from,
+        date_to: params?.date_to,
+        tz: params?.tz,
         sort_by: params?.sort_by,
         sort_dir: params?.sort_dir,
       })}`,
@@ -457,12 +479,18 @@ export const adminApi = {
     user_id?: number
     status?: string
     q?: string
+    date_from?: string
+    date_to?: string
+    tz?: string
     sort_by?: string
     sort_dir?: string
   }) =>
     downloadAdminCsv('/admin/plant-model/conversations/export.csv', {
       user_id: params?.user_id,
       status: params?.status,
+      date_from: params?.date_from,
+      date_to: params?.date_to,
+      tz: params?.tz,
       q: params?.q,
       sort_by: params?.sort_by,
       sort_dir: params?.sort_dir,
@@ -506,6 +534,9 @@ export const adminApi = {
     source?: string
     status_code?: number
     q?: string
+    date_from?: string
+    date_to?: string
+    tz?: string
     limit?: number
     sort_by?: string
     sort_dir?: string
@@ -516,6 +547,9 @@ export const adminApi = {
         source: params?.source,
         status_code: params?.status_code,
         q: params?.q,
+        date_from: params?.date_from,
+        date_to: params?.date_to,
+        tz: params?.tz,
         limit: params?.limit,
         sort_by: params?.sort_by,
         sort_dir: params?.sort_dir,
@@ -526,6 +560,9 @@ export const adminApi = {
     source?: string
     status_code?: number
     q?: string
+    date_from?: string
+    date_to?: string
+    tz?: string
     limit?: number
     sort_by?: string
     sort_dir?: string
@@ -535,6 +572,9 @@ export const adminApi = {
       source: params?.source,
       status_code: params?.status_code,
       q: params?.q,
+      date_from: params?.date_from,
+      date_to: params?.date_to,
+      tz: params?.tz,
       limit: params?.limit,
       sort_by: params?.sort_by,
       sort_dir: params?.sort_dir,
@@ -545,6 +585,9 @@ export const adminApi = {
     actor_user_id?: number
     success?: boolean
     q?: string
+    date_from?: string
+    date_to?: string
+    tz?: string
     limit?: number
     sort_by?: string
     sort_dir?: string
@@ -556,6 +599,9 @@ export const adminApi = {
         actor_user_id: params?.actor_user_id,
         success: params?.success,
         q: params?.q,
+        date_from: params?.date_from,
+        date_to: params?.date_to,
+        tz: params?.tz,
         limit: params?.limit,
         sort_by: params?.sort_by,
         sort_dir: params?.sort_dir,
@@ -567,6 +613,9 @@ export const adminApi = {
     actor_user_id?: number
     success?: boolean
     q?: string
+    date_from?: string
+    date_to?: string
+    tz?: string
     limit?: number
     sort_by?: string
     sort_dir?: string
@@ -577,13 +626,26 @@ export const adminApi = {
       actor_user_id: params?.actor_user_id,
       success: params?.success,
       q: params?.q,
+      date_from: params?.date_from,
+      date_to: params?.date_to,
+      tz: params?.tz,
       limit: params?.limit,
       sort_by: params?.sort_by,
       sort_dir: params?.sort_dir,
     }),
-  downloadUsersCsv: (params?: { q?: string; sort_by?: string; sort_dir?: string }) =>
+  downloadUsersCsv: (params?: {
+    q?: string
+    date_from?: string
+    date_to?: string
+    tz?: string
+    sort_by?: string
+    sort_dir?: string
+  }) =>
     downloadAdminCsv('/admin/users/export.csv', {
       q: params?.q,
+      date_from: params?.date_from,
+      date_to: params?.date_to,
+      tz: params?.tz,
       sort_by: params?.sort_by,
       sort_dir: params?.sort_dir,
     }),
@@ -597,6 +659,9 @@ export const adminApi = {
     user_id?: number
     pipeline_type?: string
     q?: string
+    date_from?: string
+    date_to?: string
+    tz?: string
     sort_by?: string
     sort_dir?: string
   }) =>
@@ -604,6 +669,9 @@ export const adminApi = {
       user_id: params?.user_id,
       pipeline_type: params?.pipeline_type,
       q: params?.q,
+      date_from: params?.date_from,
+      date_to: params?.date_to,
+      tz: params?.tz,
       sort_by: params?.sort_by,
       sort_dir: params?.sort_dir,
     }),
@@ -611,6 +679,9 @@ export const adminApi = {
     user_id?: number
     pipeline_type?: string
     q?: string
+    date_from?: string
+    date_to?: string
+    tz?: string
     sort_by?: string
     sort_dir?: string
   }) =>
@@ -618,21 +689,47 @@ export const adminApi = {
       user_id: params?.user_id,
       pipeline_type: params?.pipeline_type,
       q: params?.q,
+      date_from: params?.date_from,
+      date_to: params?.date_to,
+      tz: params?.tz,
       sort_by: params?.sort_by,
       sort_dir: params?.sort_dir,
     }),
   downloadMonitoringCsv: () => downloadAdminCsv('/admin/monitoring/export.csv'),
   downloadOverviewCsv: () => downloadAdminCsv('/admin/overview/export.xlsx'),
-  downloadProfileSurveyCsv: () => downloadAdminCsv('/admin/survey/responses/profile/export.csv'),
-  downloadBeforeTestSurveyCsv: () => downloadAdminCsv('/admin/survey/responses/before-test/export.csv'),
-  downloadFeedbackSurveyCsv: () => downloadAdminCsv('/admin/survey/responses/feedback/export.csv'),
+  downloadProfileSurveyCsv: (params?: {
+    date_from?: string
+    date_to?: string
+    tz?: string
+  }) => downloadAdminCsv('/admin/survey/responses/profile/export.csv', params),
+  downloadBeforeTestSurveyCsv: (params?: {
+    date_from?: string
+    date_to?: string
+    tz?: string
+  }) => downloadAdminCsv('/admin/survey/responses/before-test/export.csv', params),
+  downloadFeedbackSurveyCsv: (params?: {
+    date_from?: string
+    date_to?: string
+    tz?: string
+  }) => downloadAdminCsv('/admin/survey/responses/feedback/export.csv', params),
   getSurveySettings: () => apiFetch<SurveySettings>('/admin/survey/settings'),
   updateSurveySettings: (body: Partial<SurveySettings>) =>
     apiFetch<SurveySettings>('/admin/survey/settings', {
       method: 'PATCH',
       body: JSON.stringify(body),
     }),
-  listSurveyResponses: () => apiFetch<SurveyResponses>('/admin/survey/responses'),
+  listSurveyResponses: (params?: {
+    date_from?: string
+    date_to?: string
+    tz?: string
+  }) =>
+    apiFetch<SurveyResponses>(
+      `/admin/survey/responses${buildQuery({
+        date_from: params?.date_from,
+        date_to: params?.date_to,
+        tz: params?.tz,
+      })}`,
+    ),
 }
 
 export const tutorialsApi = {
@@ -819,12 +916,18 @@ export const bugReportsApi = {
     }),
   listAdmin: (params?: {
     status?: 'open' | 'fixed' | 'all'
+    date_from?: string
+    date_to?: string
+    tz?: string
     sort_by?: string
     sort_dir?: string
   }) =>
     apiFetch<BugReport[]>(
       `/admin/bug-reports${buildQuery({
         status: params?.status,
+        date_from: params?.date_from,
+        date_to: params?.date_to,
+        tz: params?.tz,
         sort_by: params?.sort_by,
         sort_dir: params?.sort_dir,
       })}`,
@@ -837,11 +940,17 @@ export const bugReportsApi = {
     }),
   downloadCsv: (params?: {
     status?: 'open' | 'fixed' | 'all'
+    date_from?: string
+    date_to?: string
+    tz?: string
     sort_by?: string
     sort_dir?: string
   }) =>
     downloadAdminCsv('/admin/bug-reports/export.csv', {
       status: params?.status,
+      date_from: params?.date_from,
+      date_to: params?.date_to,
+      tz: params?.tz,
       sort_by: params?.sort_by,
       sort_dir: params?.sort_dir,
     }),

@@ -1,6 +1,6 @@
 """User and admin routes for surveys and tutorial onboarding status."""
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -185,10 +185,28 @@ def update_survey_settings(
 def list_survey_responses(
     _: User = Depends(require_action("admin:survey")),
     db: Session = Depends(get_db),
+    date_from: str | None = Query(default=None),
+    date_to: str | None = Query(default=None),
+    tz: str | None = Query(default=None, max_length=64),
 ) -> SurveyResponsesOut:
-    profile_users = survey_service.list_profile_responses(db)
-    feedback_rows = survey_service.list_feedback_responses(db)
-    before_test_rows = survey_service.list_before_test_responses(db)
+    profile_users = survey_service.list_profile_responses(
+        db,
+        date_from=date_from,
+        date_to=date_to,
+        tz=tz,
+    )
+    feedback_rows = survey_service.list_feedback_responses(
+        db,
+        date_from=date_from,
+        date_to=date_to,
+        tz=tz,
+    )
+    before_test_rows = survey_service.list_before_test_responses(
+        db,
+        date_from=date_from,
+        date_to=date_to,
+        tz=tz,
+    )
     return SurveyResponsesOut(
         profile=[
             ProfileSurveyResponseOut(
@@ -258,21 +276,39 @@ def list_survey_responses(
 def export_profile_survey_csv_endpoint(
     _: User = Depends(require_action("admin:survey")),
     db: Session = Depends(get_db),
+    date_from: str | None = Query(default=None),
+    date_to: str | None = Query(default=None),
+    tz: str | None = Query(default=None, max_length=64),
 ) -> StreamingResponse:
-    return csv_response(export_profile_survey_csv(db), "profile_survey_responses.csv")
+    return csv_response(
+        export_profile_survey_csv(db, date_from=date_from, date_to=date_to, tz=tz),
+        "profile_survey_responses.csv",
+    )
 
 
 @router.get("/admin/survey/responses/before-test/export.csv")
 def export_before_test_survey_csv_endpoint(
     _: User = Depends(require_action("admin:survey")),
     db: Session = Depends(get_db),
+    date_from: str | None = Query(default=None),
+    date_to: str | None = Query(default=None),
+    tz: str | None = Query(default=None, max_length=64),
 ) -> StreamingResponse:
-    return csv_response(export_before_test_survey_csv(db), "before_test_survey_responses.csv")
+    return csv_response(
+        export_before_test_survey_csv(db, date_from=date_from, date_to=date_to, tz=tz),
+        "before_test_survey_responses.csv",
+    )
 
 
 @router.get("/admin/survey/responses/feedback/export.csv")
 def export_feedback_survey_csv_endpoint(
     _: User = Depends(require_action("admin:survey")),
     db: Session = Depends(get_db),
+    date_from: str | None = Query(default=None),
+    date_to: str | None = Query(default=None),
+    tz: str | None = Query(default=None, max_length=64),
 ) -> StreamingResponse:
-    return csv_response(export_feedback_survey_csv(db), "feedback_survey_responses.csv")
+    return csv_response(
+        export_feedback_survey_csv(db, date_from=date_from, date_to=date_to, tz=tz),
+        "feedback_survey_responses.csv",
+    )

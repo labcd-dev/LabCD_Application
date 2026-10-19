@@ -3,11 +3,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { RefreshCw, Search } from 'lucide-react'
 import { adminApi } from '../api/endpoints'
 import type { AuditLogEntry } from '../api/types'
+import { AdminDateRangeFilter } from '../components/admin/AdminDateRangeFilter'
 import { AdminDownloadCsvButton } from '../components/admin/AdminDownloadCsvButton'
 import { AdminPagination } from '../components/admin/AdminPagination'
 import { AdminSortHeader } from '../components/admin/AdminSortHeader'
 import { StatusMessage } from '../components/StatusMessage'
 import { useAuth } from '../context/AuthContext'
+import { useAdminDateRange } from '../hooks/useAdminDateRange'
 import { useClientPagination } from '../hooks/useClientPagination'
 import { useClientSort } from '../hooks/useClientSort'
 import { downloadCsv } from '../lib/downloadCsv'
@@ -51,6 +53,7 @@ export function AdminAuditLogPage() {
   const [successFilter, setSuccessFilter] = useState<SuccessFilter>('all')
   const [actionFilter, setActionFilter] = useState('')
   const [query, setQuery] = useState('')
+  const dateRange = useAdminDateRange()
   const [selectedId, setSelectedId] = useState<number | null>(null)
 
   const filterParams = useMemo(() => {
@@ -61,8 +64,9 @@ export function AdminAuditLogPage() {
       action: actionFilter.trim() || undefined,
       success,
       q: query.trim() || undefined,
+      ...dateRange.params,
     }
-  }, [actionFilter, category, query, successFilter])
+  }, [actionFilter, category, dateRange.params, query, successFilter])
 
   const auditSortAccessors = useMemo(
     () => ({
@@ -121,7 +125,7 @@ export function AdminAuditLogPage() {
   }, [canManage, load])
 
   const pagination = useClientPagination(sortedEntries, {
-    resetKey: `${category}|${successFilter}|${actionFilter}|${query}|${sortResetKey}`,
+    resetKey: `${category}|${successFilter}|${actionFilter}|${query}|${dateRange.dateFrom}|${dateRange.dateTo}|${sortResetKey}`,
   })
 
   if (!canManage) {
@@ -225,6 +229,15 @@ export function AdminAuditLogPage() {
               />
             </div>
           </label>
+        </div>
+        <div className="mb-4">
+          <AdminDateRangeFilter
+            dateFrom={dateRange.dateFrom}
+            dateTo={dateRange.dateTo}
+            onDateFromChange={dateRange.setDateFrom}
+            onDateToChange={dateRange.setDateTo}
+            onClear={dateRange.clear}
+          />
         </div>
 
         <p className="mb-3 text-sm text-muted-text">

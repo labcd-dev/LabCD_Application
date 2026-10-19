@@ -1,5 +1,5 @@
 import { Navigate } from 'react-router-dom'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
   Bug,
@@ -21,10 +21,12 @@ import type {
   ProfileSurveyResponseRow,
   SurveySettings,
 } from '../api/types'
+import { AdminDateRangeFilter } from '../components/admin/AdminDateRangeFilter'
 import { AdminDownloadCsvButton } from '../components/admin/AdminDownloadCsvButton'
 import { AdminPagination } from '../components/admin/AdminPagination'
 import { StatusMessage } from '../components/StatusMessage'
 import { useAuth } from '../context/AuthContext'
+import { useAdminDateRange } from '../hooks/useAdminDateRange'
 import { useClientPagination } from '../hooks/useClientPagination'
 import { downloadCsv } from '../lib/downloadCsv'
 import {
@@ -83,6 +85,7 @@ export function AdminSurveyPage() {
   const [message, setMessage] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const dateRange = useAdminDateRange()
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -90,7 +93,7 @@ export function AdminSurveyPage() {
     try {
       const [nextSettings, responses] = await Promise.all([
         adminApi.getSurveySettings(),
-        adminApi.listSurveyResponses(),
+        adminApi.listSurveyResponses(dateRange.params),
       ])
       setSettings(nextSettings)
       setProfileRows(responses.profile || [])
@@ -101,16 +104,24 @@ export function AdminSurveyPage() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [dateRange.params])
 
   useEffect(() => {
     if (!canManage) return
     void load()
   }, [canManage, load])
 
-  const feedbackPagination = useClientPagination(feedbackRows)
-  const beforeTestPagination = useClientPagination(beforeTestRows)
-  const profilePagination = useClientPagination(profileRows)
+  const dateExportParams = useMemo(() => dateRange.params, [dateRange.params])
+
+  const feedbackPagination = useClientPagination(feedbackRows, {
+    resetKey: `${dateRange.dateFrom}|${dateRange.dateTo}|feedback`,
+  })
+  const beforeTestPagination = useClientPagination(beforeTestRows, {
+    resetKey: `${dateRange.dateFrom}|${dateRange.dateTo}|before`,
+  })
+  const profilePagination = useClientPagination(profileRows, {
+    resetKey: `${dateRange.dateFrom}|${dateRange.dateTo}|profile`,
+  })
 
   if (!canManage) {
     return <Navigate to="/admin" replace />
@@ -162,6 +173,16 @@ export function AdminSurveyPage() {
 
       {error && <StatusMessage type="error" message={error} />}
       {message && <StatusMessage type="success" message={message} />}
+
+      <div className={cardPanel}>
+        <AdminDateRangeFilter
+          dateFrom={dateRange.dateFrom}
+          dateTo={dateRange.dateTo}
+          onDateFromChange={dateRange.setDateFrom}
+          onDateToChange={dateRange.setDateTo}
+          onClear={dateRange.clear}
+        />
+      </div>
 
       {/* Global Module Settings */}
       <div className={cardPanel}>
@@ -254,7 +275,7 @@ export function AdminSurveyPage() {
                 setError(null)
                 try {
                   await downloadCsv(
-                    () => adminApi.downloadFeedbackSurveyCsv(),
+                    () => adminApi.downloadFeedbackSurveyCsv(dateExportParams),
                     'feedback_survey_responses.csv',
                   )
                 } catch (err) {
@@ -489,7 +510,7 @@ export function AdminSurveyPage() {
                 setError(null)
                 try {
                   await downloadCsv(
-                    () => adminApi.downloadBeforeTestSurveyCsv(),
+                    () => adminApi.downloadBeforeTestSurveyCsv(dateExportParams),
                     'before_test_survey_responses.csv',
                   )
                 } catch (err) {
@@ -669,7 +690,7 @@ export function AdminSurveyPage() {
                 setError(null)
                 try {
                   await downloadCsv(
-                    () => adminApi.downloadProfileSurveyCsv(),
+                    () => adminApi.downloadProfileSurveyCsv(dateExportParams),
                     'profile_survey_responses.csv',
                   )
                 } catch (err) {

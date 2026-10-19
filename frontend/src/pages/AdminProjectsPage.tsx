@@ -3,11 +3,13 @@ import { Link, Navigate } from 'react-router-dom'
 import { Activity, FolderKanban, Search, Sparkles, Star, Trash2, TrendingUp } from 'lucide-react'
 import { adminApi } from '../api/endpoints'
 import type { AuthUser, ProjectSummary } from '../api/types'
+import { AdminDateRangeFilter } from '../components/admin/AdminDateRangeFilter'
 import { AdminDownloadCsvButton } from '../components/admin/AdminDownloadCsvButton'
 import { AdminPagination } from '../components/admin/AdminPagination'
 import { AdminSortHeader } from '../components/admin/AdminSortHeader'
 import { StatusMessage } from '../components/StatusMessage'
 import { useAuth } from '../context/AuthContext'
+import { useAdminDateRange } from '../hooks/useAdminDateRange'
 import { useClientPagination } from '../hooks/useClientPagination'
 import { useClientSort } from '../hooks/useClientSort'
 import { downloadCsv } from '../lib/downloadCsv'
@@ -31,6 +33,7 @@ export function AdminProjectsPage() {
   const [query, setQuery] = useState('')
   const [userId, setUserId] = useState('')
   const [pipelineFilter, setPipelineFilter] = useState('')
+  const dateRange = useAdminDateRange()
 
   const load = async () => {
     setLoading(true)
@@ -39,6 +42,7 @@ export function AdminProjectsPage() {
       const projectList = await adminApi.listProjects({
         user_id: userId ? Number(userId) : undefined,
         pipeline_type: pipelineFilter || undefined,
+        ...dateRange.params,
       })
       setProjects(projectList)
       try {
@@ -56,7 +60,7 @@ export function AdminProjectsPage() {
   useEffect(() => {
     if (!canManage) return
     void load()
-  }, [userId, pipelineFilter, canManage])
+  }, [userId, pipelineFilter, dateRange.dateFrom, dateRange.dateTo, canManage])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -141,14 +145,15 @@ export function AdminProjectsPage() {
       user_id: userId ? Number(userId) : undefined,
       pipeline_type: pipelineFilter || undefined,
       q: query.trim() || undefined,
+      ...dateRange.params,
       sort_by: sortBy,
       sort_dir: sortDir,
     }),
-    [pipelineFilter, query, sortBy, sortDir, userId],
+    [dateRange.params, pipelineFilter, query, sortBy, sortDir, userId],
   )
 
   const pagination = useClientPagination(sortedProjects, {
-    resetKey: `${query}|${userId}|${pipelineFilter}|${sortResetKey}`,
+    resetKey: `${query}|${userId}|${pipelineFilter}|${dateRange.dateFrom}|${dateRange.dateTo}|${sortResetKey}`,
   })
 
   if (!canManage) {
@@ -216,48 +221,59 @@ export function AdminProjectsPage() {
 
       {error && <StatusMessage type="error" message={error} />}
 
-      <div className={`${cardPanel} grid gap-3 sm:grid-cols-3`}>
-        <div className="relative sm:col-span-1">
-          <Search className="pointer-events-none absolute left-3 top-[2.35rem] size-4 text-muted" />
+      <div className={`${cardPanel} space-y-3`}>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="relative sm:col-span-1">
+            <Search className="pointer-events-none absolute left-3 top-[2.35rem] size-4 text-muted" />
+            <label className={fieldLabel}>
+              <span>Search</span>
+              <input
+                className={`${fieldInput} pl-9`}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Title, owner, file…"
+              />
+            </label>
+          </div>
           <label className={fieldLabel}>
-            <span>Search</span>
-            <input
-              className={`${fieldInput} pl-9`}
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Title, owner, file…"
-            />
+            <span>Owner</span>
+            <select
+              className={fieldInput}
+              value={userId}
+              onChange={(e) => setUserId(e.target.value)}
+            >
+              <option value="">All users</option>
+              {users.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.email}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className={fieldLabel}>
+            <span>Pipeline</span>
+            <select
+              className={fieldInput}
+              value={pipelineFilter}
+              onChange={(e) => setPipelineFilter(e.target.value)}
+            >
+              <option value="">All</option>
+              <option value="siloDesign">Single Loop</option>
+              <option value="muloDesign">Multi Loop</option>
+              <option value="adaptiveDesign">Adaptive Control</option>
+              <option value="mpcDesign">Agentic MPC</option>
+            </select>
           </label>
         </div>
-        <label className={fieldLabel}>
-          <span>Owner</span>
-          <select
-            className={fieldInput}
-            value={userId}
-            onChange={(e) => setUserId(e.target.value)}
-          >
-            <option value="">All users</option>
-            {users.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.email}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className={fieldLabel}>
-          <span>Pipeline</span>
-          <select
-            className={fieldInput}
-            value={pipelineFilter}
-            onChange={(e) => setPipelineFilter(e.target.value)}
-          >
-            <option value="">All</option>
-            <option value="siloDesign">Single Loop</option>
-            <option value="muloDesign">Multi Loop</option>
-            <option value="adaptiveDesign">Adaptive Control</option>
-            <option value="mpcDesign">Agentic MPC</option>
-          </select>
-        </label>
+        <AdminDateRangeFilter
+          dateFrom={dateRange.dateFrom}
+          dateTo={dateRange.dateTo}
+          onDateFromChange={dateRange.setDateFrom}
+          onDateToChange={dateRange.setDateTo}
+          onClear={dateRange.clear}
+          fromLabel="Updated from"
+          toLabel="Updated to"
+        />
       </div>
 
       {/* AI System Benchmark vs Human Rating Alignment Overview */}

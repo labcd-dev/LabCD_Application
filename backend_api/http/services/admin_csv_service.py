@@ -435,6 +435,9 @@ def export_users_csv(
     db: Session,
     *,
     q: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    tz: str | None = None,
     sort_by: str | None = None,
     sort_dir: str | None = None,
 ) -> str:
@@ -443,6 +446,9 @@ def export_users_csv(
     users = admin_user_service.list_users(
         db,
         q=q,
+        date_from=date_from,
+        date_to=date_to,
+        tz=tz,
         sort_by=sort_by,
         sort_dir=sort_dir,
     )
@@ -500,6 +506,9 @@ def export_projects_csv(
     user_id: int | None = None,
     pipeline_type: str | None = None,
     q: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    tz: str | None = None,
     sort_by: str | None = None,
     sort_dir: str | None = None,
 ) -> str:
@@ -508,6 +517,9 @@ def export_projects_csv(
         user_id=user_id,
         pipeline_type=pipeline_type,
         q=q,
+        date_from=date_from,
+        date_to=date_to,
+        tz=tz,
         sort_by=sort_by,
         sort_dir=sort_dir,
     )
@@ -535,6 +547,9 @@ def export_plant_model_conversations_csv(
     user_id: int | None = None,
     status: str | None = None,
     q: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    tz: str | None = None,
     sort_by: str | None = None,
     sort_dir: str | None = None,
 ) -> str:
@@ -546,6 +561,9 @@ def export_plant_model_conversations_csv(
         user_id=user_id,
         status=status,
         q=q,
+        date_from=date_from,
+        date_to=date_to,
+        tz=tz,
         sort_by=sort_by,
         sort_dir=sort_dir,
     )
@@ -862,6 +880,9 @@ def export_project_profiling_csv(
     user_id: int | None = None,
     pipeline_type: str | None = None,
     q: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    tz: str | None = None,
     sort_by: str | None = None,
     sort_dir: str | None = None,
 ) -> str:
@@ -878,6 +899,9 @@ def export_project_profiling_csv(
         user_id=user_id,
         pipeline_type=effective_pipeline,
         q=q,
+        date_from=date_from,
+        date_to=date_to,
+        tz=tz,
         sort_by=sort_by,
         sort_dir=sort_dir,
     )
@@ -1154,25 +1178,58 @@ def export_overview_xlsx(db: Session) -> bytes:
     return buffer.getvalue()
 
 
-def export_profile_survey_csv(db: Session) -> str:
+def export_profile_survey_csv(
+    db: Session,
+    *,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    tz: str | None = None,
+) -> str:
     rows = [
         _profile_survey_csv_row(user)
-        for user in survey_service.list_profile_responses(db)
+        for user in survey_service.list_profile_responses(
+            db,
+            date_from=date_from,
+            date_to=date_to,
+            tz=tz,
+        )
     ]
     return rows_to_csv(rows, PROFILE_SURVEY_CSV_FIELDS)
 
 
-def export_before_test_survey_csv(db: Session) -> str:
+def export_before_test_survey_csv(
+    db: Session,
+    *,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    tz: str | None = None,
+) -> str:
     rows = [
         _before_test_survey_csv_row(response, user)
-        for response, user in survey_service.list_before_test_responses(db)
+        for response, user in survey_service.list_before_test_responses(
+            db,
+            date_from=date_from,
+            date_to=date_to,
+            tz=tz,
+        )
     ]
     return rows_to_csv(rows, BEFORE_TEST_SURVEY_CSV_FIELDS)
 
 
-def export_feedback_survey_csv(db: Session) -> str:
+def export_feedback_survey_csv(
+    db: Session,
+    *,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    tz: str | None = None,
+) -> str:
     rows = [
         _feedback_survey_csv_row(response, user)
-        for response, user in survey_service.list_feedback_responses(db)
+        for response, user in survey_service.list_feedback_responses(
+            db,
+            date_from=date_from,
+            date_to=date_to,
+            tz=tz,
+        )
     ]
     return rows_to_csv(rows, FEEDBACK_SURVEY_CSV_FIELDS)

@@ -98,14 +98,25 @@ def list_reports(
     db: Session,
     *,
     status: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    tz: str | None = None,
     sort_by: str | None = None,
     sort_dir: str | None = None,
 ) -> list[BugReport]:
+    from backend_api.common.date_range import apply_sql_date_range
     from backend_api.common.query_sort import sort_rows
 
     query = db.query(BugReport).options(joinedload(BugReport.user))
     if status and status != "all":
         query = query.filter(BugReport.status == status)
+    query = apply_sql_date_range(
+        query,
+        BugReport.created_at,
+        date_from=date_from,
+        date_to=date_to,
+        tz=tz,
+    )
     reports = query.all()
     return sort_rows(
         reports,
@@ -161,10 +172,21 @@ def export_csv(
     db: Session,
     *,
     status: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    tz: str | None = None,
     sort_by: str | None = None,
     sort_dir: str | None = None,
 ) -> str:
-    rows = list_reports(db, status=status, sort_by=sort_by, sort_dir=sort_dir)
+    rows = list_reports(
+        db,
+        status=status,
+        date_from=date_from,
+        date_to=date_to,
+        tz=tz,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+    )
     buffer = io.StringIO()
     fieldnames = [
         "id",

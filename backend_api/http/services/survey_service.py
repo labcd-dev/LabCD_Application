@@ -258,32 +258,71 @@ def dismiss_tutorial(db: Session, user: User, action: str) -> User:
     return user
 
 
-def list_profile_responses(db: Session) -> list[User]:
-    return (
-        db.query(User)
-        .filter(User.profile_survey_completed_at.isnot(None))
-        .order_by(User.profile_survey_completed_at.desc())
-        .all()
+def list_profile_responses(
+    db: Session,
+    *,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    tz: str | None = None,
+) -> list[User]:
+    from backend_api.common.date_range import apply_sql_date_range
+
+    query = db.query(User).filter(User.profile_survey_completed_at.isnot(None))
+    query = apply_sql_date_range(
+        query,
+        User.profile_survey_completed_at,
+        date_from=date_from,
+        date_to=date_to,
+        tz=tz,
     )
+    return query.order_by(User.profile_survey_completed_at.desc()).all()
 
 
-def list_before_test_responses(db: Session) -> list[tuple[BeforeTestSurveyResponse, User]]:
-    rows = (
+def list_before_test_responses(
+    db: Session,
+    *,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    tz: str | None = None,
+) -> list[tuple[BeforeTestSurveyResponse, User]]:
+    from backend_api.common.date_range import apply_sql_date_range
+
+    query = (
         db.query(BeforeTestSurveyResponse, User)
         .join(User, User.id == BeforeTestSurveyResponse.user_id)
-        .order_by(BeforeTestSurveyResponse.created_at.desc())
-        .all()
     )
+    query = apply_sql_date_range(
+        query,
+        BeforeTestSurveyResponse.created_at,
+        date_from=date_from,
+        date_to=date_to,
+        tz=tz,
+    )
+    rows = query.order_by(BeforeTestSurveyResponse.created_at.desc()).all()
     return list(rows)
 
 
-def list_feedback_responses(db: Session) -> list[tuple[FeedbackSurveyResponse, User]]:
-    rows = (
+def list_feedback_responses(
+    db: Session,
+    *,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    tz: str | None = None,
+) -> list[tuple[FeedbackSurveyResponse, User]]:
+    from backend_api.common.date_range import apply_sql_date_range
+
+    query = (
         db.query(FeedbackSurveyResponse, User)
         .join(User, User.id == FeedbackSurveyResponse.user_id)
-        .order_by(FeedbackSurveyResponse.created_at.desc())
-        .all()
     )
+    query = apply_sql_date_range(
+        query,
+        FeedbackSurveyResponse.created_at,
+        date_from=date_from,
+        date_to=date_to,
+        tz=tz,
+    )
+    rows = query.order_by(FeedbackSurveyResponse.created_at.desc()).all()
     return list(rows)
 
 

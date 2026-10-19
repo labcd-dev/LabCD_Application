@@ -13,14 +13,17 @@ import {
 } from 'lucide-react'
 import { adminApi } from '../api/endpoints'
 import type { AuthUser, PlanInfo, RoleInfo } from '../api/types'
+import { AdminDateRangeFilter } from '../components/admin/AdminDateRangeFilter'
 import { AdminDownloadCsvButton } from '../components/admin/AdminDownloadCsvButton'
 import { AdminPagination } from '../components/admin/AdminPagination'
 import { AdminSortHeader } from '../components/admin/AdminSortHeader'
 import { PasswordStrengthMeter } from '../components/PasswordStrengthMeter'
 import { StatusMessage } from '../components/StatusMessage'
 import { useAuth } from '../context/AuthContext'
+import { useAdminDateRange } from '../hooks/useAdminDateRange'
 import { useClientPagination } from '../hooks/useClientPagination'
 import { useClientSort } from '../hooks/useClientSort'
+import { isInAdminDateRange } from '../lib/dateRangeFilter'
 import { downloadCsv } from '../lib/downloadCsv'
 import {
   btnBase,
@@ -44,6 +47,7 @@ export function AdminUsersPage() {
   const [message, setMessage] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
+  const dateRange = useAdminDateRange()
   const [panelOpen, setPanelOpen] = useState(false)
 
   const [email, setEmail] = useState('')
@@ -103,15 +107,19 @@ export function AdminUsersPage() {
 
   const filteredUsers = useMemo(() => {
     const q = query.trim().toLowerCase()
-    if (!q) return users
-    return users.filter(
-      (u) =>
+    return users.filter((u) => {
+      if (!isInAdminDateRange(u.created_at, dateRange.dateFrom, dateRange.dateTo)) {
+        return false
+      }
+      if (!q) return true
+      return (
         u.email.toLowerCase().includes(q) ||
         (u.plan_name?.toLowerCase().includes(q) ?? false) ||
         (u.role_name?.toLowerCase().includes(q) ?? false) ||
-        u.actions.some((a) => a.toLowerCase().includes(q)),
-    )
-  }, [users, query])
+        u.actions.some((a) => a.toLowerCase().includes(q))
+      )
+    })
+  }, [users, query, dateRange.dateFrom, dateRange.dateTo])
 
   const userSortAccessors = useMemo(
     () => ({
@@ -140,14 +148,15 @@ export function AdminUsersPage() {
   const exportParams = useMemo(
     () => ({
       q: query.trim() || undefined,
+      ...dateRange.params,
       sort_by: sortBy,
       sort_dir: sortDir,
     }),
-    [query, sortBy, sortDir],
+    [dateRange.params, query, sortBy, sortDir],
   )
 
   const pagination = useClientPagination(sortedUsers, {
-    resetKey: `${query}|${sortResetKey}`,
+    resetKey: `${query}|${dateRange.dateFrom}|${dateRange.dateTo}|${sortResetKey}`,
   })
 
   const planOptions = useMemo(() => {
@@ -341,6 +350,13 @@ export function AdminUsersPage() {
             aria-label="Search users"
           />
         </div>
+        <AdminDateRangeFilter
+          dateFrom={dateRange.dateFrom}
+          dateTo={dateRange.dateTo}
+          onDateFromChange={dateRange.setDateFrom}
+          onDateToChange={dateRange.setDateTo}
+          onClear={dateRange.clear}
+        />
 
         {loading ? (
           <p className="py-8 text-center text-muted-text">Loading users…</p>

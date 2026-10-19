@@ -125,11 +125,15 @@ def list_audits(
     actor_user_id: int | None = None,
     success: bool | None = None,
     q: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    tz: str | None = None,
     limit: int = 200,
     max_limit: int = 1000,
     sort_by: str | None = None,
     sort_dir: str | None = None,
 ) -> list[AuditLog]:
+    from backend_api.common.date_range import apply_sql_date_range
     from backend_api.common.query_sort import apply_sql_order
 
     query = db.query(AuditLog)
@@ -152,6 +156,13 @@ def list_audits(
                 AuditLog.ip_address.ilike(like),
             )
         )
+    query = apply_sql_date_range(
+        query,
+        AuditLog.created_at,
+        date_from=date_from,
+        date_to=date_to,
+        tz=tz,
+    )
     query = apply_sql_order(
         query,
         {
@@ -219,6 +230,9 @@ def export_csv(
     actor_user_id: int | None = None,
     success: bool | None = None,
     q: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    tz: str | None = None,
     limit: int = 10000,
     sort_by: str | None = None,
     sort_dir: str | None = None,
@@ -230,6 +244,9 @@ def export_csv(
         actor_user_id=actor_user_id,
         success=success,
         q=q,
+        date_from=date_from,
+        date_to=date_to,
+        tz=tz,
         limit=min(limit, 10000),
         max_limit=10000,
         sort_by=sort_by,

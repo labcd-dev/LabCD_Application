@@ -375,9 +375,13 @@ def list_all_projects(
     user_id: int | None = None,
     pipeline_type: str | None = None,
     q: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    tz: str | None = None,
     sort_by: str | None = None,
     sort_dir: str | None = None,
 ) -> list[Project]:
+    from backend_api.common.date_range import apply_sql_date_range
     from backend_api.common.query_sort import sort_rows
 
     query = db.query(Project).options(joinedload(Project.owner))
@@ -385,6 +389,13 @@ def list_all_projects(
         query = query.filter(Project.user_id == user_id)
     if pipeline_type is not None:
         query = query.filter(Project.pipeline_type == pipeline_type)
+    query = apply_sql_date_range(
+        query,
+        Project.updated_at,
+        date_from=date_from,
+        date_to=date_to,
+        tz=tz,
+    )
     projects = query.all()
 
     needle = (q or "").strip().lower()

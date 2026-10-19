@@ -3,12 +3,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { RefreshCw, ZoomIn } from 'lucide-react'
 import { bugReportsApi } from '../api/endpoints'
 import type { BugReport, BugReportSettings } from '../api/types'
+import { AdminDateRangeFilter } from '../components/admin/AdminDateRangeFilter'
 import { AdminDownloadCsvButton } from '../components/admin/AdminDownloadCsvButton'
 import { AdminPagination } from '../components/admin/AdminPagination'
 import { AdminSortHeader } from '../components/admin/AdminSortHeader'
 import { ImageModal } from '../components/ImageModal'
 import { StatusMessage } from '../components/StatusMessage'
 import { useAuth } from '../context/AuthContext'
+import { useAdminDateRange } from '../hooks/useAdminDateRange'
 import { useClientPagination } from '../hooks/useClientPagination'
 import { useClientSort } from '../hooks/useClientSort'
 import { downloadCsv } from '../lib/downloadCsv'
@@ -44,6 +46,7 @@ export function AdminBugReportsPage() {
   const [settings, setSettings] = useState<BugReportSettings>({ enabled: true })
   const [reports, setReports] = useState<BugReport[]>([])
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('open')
+  const dateRange = useAdminDateRange()
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
@@ -62,7 +65,7 @@ export function AdminBugReportsPage() {
     try {
       const [nextSettings, list] = await Promise.all([
         bugReportsApi.getSettings(),
-        bugReportsApi.listAdmin({ status: statusFilter }),
+        bugReportsApi.listAdmin({ status: statusFilter, ...dateRange.params }),
       ])
       setSettings(nextSettings)
       setReports(list)
@@ -72,7 +75,7 @@ export function AdminBugReportsPage() {
     } finally {
       setLoading(false)
     }
-  }, [statusFilter])
+  }, [dateRange.params, statusFilter])
 
   useEffect(() => {
     if (!canManage) return
@@ -104,14 +107,15 @@ export function AdminBugReportsPage() {
   const exportParams = useMemo(
     () => ({
       status: statusFilter,
+      ...dateRange.params,
       sort_by: sortBy,
       sort_dir: sortDir,
     }),
-    [sortBy, sortDir, statusFilter],
+    [dateRange.params, sortBy, sortDir, statusFilter],
   )
 
   const pagination = useClientPagination(sortedReports, {
-    resetKey: `${statusFilter}|${sortResetKey}`,
+    resetKey: `${statusFilter}|${dateRange.dateFrom}|${dateRange.dateTo}|${sortResetKey}`,
   })
 
   if (!canManage) {
@@ -220,6 +224,16 @@ export function AdminBugReportsPage() {
 
       {error && <StatusMessage type="error" message={error} />}
       {message && <StatusMessage type="success" message={message} />}
+
+      <div className={cardPanel}>
+        <AdminDateRangeFilter
+          dateFrom={dateRange.dateFrom}
+          dateTo={dateRange.dateTo}
+          onDateFromChange={dateRange.setDateFrom}
+          onDateToChange={dateRange.setDateTo}
+          onClear={dateRange.clear}
+        />
+      </div>
 
       <section className={cardPanel}>
         <h2 className="mb-3 text-base font-semibold text-foreground">Module settings</h2>

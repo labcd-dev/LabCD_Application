@@ -100,6 +100,9 @@ def admin_update_bug_report_settings(
 @router.get("/admin/bug-reports/export.csv")
 def admin_export_bug_reports_csv(
     report_status: str | None = Query(None, alias="status", pattern="^(open|fixed|all)$"),
+    date_from: str | None = Query(default=None),
+    date_to: str | None = Query(default=None),
+    tz: str | None = Query(default=None, max_length=64),
     sort_by: str | None = Query(default=None),
     sort_dir: str | None = Query(default=None),
     _: User = Depends(require_action("admin:bug_reports")),
@@ -108,6 +111,9 @@ def admin_export_bug_reports_csv(
     content = bug_report_service.export_csv(
         db,
         status=report_status,
+        date_from=date_from,
+        date_to=date_to,
+        tz=tz,
         sort_by=sort_by,
         sort_dir=sort_dir,
     )
@@ -117,6 +123,9 @@ def admin_export_bug_reports_csv(
 @router.get("/admin/bug-reports", response_model=list[BugReportOut])
 def admin_list_bug_reports(
     report_status: str | None = Query(None, alias="status", pattern="^(open|fixed|all)$"),
+    date_from: str | None = Query(default=None),
+    date_to: str | None = Query(default=None),
+    tz: str | None = Query(default=None, max_length=64),
     sort_by: str | None = Query(default=None),
     sort_dir: str | None = Query(default=None),
     _: User = Depends(require_action("admin:bug_reports")),
@@ -125,6 +134,9 @@ def admin_list_bug_reports(
     rows = bug_report_service.list_reports(
         db,
         status=report_status,
+        date_from=date_from,
+        date_to=date_to,
+        tz=tz,
         sort_by=sort_by,
         sort_dir=sort_dir,
     )
