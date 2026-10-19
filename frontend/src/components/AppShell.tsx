@@ -348,7 +348,13 @@ export function AppShell({ children, topbarActions }: AppShellProps) {
             )}
             {showCaseStudiesBack && <BackToCaseStudies />}
             <div className="flex min-w-0 items-center gap-2 text-[13px] text-muted-text">
-              <span className="shrink-0 font-bold text-foreground tracking-tight">LabCD</span>
+              <Link
+                to="/design"
+                className="shrink-0 font-bold text-foreground tracking-tight no-underline hover:text-primary transition-colors"
+                aria-label="LabCD Home"
+              >
+                LabCD
+              </Link>
               <span className="shrink-0 text-muted/50">/</span>
               <span className="truncate capitalize font-medium text-foreground/90">{label}</span>
             </div>
