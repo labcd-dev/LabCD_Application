@@ -253,7 +253,7 @@ export function AppShell({ children, topbarActions }: AppShellProps) {
         >
           {hasActiveChat ? (
             <RailAction
-              label="+ New chat"
+              label="New chat"
               active={isDesign}
               expanded={sidebarOpen}
               onClick={startNewChat}
