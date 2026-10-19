@@ -21,10 +21,10 @@ export function AdminOverviewPage() {
       try {
         const [overviewStats, planList] = await Promise.all([
           adminApi.getOverviewStats(),
-          adminApi.listPlans(),
+          adminApi.listPlans({ page: 1, page_size: 100 }),
         ])
         setStats(overviewStats)
-        setPlans(planList)
+        setPlans(planList.items)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load overview')
       } finally {

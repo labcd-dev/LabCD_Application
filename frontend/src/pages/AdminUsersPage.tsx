@@ -109,12 +109,12 @@ export function AdminUsersPage() {
     const loadCatalog = async () => {
       try {
         const [planList, roleList, defaultPlan] = await Promise.all([
-          adminApi.listPlans(),
-          adminApi.listRoles(),
+          adminApi.listPlans({ page: 1, page_size: 100 }),
+          adminApi.listRoles({ page: 1, page_size: 100 }),
           adminApi.getDefaultPlan(),
         ])
-        setPlans(planList)
-        setRoles(roleList)
+        setPlans(planList.items)
+        setRoles(roleList.items)
         setDefaultPlanId(defaultPlan.plan_id)
       } catch {
         /* catalog errors surface on next full load */

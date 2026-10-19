@@ -133,8 +133,32 @@ export function AdminSitePage() {
     void load()
   }, [canManage, load])
 
-  const filteredMenus = menus.filter((m) => m.location === menuLocation)
-  const menuPagination = useClientPagination(filteredMenus, { resetKey: menuLocation })
+  const menuPagination = useServerPagination({
+    total: menuTotal,
+    resetKey: menuLocation,
+  })
+
+  const menuListParams = useMemo(
+    () => ({
+      location: menuLocation,
+      page: menuPagination.page,
+      page_size: menuPagination.pageSize,
+    }),
+    [menuLocation, menuPagination.page, menuPagination.pageSize],
+  )
+
+  const reloadMenus = useCallback(async () => {
+    const page = await adminSiteApi.listMenus(menuListParams)
+    setMenus(page.items)
+    setMenuTotal(page.total)
+  }, [menuListParams])
+
+  useEffect(() => {
+    if (!canManage) return
+    void reloadMenus().catch((err: unknown) => {
+      setError(err instanceof Error ? err.message : 'Failed to load menus')
+    })
+  }, [canManage, reloadMenus])
 
   if (!canManage) {
     return <Navigate to="/admin" replace />
@@ -181,11 +205,11 @@ export function AdminSitePage() {
         location: menuLocation,
         label: newMenu.label.trim(),
         href: newMenu.href.trim(),
-        sort_order: menus.filter((m) => m.location === menuLocation).length,
+        sort_order: menuTotal,
         is_external: newMenu.is_external,
       })
       setNewMenu({ label: '', href: '', is_external: false })
-      setMenus(await adminSiteApi.listMenus())
+      await reloadMenus()
       setMessage('Menu item added.')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add menu item')
@@ -199,7 +223,7 @@ export function AdminSitePage() {
     setError(null)
     try {
       await adminSiteApi.updateMenu(item.id, patch)
-      setMenus(await adminSiteApi.listMenus())
+      await reloadMenus()
       setMessage('Menu item updated.')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update menu item')
@@ -214,7 +238,7 @@ export function AdminSitePage() {
     setError(null)
     try {
       await adminSiteApi.deleteMenu(itemId)
-      setMenus(await adminSiteApi.listMenus())
+      await reloadMenus()
       setMessage('Menu item deleted.')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete menu item')
@@ -340,7 +364,7 @@ export function AdminSitePage() {
             </form>
           </div>
           <div className={`${cardPanel} space-y-3`}>
-            {menuPagination.pageItems.map((item) => (
+            {menus.map((item) => (
               <div key={item.id} className="grid gap-2 rounded-lg border border-border-subtle p-3 sm:grid-cols-[1fr_1fr_auto_auto_auto]">
                 <input className={fieldInput} value={item.label} onChange={(e) => void updateMenuItem(item, { label: e.target.value })} />
                 <input className={fieldInput} value={item.href} onChange={(e) => void updateMenuItem(item, { href: e.target.value })} />
@@ -354,7 +378,7 @@ export function AdminSitePage() {
                 </button>
               </div>
             ))}
-            {filteredMenus.length === 0 && <p className="text-muted-text">No items in this menu.</p>}
+            {menuTotal === 0 && <p className="text-muted-text">No items in this menu.</p>}
             <AdminPagination
               page={menuPagination.page}
               totalPages={menuPagination.totalPages}

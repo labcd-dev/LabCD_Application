@@ -105,24 +105,36 @@ export function AdminProjectsPage() {
     setLoading(true)
     setError(null)
     try {
-      const [projectPage, stats] = await Promise.all([
-        adminApi.listProjects(listParams),
-        adminApi.getProjectBenchmarkStats(benchmarkParams),
-      ])
+      const projectPage = await adminApi.listProjects(listParams)
       setProjects(projectPage.items)
       setTotal(projectPage.total)
-      setBenchmarkStats(stats.total_evaluated > 0 ? stats : null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load projects')
     } finally {
       setLoading(false)
     }
-  }, [benchmarkParams, listParams])
+  }, [listParams])
 
   useEffect(() => {
     if (!canManage) return
     void load()
   }, [canManage, load])
+
+  useEffect(() => {
+    if (!canManage) return
+    let cancelled = false
+    void adminApi
+      .getProjectBenchmarkStats(benchmarkParams)
+      .then((stats) => {
+        if (!cancelled) setBenchmarkStats(stats.total_evaluated > 0 ? stats : null)
+      })
+      .catch(() => {
+        if (!cancelled) setBenchmarkStats(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [benchmarkParams, canManage])
 
   useEffect(() => {
     if (!canManage) return
