@@ -7,6 +7,7 @@ import {
   KeyRound,
   Monitor,
   Palette,
+  Shield,
   Trash2,
   User,
   UserCircle,
@@ -40,6 +41,8 @@ type ProfileSection =
   | 'credits'
   | 'billing'
   | 'developer'
+  | 'data_controls'
+  | 'close_account'
   | 'about'
 
 const SECTIONS: {
@@ -60,6 +63,18 @@ const SECTIONS: {
     label: 'Developer',
     description: 'API key, endpoints, and code examples',
     icon: Code2,
+  },
+  {
+    id: 'data_controls',
+    label: 'Data controls',
+    description: 'Model training preference',
+    icon: Shield,
+  },
+  {
+    id: 'close_account',
+    label: 'Close account',
+    description: 'Deactivate your account',
+    icon: Trash2,
   },
   { id: 'about', label: 'About', description: 'Account details', icon: UserCircle },
 ]
@@ -144,6 +159,16 @@ export function ProfilePage() {
   const [devKeyError, setDevKeyError] = useState<string | null>(null)
   const [devKeyLoading, setDevKeyLoading] = useState(false)
 
+  const [allowTrainingUse, setAllowTrainingUse] = useState(true)
+  const [savingTraining, setSavingTraining] = useState(false)
+  const [trainingMessage, setTrainingMessage] = useState<string | null>(null)
+  const [trainingError, setTrainingError] = useState<string | null>(null)
+
+  const [closeMessage, setCloseMessage] = useState<string | null>(null)
+  const [closeError, setCloseError] = useState<string | null>(null)
+  const [closeBusy, setCloseBusy] = useState(false)
+  const [privacyEmail, setPrivacyEmail] = useState('privacy@labcd.app')
+
   const loadSessions = async () => {
     setSessionsError(null)
     try {
@@ -177,6 +202,8 @@ export function ProfilePage() {
     setDisplayName(user.display_name ?? '')
     setEmail(user.email)
     setSelectedTheme(user.theme)
+    setAllowTrainingUse(user.allow_training_use !== false)
+    if (user.privacy_email) setPrivacyEmail(user.privacy_email)
     void loadSessions()
   }, [user])
 
@@ -243,8 +270,43 @@ export function ProfilePage() {
   const accountChanged =
     (displayName.trim() || null) !== (user.display_name ?? null) || emailChanged
   const themeChanged = selectedTheme !== user.theme
+  const trainingChanged = allowTrainingUse !== (user.allow_training_use !== false)
   const activeSection = SECTIONS.find((item) => item.id === section) ?? SECTIONS[0]
   const initials = userInitials(user)
+
+  const handleTrainingSave = async () => {
+    setTrainingMessage(null)
+    setTrainingError(null)
+    setSavingTraining(true)
+    try {
+      await authApi.updateProfile({ allow_training_use: allowTrainingUse })
+      await refreshUser()
+      setTrainingMessage(
+        allowTrainingUse
+          ? 'Training preference saved — your data may be used to improve models.'
+          : 'Training preference saved — your data will not be used for model training.',
+      )
+    } catch (err) {
+      setTrainingError(err instanceof Error ? err.message : 'Failed to save preference')
+    } finally {
+      setSavingTraining(false)
+    }
+  }
+
+  const handleRequestCloseAccount = async () => {
+    setCloseMessage(null)
+    setCloseError(null)
+    setCloseBusy(true)
+    try {
+      const result = await authApi.requestCloseAccount()
+      setCloseMessage(result.message)
+      if (result.privacy_email) setPrivacyEmail(result.privacy_email)
+    } catch (err) {
+      setCloseError(err instanceof Error ? err.message : 'Failed to request account closure')
+    } finally {
+      setCloseBusy(false)
+    }
+  }
 
   const handleProfileSubmit = async (event: FormEvent) => {
     event.preventDefault()
@@ -984,6 +1046,92 @@ export function ProfilePage() {
                     </p>
                     <DeveloperHowTo maskedKey={devKey?.is_active ? devKey.masked_key : null} />
                   </section>
+                </div>
+              )}
+
+              {section === 'data_controls' && (
+                <div className="max-w-lg space-y-4">
+                  {trainingMessage && (
+                    <StatusMessage type="success" message={trainingMessage} />
+                  )}
+                  {trainingError && <StatusMessage type="error" message={trainingError} />}
+
+                  <p className="m-0 text-sm leading-relaxed text-muted-text">
+                    Control whether LabCD may use your account data to improve models. Turning this
+                    off is a preference we record for your account; it does not change how third-party
+                    providers process API calls today.
+                  </p>
+
+                  <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-surface-muted/50 px-4 py-3.5">
+                    <input
+                      type="checkbox"
+                      className="mt-1 size-4 shrink-0"
+                      checked={allowTrainingUse}
+                      onChange={(e) => setAllowTrainingUse(e.target.checked)}
+                    />
+                    <span>
+                      <span className="block text-sm font-medium text-foreground">
+                        Allow using my data for model training
+                      </span>
+                      <span className="mt-1 block text-xs leading-relaxed text-muted">
+                        When off, we will not use your LabCD usage for training our models.
+                      </span>
+                    </span>
+                  </label>
+
+                  <button
+                    type="button"
+                    className={btnPrimary}
+                    disabled={savingTraining || !trainingChanged}
+                    onClick={() => void handleTrainingSave()}
+                  >
+                    {savingTraining ? 'Saving…' : 'Save data controls'}
+                  </button>
+
+                  <p className="m-0 text-xs text-muted-text">
+                    Questions?{' '}
+                    <a
+                      className="text-primary underline-offset-2 hover:underline"
+                      href={`mailto:${privacyEmail}?subject=${encodeURIComponent('Data controls question')}`}
+                    >
+                      {privacyEmail}
+                    </a>
+                  </p>
+                </div>
+              )}
+
+              {section === 'close_account' && (
+                <div className="max-w-lg space-y-4">
+                  {closeMessage && <StatusMessage type="success" message={closeMessage} />}
+                  {closeError && <StatusMessage type="error" message={closeError} />}
+
+                  <p className="m-0 text-sm leading-relaxed text-muted-text">
+                    Closing your account deactivates it after you confirm via email. Your data is kept
+                    in an admin trash until an administrator permanently deletes it. You will not be
+                    able to sign in after confirmation.
+                  </p>
+
+                  <button
+                    type="button"
+                    className={`${btnBase} border-[color-mix(in_srgb,var(--app-status-error-text)_35%,transparent)] text-[var(--app-status-error-text)]`}
+                    disabled={closeBusy || Boolean(closeMessage)}
+                    onClick={() => void handleRequestCloseAccount()}
+                  >
+                    <Trash2 className="size-3.5" aria-hidden />
+                    {closeBusy ? 'Sending…' : 'Request account closure'}
+                  </button>
+
+                  <p className="m-0 text-xs leading-relaxed text-muted-text">
+                    We will email a confirmation link to <strong>{user.email}</strong>. Prefer not to
+                    use the button, or need help? Contact{' '}
+                    <a
+                      className="text-primary underline-offset-2 hover:underline"
+                      href={`mailto:${privacyEmail}?subject=${encodeURIComponent('Close my LabCD account')}`}
+                    >
+                      {privacyEmail}
+                    </a>
+                    .
+                  </p>
                 </div>
               )}
 

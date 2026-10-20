@@ -48,6 +48,7 @@ export function AdminUsersPage() {
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
   const debouncedQuery = useDebouncedValue(query)
+  const [showDeleted, setShowDeleted] = useState(false)
   const [total, setTotal] = useState(0)
   const dateRange = useAdminDateRange()
   const { sortBy, sortDir, toggle: toggleSort, resetKey: sortResetKey } = useServerSort(
@@ -56,7 +57,7 @@ export function AdminUsersPage() {
   )
   const pagination = useServerPagination({
     total,
-    resetKey: `${debouncedQuery}|${dateRange.dateFrom}|${dateRange.dateTo}|${sortResetKey}`,
+    resetKey: `${debouncedQuery}|${dateRange.dateFrom}|${dateRange.dateTo}|${sortResetKey}|${showDeleted}`,
   })
   const [panelOpen, setPanelOpen] = useState(false)
 
@@ -87,12 +88,14 @@ export function AdminUsersPage() {
       sort_dir: sortDir,
       page: pagination.page,
       page_size: pagination.pageSize,
+      deleted: showDeleted || undefined,
     }),
     [
       dateRange.params,
       debouncedQuery,
       pagination.page,
       pagination.pageSize,
+      showDeleted,
       sortBy,
       sortDir,
     ],
@@ -147,8 +150,9 @@ export function AdminUsersPage() {
       ...dateRange.params,
       sort_by: sortBy,
       sort_dir: sortDir,
+      deleted: showDeleted || undefined,
     }),
-    [dateRange.params, debouncedQuery, sortBy, sortDir],
+    [dateRange.params, debouncedQuery, showDeleted, sortBy, sortDir],
   )
 
   const planOptions = useMemo(() => {
@@ -271,7 +275,7 @@ export function AdminUsersPage() {
     if (isSelf(user)) return
     if (
       !window.confirm(
-        `Delete user "${user.email}"? This permanently removes the account and related projects. This cannot be undone.`,
+        `Permanently delete user "${user.email}"? This removes the account and related projects. This cannot be undone.`,
       )
     ) {
       return
@@ -284,6 +288,18 @@ export function AdminUsersPage() {
       await refreshUsers()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Delete failed')
+    }
+  }
+
+  const handleRestore = async (user: AuthUser) => {
+    setError(null)
+    setMessage(null)
+    try {
+      await adminApi.restoreUser(user.id)
+      setMessage(`Restored ${user.email}`)
+      await refreshUsers()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Restore failed')
     }
   }
 
@@ -328,6 +344,27 @@ export function AdminUsersPage() {
       {message && <StatusMessage type="success" message={message} />}
 
       <div className={`${cardPanel} space-y-4`}>
+        <div className="flex flex-wrap gap-2" role="tablist" aria-label="User list">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={!showDeleted}
+            className={`${btnCompact} ${!showDeleted ? btnPrimary : btnBase}`}
+            onClick={() => setShowDeleted(false)}
+          >
+            Active
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={showDeleted}
+            className={`${btnCompact} ${showDeleted ? btnPrimary : btnBase}`}
+            onClick={() => setShowDeleted(true)}
+          >
+            <Trash2 className="size-3.5" aria-hidden />
+            Trash
+          </button>
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative min-w-[14rem] flex-1">
             <Search
@@ -360,14 +397,20 @@ export function AdminUsersPage() {
               <UserPlus className="size-8" aria-hidden />
             </div>
             <p className="m-0 font-medium text-foreground">
-              {query ? 'No users match your search' : 'No users yet'}
+              {query
+                ? 'No users match your search'
+                : showDeleted
+                  ? 'Trash is empty'
+                  : 'No users yet'}
             </p>
             <p className="m-0 text-sm text-muted-text">
               {query
                 ? 'Try a different email or plan name.'
-                : 'Create the first account and assign a plan.'}
+                : showDeleted
+                  ? 'Closed accounts appear here until permanently deleted.'
+                  : 'Create the first account and assign a plan.'}
             </p>
-            {!query && (
+            {!query && !showDeleted && (
               <button type="button" className={btnPrimary} onClick={openCreate}>
                 <Plus className="size-4" aria-hidden />
                 New user
@@ -456,7 +499,11 @@ export function AdminUsersPage() {
                         )}
                       </td>
                       <td className="px-4 py-3">
-                        {user.is_active ? (
+                        {showDeleted || user.deleted_at ? (
+                          <span className="rounded-md bg-[var(--app-status-error-bg)] px-2 py-0.5 text-xs font-medium text-[var(--app-status-error-text)]">
+                            Closed
+                          </span>
+                        ) : user.is_active ? (
                           <span className="rounded-md bg-[var(--app-status-success-bg)] px-2 py-0.5 text-xs font-medium text-[var(--app-status-success-text)]">
                             Active
                           </span>
@@ -485,34 +532,60 @@ export function AdminUsersPage() {
                             <Eye className="size-3.5" aria-hidden />
                             View
                           </Link>
-                          <button
-                            type="button"
-                            className={`${btnBase} ${btnCompact}`}
-                            onClick={() => startEdit(user)}
-                          >
-                            <Pencil className="size-3.5" aria-hidden />
-                            Edit
-                          </button>
-                          <button
-                            type="button"
-                            className={`${btnBase} ${btnCompact}`}
-                            disabled={isSelf(user)}
-                            title={isSelf(user) ? 'You cannot suspend your own account' : undefined}
-                            onClick={() => void handleToggleActive(user)}
-                          >
-                            <UserX className="size-3.5" aria-hidden />
-                            {user.is_active ? 'Suspend' : 'Reactivate'}
-                          </button>
-                          <button
-                            type="button"
-                            className={`${btnBase} ${btnCompact}`}
-                            disabled={isSelf(user)}
-                            title={isSelf(user) ? 'You cannot delete your own account' : undefined}
-                            onClick={() => void handleDelete(user)}
-                          >
-                            <Trash2 className="size-3.5" aria-hidden />
-                            Delete
-                          </button>
+                          {showDeleted ? (
+                            <>
+                              <button
+                                type="button"
+                                className={`${btnBase} ${btnCompact}`}
+                                onClick={() => void handleRestore(user)}
+                              >
+                                Restore
+                              </button>
+                              <button
+                                type="button"
+                                className={`${btnBase} ${btnCompact}`}
+                                onClick={() => void handleDelete(user)}
+                              >
+                                <Trash2 className="size-3.5" aria-hidden />
+                                Delete permanently
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                className={`${btnBase} ${btnCompact}`}
+                                onClick={() => startEdit(user)}
+                              >
+                                <Pencil className="size-3.5" aria-hidden />
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                className={`${btnBase} ${btnCompact}`}
+                                disabled={isSelf(user)}
+                                title={
+                                  isSelf(user) ? 'You cannot suspend your own account' : undefined
+                                }
+                                onClick={() => void handleToggleActive(user)}
+                              >
+                                <UserX className="size-3.5" aria-hidden />
+                                {user.is_active ? 'Suspend' : 'Reactivate'}
+                              </button>
+                              <button
+                                type="button"
+                                className={`${btnBase} ${btnCompact}`}
+                                disabled={isSelf(user)}
+                                title={
+                                  isSelf(user) ? 'You cannot delete your own account' : undefined
+                                }
+                                onClick={() => void handleDelete(user)}
+                              >
+                                <Trash2 className="size-3.5" aria-hidden />
+                                Delete
+                              </button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>

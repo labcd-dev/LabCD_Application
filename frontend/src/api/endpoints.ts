@@ -10,6 +10,7 @@ import type {
   ApiKeysUpdate,
   AuthUser,
   BillingStatus,
+  CloseAccountResponse,
   CaseStudiesResponse,
   ControlDesignTemplate,
   CreditDashboard,
@@ -207,6 +208,7 @@ export const authApi = {
     email?: string
     theme?: AuthUser['theme']
     current_password?: string
+    allow_training_use?: boolean
   }) =>
     apiFetch<AuthUser>('/auth/me', {
       method: 'PATCH',
@@ -217,6 +219,17 @@ export const authApi = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+  requestCloseAccount: () =>
+    apiFetch<CloseAccountResponse>('/auth/me/close-account', { method: 'POST' }),
+  confirmCloseAccount: (body: { token: string }) =>
+    apiFetch<MessageResponse>(
+      '/auth/confirm-close-account',
+      {
+        method: 'POST',
+        body: JSON.stringify(body),
+      },
+      AUTH_TIMEOUT_MS,
+    ),
   uploadAvatar: (file: File) => {
     const form = new FormData()
     form.append('file', file)
@@ -371,6 +384,7 @@ export const adminApi = {
     sort_dir?: string
     page?: number
     page_size?: number
+    deleted?: boolean
   }) =>
     apiFetch<PaginatedResponse<AuthUser>>(
       `/admin/users${buildQuery({
@@ -382,6 +396,7 @@ export const adminApi = {
         sort_dir: params?.sort_dir,
         page: params?.page,
         page_size: params?.page_size,
+        deleted: params?.deleted,
       })}`,
     ),
   getUser: (userId: number) => apiFetch<AdminUserDetail>(`/admin/users/${userId}`),
@@ -438,6 +453,8 @@ export const adminApi = {
     }),
   deleteUser: (userId: number) =>
     apiFetch<void>(`/admin/users/${userId}`, { method: 'DELETE' }),
+  restoreUser: (userId: number) =>
+    apiFetch<AuthUser>(`/admin/users/${userId}/restore`, { method: 'POST' }),
   cancelUserSubscription: (userId: number, atPeriodEnd = true) =>
     apiFetch<AuthUser>(
       `/admin/users/${userId}/billing/cancel?at_period_end=${atPeriodEnd ? 'true' : 'false'}`,
@@ -723,6 +740,7 @@ export const adminApi = {
     tz?: string
     sort_by?: string
     sort_dir?: string
+    deleted?: boolean
   }) =>
     downloadAdminCsv('/admin/users/export.csv', {
       q: params?.q,
@@ -731,6 +749,7 @@ export const adminApi = {
       tz: params?.tz,
       sort_by: params?.sort_by,
       sort_dir: params?.sort_dir,
+      deleted: params?.deleted,
     }),
   downloadPlansCsv: (params?: { q?: string; sort_by?: string; sort_dir?: string }) =>
     downloadAdminCsv('/admin/plans/export.csv', {

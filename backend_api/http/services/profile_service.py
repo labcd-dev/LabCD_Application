@@ -8,7 +8,7 @@ from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
 from backend_api.db.models import User
-from backend_api.http.config import API_PREFIX, UPLOADS_DIR
+from backend_api.http.config import API_PREFIX, PRIVACY_EMAIL, UPLOADS_DIR
 from backend_api.http.schemas.auth import ChangePasswordRequest, UpdateProfileRequest, UserOut
 from backend_api.http.services.auth_service import get_user_by_email, hash_password, verify_password
 
@@ -56,6 +56,9 @@ def user_out(user: User) -> UserOut:
         billing_interval=user.billing_interval,
         stripe_current_period_end=user.stripe_current_period_end,
         stripe_cancel_at_period_end=bool(user.stripe_cancel_at_period_end),
+        deleted_at=user.deleted_at,
+        allow_training_use=bool(user.allow_training_use),
+        privacy_email=PRIVACY_EMAIL or None,
     )
 
 
@@ -66,6 +69,9 @@ def update_profile(db: Session, user: User, request: UpdateProfileRequest) -> Us
 
     if request.theme is not None:
         user.theme = request.theme
+
+    if request.allow_training_use is not None:
+        user.allow_training_use = bool(request.allow_training_use)
 
     if request.email is not None:
         normalized = request.email.lower().strip()

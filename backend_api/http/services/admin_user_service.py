@@ -33,6 +33,7 @@ def list_users(
     sort_dir: str | None = None,
     page: int = 1,
     page_size: int | None = None,
+    deleted: bool = False,
 ) -> PaginationResult[User]:
     query = (
         db.query(User)
@@ -40,6 +41,11 @@ def list_users(
         .outerjoin(Role, Role.id == User.role_id)
         .options(joinedload(User.plan), joinedload(User.role))
     )
+    if deleted:
+        query = query.filter(User.deleted_at.isnot(None))
+    else:
+        query = query.filter(User.deleted_at.is_(None))
+
     query = apply_sql_date_range(
         query,
         User.created_at,
@@ -79,14 +85,27 @@ def list_users(
 
 def list_user_options(db: Session) -> list[dict]:
     """Lightweight id/email list for admin filter dropdowns."""
-    rows = db.query(User.id, User.email).order_by(User.email.asc()).all()
+    rows = (
+        db.query(User.id, User.email)
+        .filter(User.deleted_at.is_(None))
+        .order_by(User.email.asc())
+        .all()
+    )
     return [{"id": row.id, "email": row.email} for row in rows]
 
 
 def user_overview_stats(db: Session) -> dict[str, int]:
-    total = db.query(User).count()
-    active = db.query(User).filter(User.is_active.is_(True)).count()
-    admins = db.query(User).filter(User.is_admin.is_(True)).count()
+    total = db.query(User).filter(User.deleted_at.is_(None)).count()
+    active = (
+        db.query(User)
+        .filter(User.is_active.is_(True), User.deleted_at.is_(None))
+        .count()
+    )
+    admins = (
+        db.query(User)
+        .filter(User.is_admin.is_(True), User.deleted_at.is_(None))
+        .count()
+    )
     return {"total": total, "active": active, "admins": admins}
 
 

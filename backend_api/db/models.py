@@ -171,6 +171,19 @@ class User(Base):
         default=False,
         nullable=False,
     )
+    # Soft-delete timestamp; set after email-confirmed account closure.
+    # Distinct from is_active (admin suspend). Hard delete is admin-only.
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        index=True,
+    )
+    # Preference: whether LabCD may use this user's data for model training.
+    allow_training_use: Mapped[bool] = mapped_column(
+        Boolean,
+        default=True,
+        nullable=False,
+    )
     referral_code: Mapped[str | None] = mapped_column(
         String(32),
         unique=True,

@@ -168,6 +168,9 @@ class UserOut(BaseModel):
     billing_interval: str | None = None
     stripe_current_period_end: datetime | None = None
     stripe_cancel_at_period_end: bool = False
+    deleted_at: datetime | None = None
+    allow_training_use: bool = True
+    privacy_email: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -177,6 +180,16 @@ class UpdateProfileRequest(BaseModel):
     email: EmailStr | None = None
     theme: ThemeMode | None = None
     current_password: str | None = Field(default=None, min_length=1)
+    allow_training_use: bool | None = None
+
+
+class CloseAccountResponse(BaseModel):
+    message: str
+    privacy_email: str
+
+
+class ConfirmCloseAccountRequest(BaseModel):
+    token: str = Field(min_length=1)
 
 
 class ChangePasswordRequest(BaseModel):

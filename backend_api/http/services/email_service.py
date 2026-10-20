@@ -14,6 +14,7 @@ from email.message import EmailMessage
 from backend_api.http.config import (
     APP_PUBLIC_URL,
     EMAIL_FROM,
+    PRIVACY_EMAIL,
     SMTP_HOST,
     SMTP_PASSWORD,
     SMTP_PORT,
@@ -106,3 +107,17 @@ def send_password_reset_email(*, to: str, token: str) -> None:
         "If you did not request this, you can ignore this message.\n"
     )
     send_email(to=to, subject="Reset your LabCD password", body=body)
+
+
+def send_close_account_email(*, to: str, token: str) -> None:
+    link = f"{APP_PUBLIC_URL}/confirm-close-account?token={token}"
+    privacy = PRIVACY_EMAIL or "privacy@labcd.app"
+    body = (
+        "You requested to close your LabCD account.\n\n"
+        "Open this link to confirm account closure (valid for 1 hour):\n"
+        f"{link}\n\n"
+        "This will deactivate your account. An administrator can permanently "
+        "delete it later. If you did not request this, you can ignore this message.\n\n"
+        f"Questions? Contact {privacy}\n"
+    )
+    send_email(to=to, subject="Confirm closing your LabCD account", body=body)

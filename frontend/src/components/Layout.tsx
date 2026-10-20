@@ -11,6 +11,7 @@ const AUTH_PATHS = new Set([
   '/resend-verification',
   '/forgot-password',
   '/reset-password',
+  '/confirm-close-account',
 ])
 
 const IMMERSIVE_AUTH_PATHS = new Set([
@@ -21,6 +22,7 @@ const IMMERSIVE_AUTH_PATHS = new Set([
   '/resend-verification',
   '/forgot-password',
   '/reset-password',
+  '/confirm-close-account',
 ])
 
 export function Layout() {

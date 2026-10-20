@@ -206,7 +206,7 @@ export function AdminUserDetailPage() {
     if (!detail || isSelf) return
     if (
       !window.confirm(
-        `Delete user "${detail.user.email}"? This permanently removes the account and related projects. This cannot be undone.`,
+        `Permanently delete user "${detail.user.email}"? This removes the account and related projects. This cannot be undone.`,
       )
     ) {
       return
@@ -219,6 +219,22 @@ export function AdminUserDetailPage() {
       navigate('/admin/users', { replace: true })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Delete failed')
+      setBusy(false)
+    }
+  }
+
+  const handleRestore = async () => {
+    if (!detail) return
+    setBusy(true)
+    setError(null)
+    setMessage(null)
+    try {
+      await adminApi.restoreUser(detail.user.id)
+      setMessage('Account restored from trash')
+      await loadDetail({ quiet: true })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Restore failed')
+    } finally {
       setBusy(false)
     }
   }
@@ -436,39 +452,70 @@ export function AdminUserDetailPage() {
                 {user.is_admin ? <Shield className="size-3" aria-hidden /> : null}
                 {user.role_name || (user.is_admin ? 'Admin' : 'User')}
               </span>
-              <span
-                className={`rounded-md px-2 py-0.5 text-xs font-medium ${
-                  user.is_active
-                    ? 'bg-[var(--app-status-success-bg)] text-[var(--app-status-success-text)]'
-                    : 'bg-[var(--app-status-warning-bg)] text-[var(--app-status-warning-text)]'
-                }`}
-              >
-                {user.is_active ? 'Active' : 'Inactive'}
-              </span>
+              {user.deleted_at ? (
+                <span className="rounded-md bg-[var(--app-status-error-bg)] px-2 py-0.5 text-xs font-medium text-[var(--app-status-error-text)]">
+                  Closed
+                </span>
+              ) : (
+                <span
+                  className={`rounded-md px-2 py-0.5 text-xs font-medium ${
+                    user.is_active
+                      ? 'bg-[var(--app-status-success-bg)] text-[var(--app-status-success-text)]'
+                      : 'bg-[var(--app-status-warning-bg)] text-[var(--app-status-warning-text)]'
+                  }`}
+                >
+                  {user.is_active ? 'Active' : 'Inactive'}
+                </span>
+              )}
             </div>
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            className={`${btnBase} ${btnCompact}`}
-            disabled={busy || isSelf}
-            title={isSelf ? 'You cannot suspend your own account' : undefined}
-            onClick={() => void handleToggleActive()}
-          >
-            <UserX className="size-3.5" aria-hidden />
-            {user.is_active ? 'Suspend' : 'Reactivate'}
-          </button>
-          <button
-            type="button"
-            className={`${btnBase} ${btnCompact}`}
-            disabled={busy || isSelf}
-            title={isSelf ? 'You cannot delete your own account' : undefined}
-            onClick={() => void handleDelete()}
-          >
-            <Trash2 className="size-3.5" aria-hidden />
-            Delete
-          </button>
+          {user.deleted_at ? (
+            <>
+              <button
+                type="button"
+                className={`${btnBase} ${btnCompact}`}
+                disabled={busy}
+                onClick={() => void handleRestore()}
+              >
+                Restore
+              </button>
+              <button
+                type="button"
+                className={`${btnBase} ${btnCompact}`}
+                disabled={busy || isSelf}
+                title={isSelf ? 'You cannot delete your own account' : undefined}
+                onClick={() => void handleDelete()}
+              >
+                <Trash2 className="size-3.5" aria-hidden />
+                Delete permanently
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                className={`${btnBase} ${btnCompact}`}
+                disabled={busy || isSelf}
+                title={isSelf ? 'You cannot suspend your own account' : undefined}
+                onClick={() => void handleToggleActive()}
+              >
+                <UserX className="size-3.5" aria-hidden />
+                {user.is_active ? 'Suspend' : 'Reactivate'}
+              </button>
+              <button
+                type="button"
+                className={`${btnBase} ${btnCompact}`}
+                disabled={busy || isSelf}
+                title={isSelf ? 'You cannot delete your own account' : undefined}
+                onClick={() => void handleDelete()}
+              >
+                <Trash2 className="size-3.5" aria-hidden />
+                Delete
+              </button>
+            </>
+          )}
         </div>
       </header>
 
@@ -519,9 +566,16 @@ export function AdminUserDetailPage() {
           />
           <DetailRow label="Theme" value={user.theme} />
           <DetailRow
+            label="Model training data"
+            value={user.allow_training_use === false ? 'Opted out' : 'Allowed'}
+          />
+          <DetailRow
             label="Email verified"
             value={user.email_verified === false ? 'No' : 'Yes'}
           />
+          {user.deleted_at ? (
+            <DetailRow label="Closed at" value={formatDateTime(user.deleted_at)} />
+          ) : null}
           <DetailRow label="Joined" value={formatDateTime(user.created_at)} />
           <DetailRow
             label="Profile survey"

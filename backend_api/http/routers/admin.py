@@ -24,7 +24,7 @@ from backend_api.http.schemas.auth import (
     UpdateUserRequest,
     UserOut,
 )
-from backend_api.http.services import admin_user_service, journey_service
+from backend_api.http.services import account_closure_service, admin_user_service, journey_service
 from backend_api.common.csv_utils import csv_response, xlsx_response
 from backend_api.http.services.admin_csv_service import (
     export_monitoring_csv,
@@ -936,6 +936,7 @@ def list_users(
     sort_dir: str | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
+    deleted: bool = Query(default=False),
 ) -> PaginatedResponse[UserOut]:
     result = admin_user_service.list_users(
         db,
@@ -947,6 +948,7 @@ def list_users(
         sort_dir=sort_dir,
         page=page,
         page_size=page_size,
+        deleted=deleted,
     )
     return PaginatedResponse(
         items=[user_out(user) for user in result.items],
@@ -966,6 +968,7 @@ def export_users_csv_endpoint(
     tz: str | None = Query(default=None, max_length=64),
     sort_by: str | None = Query(default=None),
     sort_dir: str | None = Query(default=None),
+    deleted: bool = Query(default=False),
 ) -> StreamingResponse:
     return csv_response(
         export_users_csv(
@@ -976,6 +979,7 @@ def export_users_csv_endpoint(
             tz=tz,
             sort_by=sort_by,
             sort_dir=sort_dir,
+            deleted=deleted,
         ),
         "users.csv",
     )
@@ -1624,6 +1628,34 @@ def revoke_user_session(
         success=True,
         details={"user_id": user_id},
     )
+
+
+@router.post("/users/{user_id}/restore", response_model=UserOut)
+def restore_user(
+    user_id: int,
+    http_request: Request,
+    admin: User = Depends(require_action("admin:users")),
+    db: Session = Depends(get_db),
+) -> UserOut:
+    user = get_user_by_id(db, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    try:
+        restored = account_closure_service.restore_user(db, user)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    audit_service.record_from_request(
+        db,
+        http_request,
+        action="admin.user.restore",
+        category="admin",
+        actor=admin,
+        resource_type="user",
+        resource_id=user_id,
+        success=True,
+        details={"email": restored.email},
+    )
+    return user_out(restored)
 
 
 @router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)

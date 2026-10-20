@@ -69,7 +69,7 @@ def _load_user_and_session(
         )
 
     user = get_user_by_id(db, user_id)
-    if user is None or not user.is_active:
+    if user is None or not user.is_active or user.deleted_at is not None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found or inactive",

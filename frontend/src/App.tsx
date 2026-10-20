@@ -46,6 +46,7 @@ import { RecommenderPage } from './pages/RecommenderPage'
 import { SiloPage } from './pages/SiloPage'
 import { TrimmerPage } from './pages/TrimmerPage'
 import { TutorialsPage } from './pages/TutorialsPage'
+import { ConfirmCloseAccountPage } from './pages/ConfirmCloseAccountPage'
 import { VerifyEmailPage } from './pages/VerifyEmailPage'
 import './index.css'
 
@@ -68,6 +69,7 @@ export default function App() {
                   <Route path="resend-verification" element={<ResendVerificationPage />} />
                   <Route path="forgot-password" element={<ForgotPasswordPage />} />
                   <Route path="reset-password" element={<ResetPasswordPage />} />
+                  <Route path="confirm-close-account" element={<ConfirmCloseAccountPage />} />
                   <Route element={<ProtectedRoute />}>
                     <Route path="design" element={<DesignPage />} />
                     <Route path="case-studies" element={<ProjectsPage defaultTab="cases" />} />

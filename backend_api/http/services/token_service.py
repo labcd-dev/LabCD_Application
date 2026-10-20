@@ -17,6 +17,7 @@ from backend_api.http.config import (
 
 PURPOSE_EMAIL_VERIFY = "email_verify"
 PURPOSE_PASSWORD_RESET = "password_reset"
+PURPOSE_ACCOUNT_DELETE = "account_delete"
 
 
 def _hash_token(raw_token: str) -> str:
@@ -77,6 +78,15 @@ def create_password_reset_token(db: Session, user: User) -> str:
         db,
         user=user,
         purpose=PURPOSE_PASSWORD_RESET,
+        expire_hours=PASSWORD_RESET_EXPIRE_HOURS,
+    )
+
+
+def create_account_delete_token(db: Session, user: User) -> str:
+    return create_auth_token(
+        db,
+        user=user,
+        purpose=PURPOSE_ACCOUNT_DELETE,
         expire_hours=PASSWORD_RESET_EXPIRE_HOURS,
     )
 

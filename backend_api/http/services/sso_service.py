@@ -382,7 +382,7 @@ def resolve_or_create_user(
         user = get_user_by_id(db, identity.user_id)
         if user is None:
             raise SsoError("Linked user no longer exists")
-        if not user.is_active:
+        if not user.is_active or user.deleted_at is not None:
             raise SsoError("Account is inactive")
         if identity.email != profile.email:
             identity.email = profile.email
@@ -401,7 +401,7 @@ def resolve_or_create_user(
             avatar_url=profile.avatar_url,
         )
     else:
-        if not user.is_active:
+        if not user.is_active or user.deleted_at is not None:
             raise SsoError("Account is inactive")
         newly_verified = False
         if not user.email_verified:

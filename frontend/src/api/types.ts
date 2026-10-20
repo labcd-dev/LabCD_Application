@@ -332,6 +332,14 @@ export interface AuthUser {
   billing_interval?: 'month' | 'year' | null
   stripe_current_period_end?: string | null
   stripe_cancel_at_period_end?: boolean
+  deleted_at?: string | null
+  allow_training_use?: boolean
+  privacy_email?: string | null
+}
+
+export interface CloseAccountResponse {
+  message: string
+  privacy_email: string
 }
 
 export interface BillingStatus {

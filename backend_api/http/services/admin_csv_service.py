@@ -443,6 +443,7 @@ def export_users_csv(
     tz: str | None = None,
     sort_by: str | None = None,
     sort_dir: str | None = None,
+    deleted: bool = False,
 ) -> str:
     from backend_api.http.services import admin_user_service
 
@@ -455,6 +456,7 @@ def export_users_csv(
         sort_by=sort_by,
         sort_dir=sort_dir,
         page_size=None,
+        deleted=deleted,
     ).items
     rows = [_user_csv_row(user) for user in users]
     return rows_to_csv(rows, USER_CSV_FIELDS)

@@ -110,6 +110,15 @@ def _migrate_schema() -> None:
         )
     if "locked_until" not in columns:
         statements.append("ALTER TABLE users ADD COLUMN locked_until TIMESTAMP WITH TIME ZONE")
+    if "deleted_at" not in columns:
+        statements.append(
+            "ALTER TABLE users ADD COLUMN deleted_at TIMESTAMP WITH TIME ZONE"
+        )
+    if "allow_training_use" not in columns:
+        statements.append(
+            "ALTER TABLE users ADD COLUMN allow_training_use "
+            "BOOLEAN NOT NULL DEFAULT TRUE"
+        )
 
     if statements:
         with engine.begin() as conn:

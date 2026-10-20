@@ -12,6 +12,8 @@ from backend_api.http.dependencies import (
 )
 from backend_api.http.schemas.auth import (
     ChangePasswordRequest,
+    CloseAccountResponse,
+    ConfirmCloseAccountRequest,
     EmailOnlyRequest,
     LoginRequest,
     MessageResponse,
@@ -46,6 +48,7 @@ from backend_api.http.services.lockout_service import (
     is_login_locked,
 )
 from backend_api.http.services.password_policy import validate_password
+from backend_api.http.services import account_closure_service
 from backend_api.http.services.profile_service import (
     change_password,
     remove_avatar,
@@ -313,6 +316,7 @@ def resend_verification(
     if (
         user is not None
         and user.is_active
+        and user.deleted_at is None
         and not user.email_verified
         and not token_service.is_resend_cooling_down(db, user.id)
     ):
@@ -338,7 +342,12 @@ def forgot_password(
     db: Session = Depends(get_db),
 ) -> MessageResponse:
     user = get_user_by_email(db, request.email)
-    if user is not None and user.is_active and user.email_verified:
+    if (
+        user is not None
+        and user.is_active
+        and user.deleted_at is None
+        and user.email_verified
+    ):
         raw_token = token_service.create_password_reset_token(db, user)
         send_password_reset_email(to=user.email, token=raw_token)
         audit_service.record_from_request(
@@ -487,6 +496,54 @@ def update_me(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return user_out(updated)
+
+
+@router.post("/me/close-account", response_model=CloseAccountResponse)
+def request_close_account(
+    http_request: Request,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> CloseAccountResponse:
+    try:
+        result = account_closure_service.request_close_account(db, user)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    audit_service.record_from_request(
+        db,
+        http_request,
+        action="auth.close_account.request",
+        category="auth",
+        actor=user,
+        resource_type="user",
+        resource_id=user.id,
+        success=True,
+    )
+    return CloseAccountResponse(**result)
+
+
+@router.post("/confirm-close-account", response_model=MessageResponse)
+def confirm_close_account(
+    request: ConfirmCloseAccountRequest,
+    http_request: Request,
+    db: Session = Depends(get_db),
+) -> MessageResponse:
+    try:
+        user = account_closure_service.confirm_close_account(db, raw_token=request.token)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    audit_service.record_from_request(
+        db,
+        http_request,
+        action="auth.close_account.confirm",
+        category="auth",
+        actor=user,
+        resource_type="user",
+        resource_id=user.id,
+        success=True,
+    )
+    return MessageResponse(
+        message="Your account has been closed. Contact privacy if you need further help."
+    )
 
 
 @router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)

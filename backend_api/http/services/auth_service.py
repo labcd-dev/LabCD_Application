@@ -280,7 +280,7 @@ def authenticate_user_with_reason(
     user = get_user_by_email(db, email)
     if user is None:
         return None, "unknown_user"
-    if not user.is_active:
+    if not user.is_active or user.deleted_at is not None:
         return user, "inactive"
     if not user.password_hash:
         return user, "invalid_credentials"
@@ -319,14 +319,23 @@ def count_active_admins(db: Session) -> int:
     return (
         db.query(User)
         .join(Role, User.role_id == Role.id)
-        .filter(Role.is_system.is_(True), User.is_active.is_(True))
+        .filter(
+            Role.is_system.is_(True),
+            User.is_active.is_(True),
+            User.deleted_at.is_(None),
+        )
         .count()
     )
 
 
 def is_last_active_admin(db: Session, user: User) -> bool:
     on_admin_role = bool(user.role is not None and user.role.is_system)
-    return bool(on_admin_role and user.is_active and count_active_admins(db) <= 1)
+    return bool(
+        on_admin_role
+        and user.is_active
+        and user.deleted_at is None
+        and count_active_admins(db) <= 1
+    )
 
 
 def client_ip_from_request(request: Request) -> str | None:

@@ -53,6 +53,7 @@ SMTP_USER = os.getenv("SMTP_USER", "").strip()
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
 SMTP_TLS = os.getenv("SMTP_TLS", "true").lower() in {"1", "true", "yes", "on"}
 EMAIL_FROM = os.getenv("EMAIL_FROM", "noreply@labcd.local").strip()
+PRIVACY_EMAIL = os.getenv("PRIVACY_EMAIL", "privacy@labcd.app").strip()
 
 # Telegram — optional seed at boot; Admin → Analytics can update process env + .env.
 # Prefer reading os.environ / api_key_service at send time (this constant is import-time only).
