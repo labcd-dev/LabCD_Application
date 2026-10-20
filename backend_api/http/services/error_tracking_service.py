@@ -13,9 +13,9 @@ from typing import Any, Literal
 from backend_api.common.datetime_utils import utc_iso
 
 from sqlalchemy import or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
-from backend_api.db.models import AppSetting, ErrorEvent
+from backend_api.db.models import AppSetting, ErrorEvent, User
 from backend_api.db.session import SessionLocal
 from backend_api.http.services import plan_service
 
@@ -260,9 +260,9 @@ def list_errors(
 ):
     from backend_api.common.date_range import apply_sql_date_range
     from backend_api.common.pagination import paginate_query
-    from backend_api.common.query_sort import apply_sql_order
+    from backend_api.common.query_sort import apply_sql_order, resolve_sort_key
 
-    query = db.query(ErrorEvent)
+    query = db.query(ErrorEvent).options(joinedload(ErrorEvent.user))
     if user_id is not None:
         query = query.filter(ErrorEvent.user_id == user_id)
     if source:
@@ -271,11 +271,12 @@ def list_errors(
         query = query.filter(ErrorEvent.status_code == status_code)
     if q:
         like = f"%{q.strip()}%"
-        query = query.filter(
+        query = query.outerjoin(User, User.id == ErrorEvent.user_id).filter(
             or_(
                 ErrorEvent.message.ilike(like),
                 ErrorEvent.path.ilike(like),
                 ErrorEvent.page_url.ilike(like),
+                User.email.ilike(like),
             )
         )
     query = apply_sql_date_range(
@@ -285,20 +286,37 @@ def list_errors(
         date_to=date_to,
         tz=tz,
     )
-    query = apply_sql_order(
-        query,
-        {
-            "created_at": ErrorEvent.created_at,
-            "source": ErrorEvent.source,
-            "status_code": ErrorEvent.status_code,
-            "path": ErrorEvent.path,
-            "message": ErrorEvent.message,
-        },
-        sort_by=sort_by,
-        sort_dir=sort_dir,
-        default_key="created_at",
-        default_dir="desc",
+    sort_key = resolve_sort_key(
+        sort_by,
+        ("created_at", "source", "status_code", "path", "message", "user_email"),
+        default="created_at",
     )
+    if sort_key == "user_email":
+        if q is None or not q.strip():
+            query = query.outerjoin(User, User.id == ErrorEvent.user_id)
+        query = apply_sql_order(
+            query,
+            {"user_email": User.email},
+            sort_by="user_email",
+            sort_dir=sort_dir,
+            default_key="user_email",
+            default_dir="desc",
+        )
+    else:
+        query = apply_sql_order(
+            query,
+            {
+                "created_at": ErrorEvent.created_at,
+                "source": ErrorEvent.source,
+                "status_code": ErrorEvent.status_code,
+                "path": ErrorEvent.path,
+                "message": ErrorEvent.message,
+            },
+            sort_by=sort_key,
+            sort_dir=sort_dir,
+            default_key="created_at",
+            default_dir="desc",
+        )
     # Legacy ``limit`` (CSV / older callers) maps to a single-page fetch.
     if page_size is None and limit is not None:
         page_size = max(1, min(limit, max_limit))
@@ -322,6 +340,7 @@ def _event_row(event: ErrorEvent) -> dict[str, Any]:
         "method": event.method or "",
         "status_code": event.status_code if event.status_code is not None else "",
         "user_id": event.user_id if event.user_id is not None else "",
+        "user_email": event.user.email if event.user is not None else "",
         "user_agent": event.user_agent or "",
         "page_url": event.page_url or "",
     }
@@ -366,6 +385,7 @@ def export_csv(
         "method",
         "status_code",
         "user_id",
+        "user_email",
         "user_agent",
         "page_url",
     ]
@@ -387,6 +407,7 @@ def event_to_dict(event: ErrorEvent) -> dict[str, Any]:
         "method": event.method,
         "status_code": event.status_code,
         "user_id": event.user_id,
+        "user_email": event.user.email if event.user is not None else None,
         "user_agent": event.user_agent,
         "page_url": event.page_url,
         "extra": event.extra,

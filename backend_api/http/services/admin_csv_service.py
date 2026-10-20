@@ -153,6 +153,7 @@ ERROR_CSV_FIELDS = [
     "method",
     "status_code",
     "user_id",
+    "user_email",
     "user_agent",
     "page_url",
 ]

@@ -1,4 +1,4 @@
-import { Navigate } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { RefreshCw, Search } from 'lucide-react'
 import { adminApi } from '../api/endpoints'
@@ -262,7 +262,7 @@ export function AdminErrorsPage() {
                 className={`${fieldInput} pl-9`}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Message, path, URL…"
+                placeholder="Message, path, URL, email…"
               />
             </div>
           </label>
@@ -319,6 +319,14 @@ export function AdminErrorsPage() {
                       className="px-2 py-2"
                     />
                     <AdminSortHeader
+                      label="User"
+                      sortKey="user_email"
+                      activeKey={sortBy}
+                      dir={sortDir}
+                      onSort={toggleSort}
+                      className="px-2 py-2"
+                    />
+                    <AdminSortHeader
                       label="Status"
                       sortKey="status_code"
                       activeKey={sortBy}
@@ -351,6 +359,18 @@ export function AdminErrorsPage() {
                         {formatDateTime(event.created_at)}
                       </td>
                       <td className="px-2 py-2 font-medium text-foreground">{event.source}</td>
+                      <td className="px-2 py-2 text-foreground">
+                        {event.user_id != null ? (
+                          <Link
+                            to={`/admin/users/${event.user_id}`}
+                            className="text-foreground hover:text-primary"
+                          >
+                            {event.user_email ?? `#${event.user_id}`}
+                          </Link>
+                        ) : (
+                          <span className="text-muted-text">—</span>
+                        )}
+                      </td>
                       <td className="px-2 py-2 text-foreground">{event.status_code ?? '—'}</td>
                       <td className="max-w-[180px] truncate px-2 py-2 font-mono text-[0.75rem] text-muted-text">
                         {event.method ? `${event.method} ` : ''}

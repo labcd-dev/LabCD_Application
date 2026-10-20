@@ -269,6 +269,11 @@ class User(Base):
         back_populates="user",
         lazy="noload",
     )
+    error_events: Mapped[list["ErrorEvent"]] = relationship(
+        "ErrorEvent",
+        back_populates="user",
+        lazy="noload",
+    )
     identities: Mapped[list["UserIdentity"]] = relationship(
         "UserIdentity",
         back_populates="user",
@@ -360,6 +365,8 @@ class ErrorEvent(Base):
         nullable=False,
         index=True,
     )
+
+    user: Mapped[User | None] = relationship("User", back_populates="error_events")
 
 
 class AuditLog(Base):

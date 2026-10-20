@@ -28,7 +28,10 @@ import anyio.to_thread
 from backend_api.common.datetime_utils import utc_iso
 from backend_api.db.session import init_db
 from backend_api.http.config import API_PREFIX, API_THREAD_LIMIT, CORS_ORIGINS, UPLOADS_DIR
-from backend_api.http.middleware.error_tracking import ErrorTrackingMiddleware
+from backend_api.http.middleware.error_tracking import (
+    ErrorTrackingMiddleware,
+    extract_optional_user_id,
+)
 from backend_api.http.middleware.request_metrics import RequestMetricsMiddleware
 from backend_api.http.routers import (
     adaptive,
@@ -119,6 +122,7 @@ def create_app() -> FastAPI:
                     path=path,
                     method=request.method,
                     status_code=500,
+                    user_id=extract_optional_user_id(request),
                     user_agent=request.headers.get("user-agent"),
                 )
         return JSONResponse(

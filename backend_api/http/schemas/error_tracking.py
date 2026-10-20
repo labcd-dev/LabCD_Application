@@ -40,6 +40,7 @@ class ErrorEventOut(BaseModel):
     method: str | None = None
     status_code: int | None = None
     user_id: int | None = None
+    user_email: str | None = None
     user_agent: str | None = None
     page_url: str | None = None
     extra: dict[str, Any] | None = None

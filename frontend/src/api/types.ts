@@ -1024,6 +1024,7 @@ export interface ErrorEvent {
   method: string | null
   status_code: number | null
   user_id: number | null
+  user_email?: string | null
   user_agent: string | null
   page_url: string | null
   extra: Record<string, unknown> | null

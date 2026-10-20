@@ -9,6 +9,25 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from backend_api.http.services import error_tracking_service
+from backend_api.http.services.auth_service import decode_access_token
+from backend_api.http.services.developer_api_key_service import KEY_PREFIX
+
+
+def extract_optional_user_id(request: Request) -> int | None:
+    """Best-effort user id from Bearer JWT or access_token query (no DB)."""
+    auth = request.headers.get("authorization") or ""
+    token: str | None = None
+    if auth.lower().startswith("bearer "):
+        token = auth[7:].strip() or None
+    if not token:
+        token = request.query_params.get("access_token")
+    if not token or token.startswith(KEY_PREFIX):
+        return None
+    try:
+        payload = decode_access_token(token)
+        return int(payload["sub"])
+    except (ValueError, KeyError, TypeError):
+        return None
 
 
 class ErrorTrackingMiddleware(BaseHTTPMiddleware):
@@ -37,6 +56,7 @@ class ErrorTrackingMiddleware(BaseHTTPMiddleware):
                     path=path,
                     method=request.method,
                     status_code=500,
+                    user_id=extract_optional_user_id(request),
                     user_agent=request.headers.get("user-agent"),
                 )
             raise
@@ -58,6 +78,7 @@ class ErrorTrackingMiddleware(BaseHTTPMiddleware):
             path=path,
             method=request.method,
             status_code=status_code,
+            user_id=extract_optional_user_id(request),
             user_agent=request.headers.get("user-agent"),
         )
         return response
