@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from backend_api.db.models import PlantModelConversation, PlantModelMessage, User
 from backend_api.http.schemas.plant_model import (
+    MESSAGE_KINDS,
     ChatMessage,
     PlantModelResult,
     PlantModelSessionState,
@@ -41,7 +42,12 @@ def _session_state_to_dict(state: PlantModelSessionState | None) -> dict[str, An
         }
         if state.latest_draft.metadata:
             latest["metadata"] = state.latest_draft.metadata
-    return {"draft_count": state.draft_count, "latest_draft": latest}
+    return {
+        "draft_count": state.draft_count,
+        "latest_draft": latest,
+        "pipeline_stage": state.pipeline_stage,
+        "pipeline_context": state.pipeline_context,
+    }
 
 
 def _session_state_from_dict(raw: dict[str, Any] | None) -> PlantModelSessionState | None:
@@ -56,9 +62,12 @@ def _session_state_from_dict(raw: dict[str, Any] | None) -> PlantModelSessionSta
             python_code=str(latest_raw["python_code"]),
             metadata=metadata if isinstance(metadata, dict) else None,
         )
+    pipeline_context = raw.get("pipeline_context")
     return PlantModelSessionState(
         draft_count=int(raw.get("draft_count") or 0),
         latest_draft=latest,
+        pipeline_stage=int(raw.get("pipeline_stage") or 1),
+        pipeline_context=pipeline_context if isinstance(pipeline_context, dict) else {},
     )
 
 
@@ -140,7 +149,8 @@ def conversation_to_detail(
     messages: list[ChatMessage] = []
     for msg in conversation.messages:
         role = msg.role if msg.role in ("user", "assistant") else "assistant"
-        messages.append(ChatMessage(role=role, content=msg.content))  # type: ignore[arg-type]
+        kind = msg.kind if msg.kind in MESSAGE_KINDS else None
+        messages.append(ChatMessage(role=role, content=msg.content, kind=kind))  # type: ignore[arg-type]
     data: dict[str, Any] = {
         "id": conversation.id,
         "title": conversation.title,
@@ -287,6 +297,8 @@ def persist_turn(
     llm_model: str,
     session_state: PlantModelSessionState,
     final_result: PlantModelResult | None,
+    user_kind: str | None = None,
+    assistant_kind: str | None = None,
 ) -> PlantModelConversation:
     """Create or update a conversation after one chat turn."""
     conversation: PlantModelConversation | None = None
@@ -324,6 +336,7 @@ def persist_turn(
             conversation_id=conversation.id,
             role="user",
             content=user_message,
+            kind=user_kind,
         )
     )
     db.add(
@@ -331,6 +344,7 @@ def persist_turn(
             conversation_id=conversation.id,
             role="assistant",
             content=assistant_reply,
+            kind=assistant_kind,
         )
     )
     db.add(conversation)

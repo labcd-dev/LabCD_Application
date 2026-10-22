@@ -1452,6 +1452,15 @@ body,
   white-space: pre-wrap;
 }
 
+/* HITL choice recorded inline in the flow (no bubble, no actions). */
+.ap-hitl-trace {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ap-muted);
+  margin: 2px 0 12px;
+  padding-left: 2px;
+}
+
 .ap-assistant--pending {
   min-height: 48px;
 }

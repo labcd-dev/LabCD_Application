@@ -43,12 +43,26 @@ def init_db() -> None:
 
     Base.metadata.create_all(bind=engine)
     _migrate_schema()
+    _migrate_plant_model_messages()
     db = SessionLocal()
     try:
         seed_auth_data(db)
         _migrate_legacy_user_actions(db)
     finally:
         db.close()
+
+
+def _migrate_plant_model_messages() -> None:
+    """Add the message display kind to existing deployments (NULL = plain chat)."""
+    from sqlalchemy import inspect
+
+    inspector = inspect(engine)
+    if "plant_model_messages" not in set(inspector.get_table_names()):
+        return
+    columns = {col["name"] for col in inspector.get_columns("plant_model_messages")}
+    if "kind" not in columns:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE plant_model_messages ADD COLUMN kind VARCHAR(20)"))
 
 
 def _migrate_schema() -> None:
