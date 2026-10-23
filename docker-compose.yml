@@ -55,7 +55,7 @@ services:
       - ./backend_api:/app/backend_api
       - ./backend_core:/app/backend_core
       - ./packages:/app/packages
-    command: ["uvicorn", "backend_api.http.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    command: ["uvicorn", "backend_api.http.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "backend_api", "--reload-dir", "backend_core", "--reload-dir", "packages"]
     depends_on:
       db:
         condition: service_healthy

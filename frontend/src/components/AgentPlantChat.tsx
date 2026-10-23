@@ -5,7 +5,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useSearchParams } from 'react-router-dom'
 import Plot from 'react-plotly.js'
-import { Activity, FileCode, Play, Workflow } from 'lucide-react'
+import {
+  Activity,
+  ArrowUpRight,
+  FileCode,
+  Orbit,
+  Play,
+  Sparkles,
+  Waves,
+  Workflow,
+  Zap,
+} from 'lucide-react'
 import { healthApi, mpcApi, plantModelApi } from '../api/endpoints'
 import type {
   MPCDiagnosticsResponse,
@@ -105,6 +115,86 @@ const assistantKindFor = (res: PlantModelChatResponse): TurnKind =>
 /** Conversation history for the server. Selections are display-only and are excluded. */
 const historyOf = (list: Turn[]) =>
   list.filter((t) => !isSelectionTurn(t)).map((t) => ({ role: t.role, content: t.content }))
+
+const SYSTEM_ARCHETYPES = [
+  {
+    id: 'power',
+    category: 'Electromechanical',
+    title: 'DC Motor Position Control',
+    desc: 'Armature-controlled DC motor with current, speed and shaft angle states.',
+    prompt:
+      'Design a DC motor position control system with current, angular velocity, and position states. Control the motor angular position by applying armature voltage, including electrical and mechanical dynamics.',
+    badge: '3rd Order',
+    icon: 'zap',
+    color: 'amber',
+  },
+  {
+    id: 'ballbeam',
+    category: 'Robotics & Mechanics',
+    title: 'Ball and Beam',
+    desc: 'Underactuated ball position control via beam tilt angle.',
+    prompt:
+      'Design a ball and beam system where the ball position and velocity are states and the control input is the beam tilt angle. Stabilize the ball at a desired position on the beam.',
+    badge: 'Underactuated',
+    icon: 'orbit',
+    color: 'emerald',
+  },
+  {
+    id: 'robotics',
+    category: 'Robotics & Mechanics',
+    title: 'Inverted Pendulum',
+    desc: 'Rotary inverted pendulum balancing about the upright equilibrium.',
+    prompt:
+      'Design a rotary inverted pendulum (not cart-pole) with pendulum angle and angular velocity as states. Stabilize the pendulum at the upright unstable equilibrium using torque at the pivot.',
+    badge: 'Nonlinear',
+    icon: 'activity',
+    color: 'purple',
+  },
+  {
+    id: 'auv',
+    category: 'Marine & AUV',
+    title: 'AUV Pitch and Depth',
+    desc: 'Heave-pitch coupled AUV dynamics with stern-plane control.',
+    prompt: `I want to model the pitch and depth dynamics of an underwater vehicle (AUV) with a stern-plane actuator. The vehicle has a rigid-body pitch moment of inertia Iy = 469 kg*m^2, an added-mass pitch moment of -458 kg*m^2, a pitch damping coefficient Mq = 9826.2 kg*m^2/s, a pitch restoring coefficient Mtheta = 13719.6 kg*m^2/s^2, and a stern-plane control moment coefficient Mfs = -1575.9. Depth rate is roughly 20 times the pitch angle.
+
+Use three states: q (pitch rate, rad/s), theta (pitch angle, rad), and z (depth, positive down, in metres). The only control input is fs (stern-plane deflection, rad).
+
+The pitch dynamics follow q_dot = -(Mq*q + Mtheta*theta + Mfs*fs) / (Iy - Mq_added), with theta_dot = q and z_dot = mu1*theta. Regulate pitch and depth back to zero using the stern plane.
+
+I'd also like the equivalent single transfer function from stern-plane deflection to depth, of the form -mu1*Mfs / (s*(I_e*s^2 + Mq*s + Mtheta)), plus the intermediate pitch transfer.`,
+    badge: 'Coupled MIMO',
+    icon: 'waves',
+    color: 'sky',
+  },
+]
+
+function ArchetypeIcon({ type }: { type: string }) {
+  const cls = 'size-3.5'
+  if (type === 'zap') return <Zap className={cls} />
+  if (type === 'orbit') return <Orbit className={cls} />
+  if (type === 'activity') return <Activity className={cls} />
+  if (type === 'waves') return <Waves className={cls} />
+  return <Sparkles className={cls} />
+}
+
+const QUICK_PROMPTS = [
+  {
+    label: '⚡ Boost converter · 12V → 48V',
+    prompt: 'Boost converter, 12V to 48V, want tight settling under load steps',
+  },
+  {
+    label: '🚁 Quadrotor altitude hold',
+    prompt: 'Quadrotor altitude hold, need to reject wind gusts with vertical velocity and position states',
+  },
+  {
+    label: '🧪 CSTR reactor temperature',
+    prompt: 'CSTR reactor temperature loop with slow thermal lag and concentration dynamics',
+  },
+  {
+    label: '🧲 Magnetic levitation',
+    prompt: 'Magnetic levitation ball with electromagnet coil current and ball position dynamics',
+  },
+]
 
 
 
@@ -1207,12 +1297,13 @@ export function AgentPlantChat({
     [turns, resendMessage],
   )
 
-  const send = useCallback(async () => {
-    const text = input.trim()
+  const send = useCallback(async (customText?: string) => {
+    const text = (customText ?? input).trim()
     if (!text || loading) return
     if (attachment?.status === 'uploading' || attachment?.status === 'error') return
     setError(null)
     setInput('')
+    if (inputRef.current) autoresizeTextarea(inputRef.current)
     const nowTs = Date.now()
     const answersOpenGate =
       pipeline !== null &&
@@ -1968,23 +2059,78 @@ if __name__ == '__main__':
           <div className="ap-chat__inner" ref={chatInnerRef}>
             {turns.length === 0 && (
               <div className="ap-empty">
-                {heroEnabled && heroImageUrl && (
-                  <div className="ap-empty__hero" aria-hidden="true">
-                    <img
-                      src={heroImageUrl}
-                      alt=""
-                      className="ap-empty__hero-img"
-                      decoding="async"
-                    />
-                    <div className="ap-empty__hero-scrim" />
-                  </div>
-                )}
                 <div className="ap-empty__copy">
+                  {heroEnabled && heroImageUrl && (
+                    <div className="ap-empty__hero" aria-hidden="true">
+                      <div className="ap-empty__hero-glow" />
+                      <img
+                        src={heroImageUrl}
+                        alt=""
+                        className="ap-empty__hero-img"
+                        decoding="async"
+                      />
+                    </div>
+                  )}
                   <h2>Describe a plant model</h2>
                   <p>
                     Start with the physical system — states, inputs, parameters. AgentPlant drafts
                     dynamics code and can simulate it in the sandbox.
                   </p>
+                </div>
+
+                <div className="ap-samples">
+                  <div className="ap-samples__header">
+                    <div className="ap-samples__header-left">
+                      <span className="ap-samples__dot" aria-hidden="true" />
+                      <span>Engineering Archetypes</span>
+                    </div>
+                    <span className="ap-samples__hint">Click to load &amp; synthesize</span>
+                  </div>
+                  <div className="ap-samples__grid">
+                    {SYSTEM_ARCHETYPES.map((arch) => (
+                      <button
+                        key={arch.id}
+                        type="button"
+                        className={`ap-sample-card ap-sample-card--${arch.color}`}
+                        disabled={loading}
+                        onClick={() => void send(arch.prompt)}
+                      >
+                        <div className="ap-sample-card__top">
+                          <div className="ap-sample-card__meta">
+                            <span className="ap-sample-card__icon-box">
+                              <ArchetypeIcon type={arch.icon} />
+                            </span>
+                            <span className="ap-sample-card__cat">{arch.category}</span>
+                          </div>
+                          <span className="ap-sample-card__badge">{arch.badge}</span>
+                        </div>
+                        <div className="ap-sample-card__body">
+                          <div className="ap-sample-card__title">
+                            <span>{arch.title}</span>
+                            <span className="ap-sample-card__arrow">
+                              <ArrowUpRight className="size-3.5" />
+                            </span>
+                          </div>
+                          <div className="ap-sample-card__desc">{arch.desc}</div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="ap-samples__chips">
+                    <span className="ap-samples__chips-label">Quick Prompts:</span>
+                    {QUICK_PROMPTS.map((chip) => (
+                      <button
+                        key={chip.label}
+                        type="button"
+                        className="ap-sample-chip"
+                        disabled={loading}
+                        onClick={() => void send(chip.prompt)}
+                      >
+                        {chip.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             )}

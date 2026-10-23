@@ -627,10 +627,8 @@ body,
 
 .ap-composer-wrap--empty {
   flex: 0 0 auto;
-  /* was flex: 1 — that pushed layout tall */
   align-items: center;
-  padding: 8px 80px 240px;
-  /* was padding-bottom: 12vh */
+  padding: 0 24px 28px;
   background: transparent;
 }
 
@@ -641,9 +639,10 @@ body,
 .ap-chat:has(.ap-composer-wrap--empty) .ap-chat__scroll {
   flex: 1 1 auto;
   min-height: 0;
-  overflow: hidden;
-  /* was auto + padding-top: 12vh */
-  padding: 8px 0 0;
+  overflow-y: auto;
+  padding: 36px 0 16px;
+  display: flex;
+  flex-direction: column;
   justify-content: center;
 }
 
@@ -653,21 +652,21 @@ body,
   display: flex;
   flex-direction: column;
   justify-content: center;
-  max-height: 100%;
 }
 
 .ap-composer {
   width: 100%;
-  max-width: 1000px;
+  max-width: 860px;
   background: var(--ap-elevated, #212121);
   border: 1px solid var(--ap-border-strong, rgba(255, 255, 255, 0.12));
   border-radius: 20px;
-  padding: 14px 16px 12px;
+  padding: 14px 18px 12px;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .ap-composer textarea {
@@ -886,90 +885,380 @@ body,
   background: var(--ap-hover);
 }
 
-/* Empty-state hero (admin-configurable plant_agent_hero_*)
-   Target: hinge high (upper third), title mid-frame, luminous swing arc
-   visible in the lower band — do NOT fade the bottom of the image. */
+/* Empty-state hero & header
+   Target: clean, high-precision control engineering presentation with
+   the pendulum physics visual positioned as a focal hero element above the title. */
 .ap-empty {
   position: relative;
   text-align: center;
-  padding: 4px 12px 8px;
-  max-width: 720px;
+  padding: 8px 20px 10px;
+  max-width: 860px;
   width: 100%;
-  margin: 0 auto;
+  margin: 16px auto 12px;
   z-index: 1;
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-height: 0;
-  /* was min(52vh, 420px) — caused overflow */
-  max-height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
 }
 
-.ap-empty__hero {
-  position: absolute;
-  /* Full empty-state frame so the bottom arc is not clipped */
-  inset: 12% 4% auto;
-  pointer-events: none;
-  z-index: 0;
-  /*overflow: visible;*/
-  border-radius: 0;
-  opacity: 0.8;
-  /* Match chat surface: pure-black plate in the PNG is replaced via blend */
-  /*background: var(--ap-bg, #0a0d12);*/
-  /*mask-image: none;*/
-  /*-webkit-mask-image: none;*/
-}
-
-.ap-empty__hero-img {
-  width: 100%;
-  height: 100%;
-  /* contain keeps hinge + full arc; cover was cropping the low light */
-  object-fit: contain;
-  object-position: center center;
-  display: block;
-  filter: none;
-  /*mix-blend-mode: lighten !* #000 → surface color *!*/
-}
-
-.ap-empty__hero-scrim {
-  position: absolute;
-  inset: 0;
-  /* Soft local readablility behind title only — leave lower arc bright */
-  background: radial-gradient(ellipse 70% 45% at 50% 48%,
-      color-mix(in srgb, var(--ap-bg, #0a0d12) 55%, transparent) 0%,
-      color-mix(in srgb, var(--ap-bg, #0a0d12) 25%, transparent) 55%,
-      transparent 75%);
-  pointer-events: none;
-}
-
 .ap-empty__copy {
   position: relative;
   z-index: 1;
-  padding-top: 0;
-  padding-bottom: min(4vh, 28px);
-  /* was min(10vh, 72px) */
-  max-width: 480px;
+  max-width: 580px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 0 auto;
+}
+
+.ap-empty__hero {
+  position: relative;
+  width: 250px;
+  height: 125px;
+  margin: 0 auto 10px;
+  pointer-events: none;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ap-empty__hero-glow {
+  position: absolute;
+  inset: -12px -28px;
+  background: radial-gradient(
+    ellipse 65% 55% at 50% 50%,
+    rgba(59, 130, 246, 0.22) 0%,
+    rgba(99, 102, 241, 0.08) 50%,
+    transparent 78%
+  );
+  filter: blur(14px);
+  pointer-events: none;
+  z-index: 0;
+}
+
+:root:not(.dark) .ap-empty__hero-glow {
+  background: radial-gradient(
+    ellipse 65% 55% at 50% 50%,
+    rgba(37, 99, 235, 0.12) 0%,
+    transparent 70%
+  );
+}
+
+.ap-empty__hero-img {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center center;
+  display: block;
+  filter: drop-shadow(0 8px 24px rgba(59, 130, 246, 0.3));
+}
+
+:root:not(.dark) .ap-empty__hero-img {
+  filter: drop-shadow(0 6px 16px rgba(37, 99, 235, 0.16));
 }
 
 .ap-empty h2 {
-  margin: 0 0 8px;
-  font-size: 1.35rem;
-  font-weight: 600;
+  margin: 0 0 10px;
+  font-size: 1.95rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
   color: var(--ap-text);
-  text-shadow:
-    0 0 24px color-mix(in srgb, var(--ap-bg, #000) 80%, transparent),
-    0 1px 12px color-mix(in srgb, var(--ap-bg, #000) 70%, transparent);
+  line-height: 1.2;
+}
+
+.dark .ap-empty h2 {
+  color: #f8fafc;
+  text-shadow: 0 2px 16px rgba(0, 0, 0, 0.5);
 }
 
 .ap-empty p {
   margin: 0 auto;
-  max-width: 420px;
+  max-width: 500px;
   color: var(--ap-muted);
   font-size: 14.5px;
-  line-height: 1.5;
-  text-shadow: 0 0 18px color-mix(in srgb, var(--ap-bg, #000) 75%, transparent);
+  line-height: 1.58;
+}
+
+.dark .ap-empty p {
+  color: #94a3b8;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.35);
+}
+
+/* Engineering Archetype Samples in Empty State */
+.ap-samples {
+  width: 100%;
+  max-width: 860px;
+  margin: 20px auto 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-align: left;
+  z-index: 2;
+  position: relative;
+}
+
+.ap-samples__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4px;
+}
+
+.ap-samples__header-left {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ap-muted);
+}
+
+.ap-samples__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--app-primary, #6366f1);
+  box-shadow: 0 0 8px var(--app-primary, #6366f1);
+  display: inline-block;
+}
+
+.ap-samples__hint {
+  font-family: var(--ap-mono);
+  font-size: 10.5px;
+  color: var(--ap-muted);
+  opacity: 0.85;
+}
+
+.ap-samples__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (max-width: 680px) {
+  .ap-samples__grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.ap-sample-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  text-align: left;
+  padding: 14px 16px;
+  background: var(--ap-elevated);
+  border: 1px solid var(--ap-border-strong);
+  border-radius: 16px;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 0.2s ease,
+              box-shadow 0.2s ease,
+              background-color 0.2s ease;
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.04),
+    0 6px 16px -4px rgba(0, 0, 0, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.ap-sample-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1.5px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--app-primary, #6366f1) 50%, transparent), transparent);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+.ap-sample-card:hover:not(:disabled) {
+  transform: translateY(-2.5px);
+  border-color: color-mix(in srgb, var(--app-primary, #6366f1) 50%, var(--ap-border));
+  background: var(--ap-hover);
+  box-shadow:
+    0 12px 28px -6px color-mix(in srgb, var(--app-primary, #6366f1) 18%, transparent),
+    0 2px 8px rgba(0, 0, 0, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.ap-sample-card:hover:not(:disabled)::before {
+  opacity: 1;
+}
+
+.ap-sample-card:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ap-sample-card__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.ap-sample-card__meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ap-sample-card__icon-box {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--app-primary, #6366f1) 10%, transparent);
+  color: var(--app-primary, #6366f1);
+  border: 1px solid color-mix(in srgb, var(--app-primary, #6366f1) 20%, transparent);
+  flex-shrink: 0;
+  transition: transform 0.2s ease, background-color 0.2s ease;
+}
+
+.ap-sample-card:hover:not(:disabled) .ap-sample-card__icon-box {
+  transform: scale(1.08);
+  background: color-mix(in srgb, var(--app-primary, #6366f1) 20%, transparent);
+}
+
+.ap-sample-card__cat {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ap-muted);
+  letter-spacing: 0.01em;
+}
+
+.ap-sample-card__badge {
+  font-size: 10px;
+  font-family: var(--ap-mono);
+  color: var(--ap-text-2);
+  background: var(--ap-input);
+  border: 1px solid var(--ap-border);
+  padding: 2px 7px;
+  border-radius: 6px;
+  font-weight: 500;
+}
+
+.ap-sample-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.ap-sample-card__title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ap-text);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  transition: color 0.18s ease;
+}
+
+.ap-sample-card:hover:not(:disabled) .ap-sample-card__title {
+  color: var(--app-primary, #6366f1);
+}
+
+.ap-sample-card__arrow {
+  opacity: 0.35;
+  transform: translateX(-2px) translateY(2px);
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease;
+  color: var(--app-primary, #6366f1);
+}
+
+.ap-sample-card:hover:not(:disabled) .ap-sample-card__arrow {
+  opacity: 1;
+  transform: translateX(0) translateY(0);
+}
+
+.ap-sample-card__desc {
+  font-size: 12px;
+  color: var(--ap-muted);
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Tints for icon-boxes */
+.ap-sample-card--amber .ap-sample-card__icon-box {
+  background: rgba(245, 158, 11, 0.12);
+  color: #f59e0b;
+  border-color: rgba(245, 158, 11, 0.25);
+}
+.ap-sample-card--emerald .ap-sample-card__icon-box {
+  background: rgba(16, 185, 129, 0.12);
+  color: #10b981;
+  border-color: rgba(16, 185, 129, 0.25);
+}
+.ap-sample-card--purple .ap-sample-card__icon-box {
+  background: rgba(168, 85, 247, 0.12);
+  color: #a855f7;
+  border-color: rgba(168, 85, 247, 0.25);
+}
+.ap-sample-card--sky .ap-sample-card__icon-box {
+  background: rgba(14, 165, 233, 0.12);
+  color: #0ea5e9;
+  border-color: rgba(14, 165, 233, 0.25);
+}
+
+/* Chips Bar */
+.ap-samples__chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 4px;
+}
+
+.ap-samples__chips-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ap-muted);
+  margin-right: 2px;
+}
+
+.ap-sample-chip {
+  background: var(--ap-elevated);
+  border: 1px solid var(--ap-border-strong);
+  border-radius: 9999px;
+  padding: 5px 13px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--ap-text-2);
+  cursor: pointer;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  white-space: nowrap;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+
+.ap-sample-chip:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--app-primary, #6366f1) 40%, transparent);
+  color: var(--ap-text);
+  background: var(--ap-hover);
+  transform: translateY(-1.5px);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--app-primary, #6366f1) 12%, transparent);
+}
+
+.ap-sample-chip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 
