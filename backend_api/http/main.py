@@ -93,6 +93,9 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    app.add_middleware(RequestMetricsMiddleware)
+    app.add_middleware(ErrorTrackingMiddleware)
+    # Registered after inner middlewares so CORS is outermost and wraps all responses, including errors.
     app.add_middleware(
         CORSMiddleware,
         allow_origins=CORS_ORIGINS,
@@ -100,9 +103,6 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    app.add_middleware(ErrorTrackingMiddleware)
-    # Registered after CORS so it is outermost and times the full request cycle.
-    app.add_middleware(RequestMetricsMiddleware)
 
     @app.exception_handler(Exception)
     async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:

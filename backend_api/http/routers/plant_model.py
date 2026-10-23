@@ -132,6 +132,19 @@ def plant_model_chat(
             response = run_plant_model_chat(request)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except Exception as exc:
+            err_text = str(exc)
+            if "credit_balance_exhausted" in err_text or "insufficient_quota" in err_text:
+                raise HTTPException(
+                    status_code=402,
+                    detail="OpenAI credit balance is exhausted (Error 429: credit_balance_exhausted). Please check your OpenAI billing or update OPENAI_API_KEY in .env / Admin settings.",
+                ) from exc
+            if "LLMInvocationError" in type(exc).__name__:
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"LLM model error: {err_text}",
+                ) from exc
+            raise
         user_message = request.user_message.strip()
         if getattr(request, "force_complete", False) and not user_message:
             user_message = "Complete"
